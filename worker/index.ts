@@ -1,11 +1,4 @@
-interface Env { ASSETS: { fetch(request: Request): Promise<Response> } }
-
-const headers: Record<string, string> = {
-  'Cross-Origin-Opener-Policy': 'same-origin',
-  'Cross-Origin-Embedder-Policy': 'require-corp',
-  'Cross-Origin-Resource-Policy': 'same-origin',
-  'X-Content-Type-Options': 'nosniff',
-};
+// Only API routes reach this Worker. Cloudflare serves the SPA and assets directly.
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -43,7 +36,7 @@ async function manPage(name: string) {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/')) {
       if (request.method !== 'GET') return json({ error: 'Método não permitido' }, 405);
@@ -58,9 +51,7 @@ export default {
       }
       return json({ error: 'Rota não encontrada' }, 404);
     }
-    const asset = await env.ASSETS.fetch(request);
-    const resultHeaders = new Headers(asset.headers);
-    Object.entries(headers).forEach(([key, value]) => resultHeaders.set(key, value));
-    return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers: resultHeaders });
+    // Non-API paths are handled by Cloudflare Static Assets, not this Worker.
+    return json({ error: 'Rota não encontrada' }, 404);
   },
 };
