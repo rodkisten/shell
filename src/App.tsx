@@ -40,6 +40,7 @@ function NavContents() {
     <div className="nav-group-label">WORKSPACE</div>
     <NavLink end to="/" className={({ isActive }) => cn('side-link', isActive && 'active')}><Code2 size={17} /> Editor <span className="shortcut-hint">⌘ 1</span></NavLink>
     <NavLink to="/biblioteca" className={({ isActive }) => cn('side-link', isActive && 'active')}><BookOpen size={17} /> Biblioteca</NavLink>
+    <NavLink to="/touch" className={({ isActive }) => cn('side-link', isActive && 'active')}><Terminal size={17} /> Touch Commands</NavLink>
     <NavLink to="/historico" className={({ isActive }) => cn('side-link', isActive && 'active')}><Clock3 size={17} /> Histórico</NavLink>
     <div className="nav-group-label second">REFERÊNCIA</div>
     <a className="side-link" href="https://www.shellcheck.net/wiki/" target="_blank" rel="noreferrer"><ShieldCheck size={17} /> ShellCheck <ArrowDownToLine className="external-mini" size={13}/></a>
@@ -249,6 +250,7 @@ export function App() {
       <nav className="mobile-nav" aria-label="Navegação principal">
         <NavLink to="/" end className={({isActive}) => cn(isActive && 'active')}><Code2 size={20}/><span>Editor</span></NavLink>
         <NavLink to="/biblioteca" className={({isActive}) => cn(isActive && 'active')}><BookOpen size={20}/><span>Biblioteca</span></NavLink>
+        <NavLink to="/touch" className={({isActive}) => cn(isActive && 'active')}><Terminal size={20}/><span>Touch</span></NavLink>
         <NavLink to="/historico" className={({isActive}) => cn(isActive && 'active')}><Clock3 size={20}/><span>Histórico</span></NavLink>
       </nav>
       {toast && <div role="status" className="toast"><CircleCheck size={16}/> {toast}<button onClick={() => setToast('')} aria-label="Fechar aviso"><X size={14}/></button></div>}

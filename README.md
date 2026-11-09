@@ -15,6 +15,16 @@ A mobile-first shell workbench for learning and daily use. Designed for the iPho
 - Safari touch-first UI, compact command toolbar, safe-area navigation, keyboard-friendly text size and PWA manifest.
 - React Router navigation: editor, reference library and saved history.
 
+## Touch Commands / VS Code sidebar
+
+A dedicated narrow-screen route is available at `/touch` (also `/extension`).
+It includes one-line presets organized by category, custom commands, favorites,
+local recent history, import of recent commands supplied by an extension, and
+a safe postMessage bridge. **Insert** sends without Enter; **Run** sends with Enter.
+Before an extension connects, tapping a command copies it to the clipboard.
+
+Integration contract and wrapper example: [docs/vscode-touch-bridge.md](docs/vscode-touch-bridge.md).
+
 ## Running locally
 
 Node.js 22+ is recommended.
@@ -47,7 +57,7 @@ After the connection is made, Cloudflare automatically builds/deploys on commits
 
 ### Worker headers
 
-The Worker returns `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` for static assets. This is necessary for the ShellCheck browser engine (`SharedArrayBuffer`, modern Safari required). ShellCheck is loaded only when validation is requested. Other tools do not require cross-origin isolation.
+Static asset headers are defined in `public/_headers`, including `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. This is necessary for the ShellCheck browser engine (`SharedArrayBuffer`, modern Safari required). ShellCheck is loaded only when validation is requested. Other tools do not require cross-origin isolation.
 
 ### Security and limitations
 

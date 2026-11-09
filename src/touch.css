@@ -1,0 +1,96 @@
+/* Standalone compact VS Code / Touch Terminal surface */
+.touch-app{--touch-border:#282a30;--touch-muted:#82858f;--touch-soft:#aaaeb8;--touch-ink:#f6f6f7;--touch-surface:#111216;--touch-raised:#181a1f;isolation:isolate;width:100%;max-width:470px;min-height:100dvh;margin:0 auto;background:#0b0c0f;color:var(--touch-ink);display:flex;flex-direction:column;border-inline:1px solid #24252a;font-size:12px}
+.touch-app button{touch-action:manipulation}
+.touch-header{height:56px;position:sticky;top:0;z-index:10;padding:0 14px;background:#0c0d10f2;backdrop-filter:blur(16px);border-bottom:1px solid var(--touch-border);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.touch-brand{display:flex;align-items:center;gap:9px;min-width:0}
+.touch-mark{height:29px;width:29px;display:grid;place-items:center;background:#fff;color:#0d0d10;border-radius:7px;flex:none}
+.touch-brand>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.touch-brand strong{font-weight:680;letter-spacing:-.55px;font-size:14px;white-space:nowrap}
+.touch-brand strong span{font-weight:400;color:#bdc0c7}
+.touch-brand small{letter-spacing:1.05px;color:#646976;font-size:8px;font-weight:700}
+.touch-connection{border:1px solid #39323a;background:#221b20;color:#c1a0a9;border-radius:20px;padding:6px 8px;display:flex;align-items:center;gap:6px;font-size:10px;white-space:nowrap}
+.touch-connection.connected{background:#12241b;border-color:#294b36;color:#8ce3b2}
+.touch-body{flex:1;min-width:0;padding:23px 13px 21px}
+.touch-eyebrow{font-size:9px;letter-spacing:1.1px;color:#888b95;font-weight:710}
+.touch-topline{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:22px}
+.touch-topline h1{font-size:27px;line-height:1.1;letter-spacing:-1.1px;margin:8px 0 5px;font-weight:720}
+.touch-topline h1 span{color:#777b87}
+.touch-topline p{font-size:11px;color:#81848d;margin:0;line-height:1.5}
+.touch-new{flex:none;width:39px;height:39px;border:1px solid #e6e6e8;border-radius:8px;background:#f8f8f9;color:#18191d;display:grid;place-items:center}
+.touch-new:hover{background:#dcdde2}
+.touch-mode{border:1px solid #2c2e34;border-radius:8px;padding:9px 9px;display:flex;align-items:center;justify-content:space-between;gap:6px;background:#121317;margin-bottom:14px}
+.touch-mode>span{color:#9699a4;display:flex;align-items:center;gap:6px;font-size:11px;white-space:nowrap}
+.touch-mode>div{background:#08090c;border:1px solid #292a30;padding:2px;border-radius:6px;display:flex;gap:2px}
+.touch-mode button{color:#999da6;background:none;border:0;border-radius:4px;font-weight:580;font-size:10px;height:28px;padding:0 9px;white-space:nowrap}
+.touch-mode button.active{background:#eeeef0;color:#15161a}
+.touch-search{height:40px;border:1px solid #32343a;border-radius:8px;background:#101115;display:flex;align-items:center;gap:9px;padding:0 11px;color:#838791}
+.touch-search:focus-within{border-color:#717680}
+.touch-search input{min-width:0;flex:1;width:100%;background:transparent;border:0;outline:none;color:#f1f1f3;font-size:16px}
+.touch-search input::placeholder{color:#6f727c}
+.touch-search button{border:0;background:transparent;color:#9698a2;display:grid;place-items:center;padding:7px}
+.touch-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;border-bottom:1px solid #292c31;margin:18px -2px 0}
+.touch-tabs button{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-width:0;min-height:48px;background:none;border:0;border-bottom:2px solid transparent;color:#878b96;font-size:10px;white-space:nowrap;padding:5px 0 9px}
+.touch-tabs button.active{color:#f3f3f5;border-bottom-color:#f3f3f5}
+.touch-tabs sup{position:absolute;right:4px;top:1px;color:#a8b1bf;font-size:9px}
+.touch-chips{display:flex;overflow-x:auto;gap:6px;padding:15px 0 5px;scrollbar-width:none;margin-right:-13px;padding-right:13px}
+.touch-chips::-webkit-scrollbar{display:none}
+.touch-chips button{border:1px solid #303238;background:#15161a;color:#989ba5;border-radius:20px;padding:7px 11px;white-space:nowrap;font-size:10px}
+.touch-chips button.active{background:#e5e6e9;color:#17181b;border-color:#e5e6e9}
+.touch-list-heading{margin:19px 0 11px;display:flex;align-items:center;justify-content:space-between;gap:8px;color:#777b86;letter-spacing:1px;font-weight:700;font-size:9px}
+.touch-list-heading>div{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.touch-link{display:flex;align-items:center;gap:3px;padding:0;background:none;border:0;color:#adaeb6;font-size:10px}
+.touch-list{display:flex;flex-direction:column;gap:9px}
+.touch-command{border:1px solid #292b31;background:#121317;border-radius:9px;overflow:hidden}
+.touch-command:hover{border-color:#444852}
+.touch-command-main{display:flex;align-items:stretch;min-height:85px}
+.touch-command-send{display:flex;flex-direction:column;text-align:left;gap:5px;min-width:0;flex:1;border:0;background:transparent;padding:13px 0 10px 13px;color:#f5f5f7}
+.touch-command-send:active{background:#202126}
+.touch-command-name{font-size:12px;font-weight:650;letter-spacing:-.16px}
+.touch-command-subtitle{color:#878c98;font-size:10px;line-height:1.4}
+.touch-command-code{font:11px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#9ee0bd;display:block;overflow-x:auto;white-space:nowrap;max-width:100%;scrollbar-width:none}
+.touch-command-code::-webkit-scrollbar{display:none}
+.touch-send-arrow{flex:none;background:transparent;border:0;color:#bec2ca;display:grid;place-items:center;width:40px}
+.touch-send-arrow:active{background:#282b30}
+.touch-command-bottom{border-top:1px solid #25262c;padding:5px 8px 5px 13px;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.touch-category-label{font-size:9px;color:#666c76;border:1px solid #292c33;padding:3px 6px;border-radius:4px}
+.touch-command-actions{display:flex;align-items:center;gap:0}
+.touch-command-actions button{border:0;background:none;color:#7e818c;width:32px;height:30px;display:grid;place-items:center;border-radius:5px}
+.touch-command-actions button:active{background:#272b31}
+.touch-command-actions button:hover{color:#e6e7ec}
+.touch-command-actions button.is-pinned{color:#d6c189}
+.touch-empty{display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;text-align:center;border:1px dashed #2d3038;border-radius:9px;padding:41px 18px;color:#737884}
+.touch-empty strong{font-size:13px;color:#dedfe4}
+.touch-empty p{font-size:11px;line-height:1.65;margin:0;color:#797e89}
+.touch-empty .btn{margin-top:8px}
+.touch-footer{position:sticky;bottom:0;z-index:9;min-height:45px;background:#0f1013ef;backdrop-filter:blur(14px);border-top:1px solid #292b31;display:flex;align-items:center;padding:0 12px max(0px,env(safe-area-inset-bottom));gap:9px}
+.touch-footer-status{display:flex;align-items:center;gap:7px;color:#757b84;font-size:10px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.touch-dot{width:6px;height:6px;border-radius:50%;background:#d9ad66;flex:none}
+.touch-dot.connected{background:#44d69e}
+.touch-footer button,.touch-footer a{color:#858a95;border:0;background:none;padding:8px;display:grid;place-items:center}
+.touch-help{position:fixed;z-index:35;bottom:54px;left:max(calc(50% - 220px),9px);right:max(calc(50% - 220px),9px);background:#202227;border:1px solid #3e4048;padding:14px;border-radius:9px;box-shadow:0 12px 50px #000a;font-size:11px;line-height:1.6}
+.touch-help>button{position:absolute;right:9px;top:9px;border:0;background:none;color:#a1a4af}
+.touch-help strong{font-size:13px}
+.touch-help p{max-width:35em;color:#b2b5be}
+.touch-help code{background:#101216;border-radius:3px;padding:2px 3px;color:#b6dccc}
+.touch-help a{color:#b9bdff;font-weight:500}
+.touch-toast{position:fixed;z-index:110;bottom:61px;left:50%;transform:translateX(-50%);max-width:min(420px,calc(100vw - 20px));width:max-content;background:#282b32;border:1px solid #4e525d;border-radius:8px;padding:10px 11px;color:#f3f4f6;box-shadow:0 18px 40px #000a;font-size:11px;line-height:1.5;display:flex;align-items:center;gap:8px}
+.touch-toast>svg{color:#6fe1aa;flex:none}
+.touch-toast button{background:none;border:0;color:#aeb2b9;margin-left:4px;display:grid;place-items:center}
+.dialog-overlay{position:fixed;inset:0;z-index:200;background:#000b;backdrop-filter:blur(3px)}
+.touch-dialog{position:fixed;z-index:201;top:50%;left:50%;transform:translate(-50%,-50%);width:min(410px,calc(100vw - 20px));max-height:min(90dvh,720px);overflow-y:auto;background:#18191d;border:1px solid #3a3d46;border-radius:13px;padding:18px;color:#f1f2f5;box-shadow:0 24px 70px #000c}
+.touch-dialog-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:18px}
+.touch-dialog-head h2{margin:6px 0 4px;font-size:19px;letter-spacing:-.7px}
+.touch-dialog-head p{font-size:11px;color:#8d919c;line-height:1.5;margin:0}
+.touch-dialog-head>button{border:0;background:none;color:#a4a7b0;padding:4px}
+.touch-dialog form{display:flex;flex-direction:column;gap:12px}
+.touch-dialog form>label{display:flex;flex-direction:column;gap:6px;color:#c6c9d0;font-size:11px;font-weight:600}
+.touch-dialog form input,.touch-dialog form textarea{border:1px solid #393d47;background:#101115;color:#e9eaee;font-size:16px;outline:none;border-radius:6px;padding:10px;min-width:0}
+.touch-dialog form textarea{font:13px/1.6 ui-monospace,Menlo,monospace;resize:vertical}
+.touch-dialog form input:focus,.touch-dialog form textarea:focus{border-color:#989aa2}
+.touch-dialog-tip{font-size:10px;color:#9ca1ab;line-height:1.6;display:flex;align-items:flex-start;gap:7px;margin:2px 0}
+.touch-dialog-tip svg{flex:none}
+.touch-dialog-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;margin-top:4px}
+.touch-dialog-actions .touch-delete{margin-right:auto;color:#e49a9c}
+@media(max-width:520px){.touch-app{border-inline:0}.touch-dialog{top:auto;left:0;bottom:0;transform:none;width:100%;max-height:calc(93dvh - env(safe-area-inset-bottom));border-radius:16px 16px 0 0;padding:20px 16px calc(18px + env(safe-area-inset-bottom))}.touch-help{left:9px;right:9px}.touch-toast{bottom:calc(62px + env(safe-area-inset-bottom))}}
+@media(max-width:280px){.touch-brand strong{font-size:12px}.touch-connection{padding:5px}.touch-mode>span{font-size:10px}.touch-mode button{padding:0 6px}.touch-tabs button{font-size:9px}.touch-command-code{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.touch-app *{scroll-behavior:auto!important;animation-duration:.001ms!important;transition-duration:.001ms!important}}
