@@ -1,4 +1,5 @@
-{
+{ 
+  "name": "shell",
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "shellconductor",
   "main": "./worker/index.ts",
