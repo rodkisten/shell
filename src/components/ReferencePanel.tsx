@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Search, ExternalLink, BookOpen, ArrowUpRight } from 'lucide-react';
+import { Search, BookOpen, ArrowUpRight } from 'lucide-react';
 import { COMMANDS, SNIPPETS, type ShellCommand } from '../lib/commands';
 import { Button } from './ui/button';
 

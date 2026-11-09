@@ -39,7 +39,7 @@ The repo includes `wrangler.jsonc`, the Cloudflare Vite plugin, the Worker backe
 
 1. Go to **Cloudflare Dashboard → Workers & Pages → Create application → GitHub** (or open an existing Worker → **Settings → Builds → Connect**).
 2. Select **rodkisten/shell**, root `/`, production branch **main**.
-3. Ensure the Worker name is **shellconductor**, matching `wrangler.jsonc`.
+3. Ensure the Worker name is **shell**, matching `wrangler.jsonc`.
 4. Set install command `npm install --no-audit --no-fund`, build command `npm run build`, deploy command `npx wrangler deploy` (or set deploy command to `npm run deploy` if build runs there).
 5. Enable preview builds for PRs if you want them. Save and deploy.
 

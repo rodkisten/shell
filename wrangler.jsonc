@@ -1,5 +1,4 @@
-{ 
-  "name": "shell",
+{
   "$schema": "./node_modules/wrangler/config-schema.json",
   "main": "./worker/index.ts",
   "compatibility_date": "2026-11-09",

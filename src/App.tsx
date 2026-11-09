@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router';
 import {
-  Activity, ArrowDownToLine, ArrowLeftRight, BookOpen, Bookmark, Check, CheckCheck, ChevronDown, CircleAlert,
-  CircleCheck, Clipboard, Clock3, Code2, Copy, FileCode2, FileText, Github, Info, Keyboard,
-  LoaderCircle, Menu, PanelBottom, Play, RotateCcw, ShieldCheck, Sparkles, Square, Terminal,
+  Activity, ArrowDownToLine, ArrowLeftRight, BookOpen, Bookmark, ChevronDown, CircleAlert,
+  CircleCheck, Clipboard, Clock3, Code2, Copy, FileCode2, FileText, Github, Info,
+  LoaderCircle, Menu, Play, RotateCcw, ShieldCheck, Sparkles, Square, Terminal,
   Trash2, WandSparkles, X,
 } from 'lucide-react';
 import { Button } from './components/ui/button';
@@ -11,7 +11,7 @@ import { ManPopover } from './components/ManPopover';
 import { ShellEditor, type ShellEditorHandle } from './components/ShellEditor';
 import { HistoryPanel } from './components/HistoryPanel';
 import { ReferencePanel } from './components/ReferencePanel';
-import { COMMANDS, SNIPPETS } from './lib/commands';
+import { SNIPPETS } from './lib/commands';
 import { contextualHints } from './lib/suggestions';
 import { formatShell } from './lib/format';
 import { checkShell, applyAvailableFixes, type Finding } from './lib/shellcheck';
@@ -31,7 +31,7 @@ done
 type Output = { id: number; script: string; stdout: string; stderr: string; exitCode: number; time: number };
 const shortcuts = [
   { label: 'Tab', value: '  ' }, { label: '|', value: ' | ' }, { label: '&&', value: ' && ' },
-  { label: '$()', value: '$()' }, { label: '${}', value: '${}' }, { label: '\"\"', value: '\"\"' },
+  { label: '$()', value: '$()' }, { label: '${}', value: '${}' }, { label: '""', value: '""' },
   { label: 'if', value: 'if [[  ]]; then\n  \nfi' }, { label: 'for', value: 'for item in ; do\n  \ndone' },
 ];
 
