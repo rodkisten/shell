@@ -1,4 +1,4 @@
-interface Env { ASSETS: Fetcher }
+interface Env { ASSETS: { fetch(request: Request): Promise<Response> } }
 
 const headers: Record<string, string> = {
   'Cross-Origin-Opener-Policy': 'same-origin',
@@ -63,4 +63,4 @@ export default {
     Object.entries(headers).forEach(([key, value]) => resultHeaders.set(key, value));
     return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers: resultHeaders });
   },
-} satisfies ExportedHandler<Env>;
+};

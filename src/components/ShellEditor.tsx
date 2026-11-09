@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { EditorState, StateEffect } from '@codemirror/state';
+import { EditorState } from '@codemirror/state';
+import { embeddedShellHighlight } from '../lib/highlight';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { basicSetup } from 'codemirror';
 import { indentWithTab } from '@codemirror/commands';
@@ -85,6 +86,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           basicSetup,
           oneDark,
           shell(),
+          embeddedShellHighlight,
           shellTheme,
           EditorView.lineWrapping,
           EditorState.tabSize.of(2),
