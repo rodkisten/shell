@@ -201,7 +201,8 @@ export function TouchTerminal() {
     }
     setSaving(true);
     try {
-      const command = (await formatShell(form.command.trim(), true)).trim();
+      const raw = form.command.trim();
+      const command = isOneLine(raw) ? raw : (await formatShell(raw, true)).trim();
       if (!isOneLine(command)) throw new Error('Não é possível converter esse script em uma linha válida. Use o editor principal.');
       const existing = custom.find(item => item.id === form.id);
       const now = Date.now();
