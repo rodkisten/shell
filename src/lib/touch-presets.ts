@@ -59,7 +59,8 @@ export const TOUCH_PRESETS: TouchCommand[] = [
 export const DEFAULT_PINNED = ['preset:status','preset:ls','preset:log','preset:npm-build','preset:jq','preset:cf-tail'];
 export const TOUCH_CATEGORIES = ['Git','Arquivos','Texto','Node','Docker','Cloudflare','Rede','Sistema','Shell','Dev'];
 export const isOneLine = (command:string) =>
-  command.length > 0 && command.length <= 4000 && !/[\n\r\0\u0001-\u0008\u000b-\u001f]/.test(command);
+  command.length > 0 && command.length <= 4000 &&
+  !Array.from(command).some(char => { const code = char.charCodeAt(0); return code < 32 && code !== 9; });
 export const needsConfirmation = (command:string) =>
   /\b(?:sudo|mkfs|shutdown|reboot|poweroff|wrangler\s+deploy|git\s+(?:reset\s+--hard|push\s+--force|clean\s+-[a-z]*f)|rm\s+-[a-z]*[rf])\b/i.test(command)
   || /(?:curl|wget)[^\n]*\|\s*(?:ba)?sh\b/i.test(command);
