@@ -1,15 +1,15 @@
 import { parse, print, LangVariant } from 'sh-syntax';
 
 /**
- * sh-syntax parses Bash-compatible shell grammar, not Zsh-specific extensions.
+ * sh-syntax exposes experimental Zsh grammar support (LangZsh).\n * It is incomplete; do not rewrite source if parsing fails.
  * Keep the original script untouched when parsing or formatting fails.
  */
 export async function formatShell(code: string, singleLine = false): Promise<string> {
   if (!code.trim()) return '';
   try {
-    await parse(code, { variant: LangVariant.LangBash, keepComments: true, filepath: 'script.zsh' });
+    await parse(code, { variant: LangVariant.LangZsh, keepComments: true, filepath: 'script.zsh' });
     const formatted = await print(code, {
-      variant: LangVariant.LangBash,
+      variant: LangVariant.LangZsh,
       keepComments: true,
       indent: 2,
       singleLine,
@@ -17,7 +17,7 @@ export async function formatShell(code: string, singleLine = false): Promise<str
     return formatted.trimEnd();
   } catch (error) {
     throw new Error(
-      'O parser Bash do sh-syntax não reconheceu este script. A sintaxe específica do Zsh não será reformatada automaticamente. ' +
+      'O parser experimental de Zsh do sh-syntax não reconheceu este script. O código original foi preservado. ' +
       (error instanceof Error ? error.message : String(error)),
     );
   }
