@@ -1,22 +1,34 @@
-import { initBashkit, Bash } from '@everruns/bashkit-wasm';
+import { runZshScript } from 'zsh-wasm';
+
 type Request = { id: number; action: 'execute' | 'reset'; script?: string };
-let init: Promise<void> | undefined;
-let bash: Bash | undefined;
-async function shell() {
-  if (!init) init = initBashkit().then(() => undefined);
-  await init;
-  if (!bash) bash = new Bash({ maxCommands: 350, maxLoopIterations: 1200, timeoutMs: 6000 });
-  return bash;
-}
+
 self.onmessage = async (event: MessageEvent<Request>) => {
   const { id, action, script } = event.data;
   try {
-    if (action === 'reset') { bash = undefined; self.postMessage({ id, ok: true, stdout: 'Ambiente reiniciado.\n', stderr: '', exitCode: 0 }); return; }
-    if (!script || script.length > 50_000) throw new Error('Script vazio ou muito grande (limite: 50 KB).');
-    const instance = await shell();
-    const response = instance.executeSync(script);
-    self.postMessage({ id, ok: true, stdout: response.stdout, stderr: response.stderr, exitCode: response.exitCode });
+    if (action === 'reset') {
+      self.postMessage({ id, ok: true, stdout: 'Ambiente reiniciado.\n', stderr: '', exitCode: 0 });
+      return;
+    }
+    if (!script?.trim() || script.length > 50_000) {
+      throw new Error('Script vazio ou muito grande (limite: 50 KB).');
+    }
+    // IDBFS persists /home/user across invocations and browser reloads.
+    // zsh-wasm runs its own nested worker to keep the UI responsive.
+    const result = await runZshScript(script, { fs: 'idbfs' });
+    self.postMessage({
+      id,
+      ok: true,
+      stdout: result.stdout ?? '',
+      stderr: result.stderr ?? '',
+      exitCode: 'exitCode' in result && typeof result.exitCode === 'number' ? result.exitCode : 0,
+    });
   } catch (error) {
-    self.postMessage({ id, ok: false, stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 1 });
+    self.postMessage({
+      id,
+      ok: false,
+      stdout: '',
+      stderr: error instanceof Error ? error.message : String(error),
+      exitCode: 1,
+    });
   }
 };
