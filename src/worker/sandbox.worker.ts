@@ -20,7 +20,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
       ok: true,
       stdout: result.stdout ?? '',
       stderr: result.stderr ?? '',
-      exitCode: 'exitCode' in result && typeof result.exitCode === 'number' ? result.exitCode : 0,
+      // The upstream public API documents stdout/stderr, not an exit status.\n      // Never report an unobserved exit as success.\n      exitCode: 'exitCode' in result && typeof result.exitCode === 'number' ? result.exitCode : -1,
     });
   } catch (error) {
     self.postMessage({
