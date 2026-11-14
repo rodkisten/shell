@@ -68,6 +68,15 @@ export function WorkspacePanel() {
     {selected && <div className="workspace-files-editor">
       <strong>{selected}</strong>
       <textarea aria-label={'Conteúdo de ' + selected} value={contents} onChange={e => setContents(e.target.value)} rows={7} spellCheck={false}/>
+      <button type="button" onClick={() => {
+        const blob = new Blob([contents], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = selected;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }}><Download size={15}/> Baixar</button>
       <button type="button" disabled={busy} onClick={() => void task(async () => {
         await saveWorkspaceFile(selected, contents, cwd); setNotice('Arquivo salvo no workspace.');
       })}><Save size={15}/> Salvar</button>
