@@ -19,7 +19,7 @@ import { cancelShell, executeScript, resetShell } from './lib/terminal';
 import { getDraft, saveDraft, saveEntry } from './lib/storage';
 import { cn } from './lib/utils';
 
-const starter = `#!/usr/bin/env bash
+const starter = `#!/usr/bin/env zsh
 # Bem-vindo ao ShellConductor 👋
 set -euo pipefail
 
@@ -188,15 +188,15 @@ export function App() {
         <main className="main-content">
           <Routes>
             <Route path="/" element={<>
-              <div className="page-heading"><div className="heading-top"><span className="eyebrow"><span className="live-dot"/> SHELL PLAYGROUND</span><span className="release-pill">BASH + WEBASSEMBLY</span></div>
+              <div className="page-heading"><div className="heading-top"><span className="eyebrow"><span className="live-dot"/> SHELL PLAYGROUND</span><span className="release-pill">ZSH + WEBASSEMBLY</span></div>
                 <h1>Seu shell, <span>sob controle.</span></h1>
                 <p>Escreva, entenda e execute scripts. Tudo em um lugar, sem sair do navegador.</p>
               </div>
               <div className="workspace-layout">
                 <section className="editor-panel">
                   <div className="panel-header">
-                    <div className="panel-tabs"><span className="file-icon"><FileCode2 size={15}/></span><span>script.sh</span><span className="unsaved-dot" aria-label="Rascunho local"/></div>
-                    <div className="panel-header-actions"><span className="language-label">Bash</span><button title="Colar texto" onClick={paste} aria-label="Colar"><Clipboard size={15}/></button><button title="Copiar script" onClick={() => void copy()} aria-label="Copiar"><Copy size={15}/></button><button title="Salvar script" onClick={save} aria-label="Salvar"><Bookmark size={15}/></button></div>
+                    <div className="panel-tabs"><span className="file-icon"><FileCode2 size={15}/></span><span>script.zsh</span><span className="unsaved-dot" aria-label="Rascunho local"/></div>
+                    <div className="panel-header-actions"><span className="language-label">Zsh</span><button title="Colar texto" onClick={paste} aria-label="Colar"><Clipboard size={15}/></button><button title="Copiar script" onClick={() => void copy()} aria-label="Copiar"><Copy size={15}/></button><button title="Salvar script" onClick={save} aria-label="Salvar"><Bookmark size={15}/></button></div>
                   </div>
                   <div className="editor-inner"><ShellEditor ref={editor} code={script} onChange={change} onCursor={setCursor} onInspect={setInspected} onRun={() => { void run(); }}/></div>
                   <div className="editor-keyboard">{shortcuts.map((item,i) => <button key={i} onMouseDown={e => e.preventDefault()} onClick={() => insert(item.value)}>{item.label}</button>)}</div>
@@ -239,7 +239,7 @@ export function App() {
                     <div className="terminal-empty"><span className="terminal-prompt"><span>❯</span> shellconductor@browser ~ %</span><p>O terminal está pronto. Execute seu script para ver a saída aqui.</p><p className="muted">Sistema de arquivos virtual, sem acesso ao disco ou rede do iPhone.</p></div>}</div>
                   <div className="terminal-bottom"><span><ShieldCheck size={13}/> Ambiente isolado</span><div><button onClick={async () => { try { await resetShell(); notify('Sandbox zerado.'); } catch { notify('Não foi possível reiniciar.'); } }}><RotateCcw size={13}/> Reiniciar</button><button onClick={() => setOutput([])}><Trash2 size={13}/> Limpar saída</button></div></div></>}
               </section>
-              <div className="footer-advice"><Info size={15}/><span>O terminal simula Bash com filesystem próprio. <strong>Não executa comandos no seu iPhone, servidor ou Codespace.</strong> Requisições HTTP externas não são habilitadas no sandbox.</span></div>
+              <div className="footer-advice"><Info size={15}/><span>O terminal executa Zsh em WebAssembly com filesystem virtual persistente. <strong>Não executa comandos no seu iPhone, servidor ou Codespace.</strong> Requisições HTTP externas não são habilitadas no sandbox.</span></div>
             </>} />
             <Route path="/biblioteca" element={<ReferencePanel onInsert={insert} onInspect={setInspected}/>} />
             <Route path="/historico" element={<HistoryPanel revision={historyRevision} onRestore={restore} notify={notify}/>} />
