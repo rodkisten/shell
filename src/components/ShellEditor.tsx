@@ -11,7 +11,7 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import { contextualHints } from '../lib/suggestions';
 import { byName, SNIPPETS } from '../lib/commands';
 
-export type ShellEditorHandle = { insert(text: string): void; focus(): void };
+export type ShellEditorHandle = { insert(text: string): void; focus(): void; getExplainTarget(): { code: string; scope: 'selection' | 'line' | 'script'; line: number } };
 type Props = {
   code: string;
   onChange(value: string): void;
@@ -56,6 +56,15 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       view.focus();
     },
     focus() { editor.current?.focus(); },
+    getExplainTarget() {
+      const view = editor.current;
+      if (!view) return { code: '', scope: 'script', line: 1 };
+      const selection = view.state.selection.main;
+      const line = view.state.doc.lineAt(selection.head);
+      if (!selection.empty) return { code: view.state.sliceDoc(selection.from, selection.to), scope: 'selection', line: view.state.doc.lineAt(selection.from).number };
+      if (line.text.trim()) return { code: line.text, scope: 'line', line: line.number };
+      return { code: view.state.doc.toString(), scope: 'script', line: 1 };
+    },
   }), []);
 
   useEffect(() => {
