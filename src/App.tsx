@@ -10,6 +10,8 @@ import { Button } from './components/ui/button';
 import { ManPopover } from './components/ManPopover';
 import { ShellEditor, type ShellEditorHandle } from './components/ShellEditor';
 import { HistoryPanel } from './components/HistoryPanel';
+import { WorkspacePanel } from './components/WorkspacePanel';
+import './components/workspace.css';
 import { ReferencePanel } from './components/ReferencePanel';
 import { SNIPPETS } from './lib/commands';
 import { contextualHints } from './lib/suggestions';
@@ -19,7 +21,7 @@ import { cancelShell, executeScript, resetShell } from './lib/terminal';
 import { getDraft, saveDraft, saveEntry } from './lib/storage';
 import { cn } from './lib/utils';
 
-const starter = `#!/usr/bin/env bash
+const starter = `#!/usr/bin/env zsh
 # Bem-vindo ao ShellConductor 👋
 set -euo pipefail
 
@@ -60,8 +62,15 @@ export function App() {
   const [historyRevision, setHistoryRevision] = useState(0);
   const [showSnippets, setShowSnippets] = useState(false);
   const [showOutput, setShowOutput] = useState(true);
+  const [autoRun, setAutoRun] = useState(() => localStorage.getItem('shellconductor:auto-run') === 'true');
+  const [editorHeight, setEditorHeight] = useState(() => Number(localStorage.getItem('shellconductor:editor-height')) || 390);
+  const [terminalHeight, setTerminalHeight] = useState(() => Number(localStorage.getItem('shellconductor:terminal-height')) || 260);
+  const [runRevision, setRunRevision] = useState(0);
   const [mobileMenu, setMobileMenu] = useState(false);
   const editor = useRef<ShellEditorHandle>(null);
+  const runningRef = useRef(false);
+  const pendingAutoRun = useRef<string | null>(null);
+  const runScriptRef = useRef<(source: string, automatic?: boolean) => Promise<void>>(async () => undefined);
   const hydrated = useRef(false);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigation = useNavigate();
@@ -117,7 +126,7 @@ export function App() {
       if (!formatted) return notify('Escreva um comando primeiro.');
       change(formatted);
       if (singleLine && formatted.includes('\n')) notify('Este script possui estruturas que precisam de múltiplas linhas para manter a sintaxe.');
-      else notify(singleLine ? 'Convertido para uma linha pelo shfmt.' : 'Formatado pelo shfmt.');
+      else notify(singleLine ? 'Convertido para uma linha pelo sh-syntax.' : 'Formatado pelo sh-syntax.');
     } catch (error) { notify('Erro de sintaxe ou formatação: ' + (error instanceof Error ? error.message : String(error))); }
     finally { setBusy(null); }
   };
@@ -140,22 +149,78 @@ export function App() {
     try { await saveEntry(script, 'save'); setHistoryRevision(n => n + 1); notify('Script salvo no IndexedDB deste dispositivo.'); }
     catch { notify('IndexedDB indisponível neste navegador.'); }
   };
-  const run = useCallback(async () => {
-    if (busy) return;
-    if (!script.trim()) return notify('Escreva um script para executar.');
-    setBusy('run'); setShowOutput(true);
+  const runScript = useCallback(async (source: string, automatic = false) => {
+    if (!source.trim()) return;
+    if (runningRef.current) {
+      if (automatic) pendingAutoRun.current = source;
+      return;
+    }
+    runningRef.current = true;
+    setBusy('run');
+    setShowOutput(true);
     try {
-      const result = await executeScript(script);
-      const entry = { ...result, script, id: Date.now(), time: Date.now() };
-      setOutput(current => [entry, ...current].slice(0, 20));
-      try { await saveEntry(script, 'run', result.stdout + result.stderr); setHistoryRevision(n => n + 1); }
-      catch { /* Execution works without persistence. */ }
-      notify(result.exitCode === 0 ? 'Executado no sandbox WASM.' : 'Finalizado com código ' + result.exitCode + '.');
+      const result = await executeScript(source);
+      const now = Date.now();
+      setOutput(current => [{ ...result, script: source, id: now, time: now }, ...current].slice(0, 20));
+      if (!automatic) {
+        try { await saveEntry(source, 'run', result.stdout + result.stderr); setHistoryRevision(n => n + 1); }
+        catch { /* Execution works without history storage. */ }
+        notify(result.exitCode === 0 ? 'Executado no sandbox WASM.' : 'Finalizado com código ' + result.exitCode + '.');
+      }
     } catch (error) {
-      setOutput(current => [{ id: Date.now(), time: Date.now(), script, stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 1 }, ...current]);
-      notify('Falha na execução. Veja a saída.');
-    } finally { setBusy(null); }
-  }, [script, busy, notify]);
+      const now = Date.now();
+      setOutput(current => [{ id: now, time: now, script: source, stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 1 }, ...current].slice(0, 20));
+      if (!automatic) notify('Falha na execução. Veja a saída.');
+    } finally {
+      runningRef.current = false;
+      setBusy(null);
+      setRunRevision(n => n + 1);
+    }
+  }, [notify]);
+  runScriptRef.current = runScript;
+  const run = () => { pendingAutoRun.current = null; void runScriptRef.current(script); };
+
+  useEffect(() => {
+    localStorage.setItem('shellconductor:auto-run', String(autoRun));
+    if (!autoRun) { pendingAutoRun.current = null; return; }
+    if (!hydrated.current || !script.trim()) return;
+    const timer = setTimeout(() => {
+      if (runningRef.current) pendingAutoRun.current = script;
+      else void runScriptRef.current(script, true);
+    }, 850);
+    return () => clearTimeout(timer);
+  }, [script, autoRun]);
+
+  useEffect(() => {
+    if (!autoRun || !pendingAutoRun.current || runningRef.current) return;
+    const next = pendingAutoRun.current;
+    pendingAutoRun.current = null;
+    const timer = setTimeout(() => void runScriptRef.current(next, true), 150);
+    return () => clearTimeout(timer);
+  }, [runRevision, autoRun]);
+
+  const resize = (target: 'editor' | 'terminal', event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const origin = event.clientY;
+    const initial = target === 'editor' ? editorHeight : terminalHeight;
+    const element = event.currentTarget;
+    element.setPointerCapture(event.pointerId);
+    const move = (e: PointerEvent) => {
+      const height = Math.max(150, Math.min(1100, initial + e.clientY - origin));
+      if (target === 'editor') setEditorHeight(height);
+      else setTerminalHeight(height);
+    };
+    const finish = () => {
+      element.removeEventListener('pointermove', move);
+      element.removeEventListener('pointerup', finish);
+      element.removeEventListener('pointercancel', finish);
+      const currentHeight = target === 'editor' ? document.querySelector('.editor-inner')?.getBoundingClientRect().height : document.querySelector('.terminal-body')?.getBoundingClientRect().height;
+      if (currentHeight) localStorage.setItem('shellconductor:' + target + '-height', String(Math.round(currentHeight)));
+    };
+    element.addEventListener('pointermove', move);
+    element.addEventListener('pointerup', finish);
+    element.addEventListener('pointercancel', finish);
+  };
   const explain = async () => {
     if (!script.trim()) return notify('Cole ou escreva um comando primeiro.');
     setBusy('explain');
@@ -188,20 +253,30 @@ export function App() {
         <main className="main-content">
           <Routes>
             <Route path="/" element={<>
-              <div className="page-heading"><div className="heading-top"><span className="eyebrow"><span className="live-dot"/> SHELL PLAYGROUND</span><span className="release-pill">BASH + WEBASSEMBLY</span></div>
+              <div className="page-heading"><div className="heading-top"><span className="eyebrow"><span className="live-dot"/> SHELL PLAYGROUND</span><span className="release-pill">ZSH + WEBASSEMBLY</span></div>
                 <h1>Seu shell, <span>sob controle.</span></h1>
                 <p>Escreva, entenda e execute scripts. Tudo em um lugar, sem sair do navegador.</p>
               </div>
+              <label className="auto-run-toggle"><input type="checkbox" checked={autoRun} onChange={event => setAutoRun(event.target.checked)} /> Executar automaticamente <span>850 ms após parar de digitar</span></label>
               <div className="workspace-layout">
                 <section className="editor-panel">
                   <div className="panel-header">
-                    <div className="panel-tabs"><span className="file-icon"><FileCode2 size={15}/></span><span>script.sh</span><span className="unsaved-dot" aria-label="Rascunho local"/></div>
-                    <div className="panel-header-actions"><span className="language-label">Bash</span><button title="Colar texto" onClick={paste} aria-label="Colar"><Clipboard size={15}/></button><button title="Copiar script" onClick={() => void copy()} aria-label="Copiar"><Copy size={15}/></button><button title="Salvar script" onClick={save} aria-label="Salvar"><Bookmark size={15}/></button></div>
+                    <div className="panel-tabs"><span className="file-icon"><FileCode2 size={15}/></span><span>script.zsh</span><span className="unsaved-dot" aria-label="Rascunho local"/></div>
+                    <div className="panel-header-actions"><span className="language-label">Zsh</span><button title="Colar texto" onClick={paste} aria-label="Colar"><Clipboard size={15}/></button><button title="Copiar script" onClick={() => void copy()} aria-label="Copiar"><Copy size={15}/></button><button title="Salvar script" onClick={save} aria-label="Salvar"><Bookmark size={15}/></button></div>
                   </div>
-                  <div className="editor-inner"><ShellEditor ref={editor} code={script} onChange={change} onCursor={setCursor} onInspect={setInspected} onRun={() => { void run(); }}/></div>
+                  <div className="editor-inner" style={{ height: editorHeight }}><ShellEditor ref={editor} code={script} onChange={change} onCursor={setCursor} onInspect={setInspected} onRun={() => { void run(); }}/></div>
+                  <div className="pane-resizer" role="separator" aria-label="Redimensionar editor" aria-orientation="horizontal" onPointerDown={event => resize('editor', event)} />
                   <div className="editor-keyboard">{shortcuts.map((item,i) => <button key={i} onMouseDown={e => e.preventDefault()} onClick={() => insert(item.value)}>{item.label}</button>)}</div>
                   <div className="editor-footer"><div className="footer-meta"><span><span className="status-light"/> Pronto</span><span>{script.split('\n').length} linhas</span><span>UTF-8</span></div><span>⌘ ↵ para executar</span></div>
                 </section>
+              <section className="terminal-panel">
+                <button className="terminal-heading" onClick={() => setShowOutput(v => !v)} aria-expanded={showOutput}><span><Terminal size={17}/> Terminal <span className="terminal-secondary">/ sandbox</span></span><div><span className="mini-status"><span className="status-light"/> WASM</span><ChevronDown className={cn(!showOutput && 'rotate')} size={16}/></div></button>
+                {showOutput && <><div className="terminal-body" style={{ height: terminalHeight, overflow: 'auto' }}>
+                  {output.length ? output.map(item => <div className="terminal-run" key={item.id}><div className="terminal-prompt"><span>❯</span> {item.script.split('\n').find(line => line.trim() && !line.startsWith('#')) || 'script.zsh'}</div>{item.stdout && <pre>{item.stdout}</pre>}{item.stderr && <pre className="terminal-error">{item.stderr}</pre>}<div className={cn('terminal-exit',item.exitCode !== 0 && 'bad')}>Processo finalizado com código {item.exitCode} · {new Date(item.time).toLocaleTimeString('pt-BR')}</div></div>) :
+                    <div className="terminal-empty"><span className="terminal-prompt"><span>❯</span> shellconductor@browser ~ %</span><p>O terminal está pronto. Execute seu script para ver a saída aqui.</p><p className="muted">Sistema de arquivos virtual, sem acesso ao disco ou rede do iPhone.</p></div>}</div>
+                  <div className="pane-resizer" role="separator" aria-label="Redimensionar terminal" aria-orientation="horizontal" onPointerDown={event => resize('terminal', event)} />
+                  <div className="terminal-bottom"><span><ShieldCheck size={13}/> Ambiente isolado</span><div><button onClick={async () => { try { await resetShell(); notify('Sandbox zerado.'); } catch { notify('Não foi possível reiniciar.'); } }}><RotateCcw size={13}/> Reiniciar</button><button onClick={() => setOutput([])}><Trash2 size={13}/> Limpar saída</button></div></div></>}
+              </section>
                 <section className="actions-panel">
                   <div className="toolbox-title"><span className="eyebrow">FERRAMENTAS</span><h3>Ações rápidas <Sparkles size={15}/></h3></div>
                   <div className="tool-primary">
@@ -209,8 +284,8 @@ export function App() {
                     {busy === 'run' && <Button onClick={() => { cancelShell(); setBusy(null); }} variant="outline" size="sm"><Square size={13}/> Interromper</Button>}
                   </div>
                   <div className="tool-group">
-                    <button className="tool-action" onClick={() => void convert(false)} disabled={!!busy}><span className="tool-icon"><WandSparkles size={17}/></span><span><strong>Formatar script</strong><small>shfmt • organização consistente</small></span><span className="tool-kbd">⌘ ⇧ F</span></button>
-                    <button className="tool-action" onClick={() => void check()} disabled={!!busy}><span className="tool-icon"><ShieldCheck size={17}/></span><span><strong>Validar e diagnosticar</strong><small>ShellCheck WASM • erros e avisos</small></span><span className="arrow-small">↗</span></button>
+                    <button className="tool-action" onClick={() => void convert(false)} disabled={!!busy}><span className="tool-icon"><WandSparkles size={17}/></span><span><strong>Formatar script</strong><small>sh-syntax • Zsh experimental</small></span><span className="tool-kbd">⌘ ⇧ F</span></button>
+                    <button className="tool-action" onClick={() => void check()} disabled={!!busy}><span className="tool-icon"><ShieldCheck size={17}/></span><span><strong>Validar e diagnosticar</strong><small>sh-syntax • análise sintática</small></span><span className="arrow-small">↗</span></button>
                     <button className="tool-action" onClick={() => void explain()} disabled={!!busy}><span className="tool-icon"><BookOpen size={17}/></span><span><strong>Explicar comando</strong><small>Man page + opções em contexto</small></span><span className="arrow-small">↗</span></button>
                   </div>
                   <div className="toolbox-divider"/>
@@ -232,14 +307,8 @@ export function App() {
                 {findings.map((finding,i) => <div className="diagnostic-item" key={i}><span className={cn('severity',finding.level)}>{finding.level}</span><div><strong>SC{finding.code} <span>L{finding.line}:{finding.column}</span></strong><p>{finding.message}</p><a href={'https://www.shellcheck.net/wiki/SC'+finding.code} target="_blank" rel="noreferrer">Entenda esse diagnóstico ↗</a></div></div>)}
               </section>}
               {explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div><pre>{explanation}</pre><p>Fonte: ManKier. Evite enviar comandos com segredos embutidos para serviços externos.</p></section>}
-              <section className="terminal-panel">
-                <button className="terminal-heading" onClick={() => setShowOutput(v => !v)} aria-expanded={showOutput}><span><Terminal size={17}/> Terminal <span className="terminal-secondary">/ sandbox</span></span><div><span className="mini-status"><span className="status-light"/> WASM</span><ChevronDown className={cn(!showOutput && 'rotate')} size={16}/></div></button>
-                {showOutput && <><div className="terminal-body">
-                  {output.length ? output.map(item => <div className="terminal-run" key={item.id}><div className="terminal-prompt"><span>❯</span> {item.script.split('\n').find(line => line.trim() && !line.startsWith('#')) || 'script.sh'}</div>{item.stdout && <pre>{item.stdout}</pre>}{item.stderr && <pre className="terminal-error">{item.stderr}</pre>}<div className={cn('terminal-exit',item.exitCode !== 0 && 'bad')}>Processo finalizado com código {item.exitCode} · {new Date(item.time).toLocaleTimeString('pt-BR')}</div></div>) :
-                    <div className="terminal-empty"><span className="terminal-prompt"><span>❯</span> shellconductor@browser ~ %</span><p>O terminal está pronto. Execute seu script para ver a saída aqui.</p><p className="muted">Sistema de arquivos virtual, sem acesso ao disco ou rede do iPhone.</p></div>}</div>
-                  <div className="terminal-bottom"><span><ShieldCheck size={13}/> Ambiente isolado</span><div><button onClick={async () => { try { await resetShell(); notify('Sandbox zerado.'); } catch { notify('Não foi possível reiniciar.'); } }}><RotateCcw size={13}/> Reiniciar</button><button onClick={() => setOutput([])}><Trash2 size={13}/> Limpar saída</button></div></div></>}
-              </section>
-              <div className="footer-advice"><Info size={15}/><span>O terminal simula Bash com filesystem próprio. <strong>Não executa comandos no seu iPhone, servidor ou Codespace.</strong> Requisições HTTP externas não são habilitadas no sandbox.</span></div>
+              <WorkspacePanel />
+              <div className="footer-advice"><Info size={15}/><span>O terminal executa Zsh em WebAssembly com filesystem virtual persistente. <strong>Não executa comandos no seu iPhone, servidor ou Codespace.</strong> Requisições HTTP externas não são habilitadas no sandbox.</span></div>
             </>} />
             <Route path="/biblioteca" element={<ReferencePanel onInsert={insert} onInspect={setInspected}/>} />
             <Route path="/historico" element={<HistoryPanel revision={historyRevision} onRestore={restore} notify={notify}/>} />

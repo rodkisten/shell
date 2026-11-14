@@ -1,21 +1,24 @@
-let formatter: Promise<typeof import('@wasm-fmt/shfmt/vite')> | undefined;
-async function load() {
-  if (!formatter) formatter = (async () => {
-    const shfmt = await import('@wasm-fmt/shfmt/vite');
-    await shfmt.default();
-    return shfmt;
-  })();
-  return formatter;
-}
+import { parse, print, LangVariant } from 'sh-syntax';
+
+/**
+ * sh-syntax exposes experimental Zsh grammar support (LangZsh).\n * It is incomplete; do not rewrite source if parsing fails.
+ * Keep the original script untouched when parsing or formatting fails.
+ */
 export async function formatShell(code: string, singleLine = false): Promise<string> {
   if (!code.trim()) return '';
-  const { format } = await load();
-  return format(code, 'script.sh', {
-    indent: 2,
-    binaryNextLine: false,
-    switchCaseIndent: true,
-    spaceRedirects: true,
-    simplify: false,
-    singleLine,
-  }).trimEnd();
+  try {
+    await parse(code, { variant: LangVariant.LangZsh, keepComments: true, filepath: 'script.zsh' });
+    const formatted = await print(code, {
+      variant: LangVariant.LangZsh,
+      keepComments: true,
+      indent: 2,
+      singleLine,
+    });
+    return formatted.trimEnd();
+  } catch (error) {
+    throw new Error(
+      'O parser experimental de Zsh do sh-syntax não reconheceu este script. O código original foi preservado. ' +
+      (error instanceof Error ? error.message : String(error)),
+    );
+  }
 }
