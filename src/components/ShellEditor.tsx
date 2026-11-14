@@ -21,10 +21,10 @@ type Props = {
 };
 
 const shellTheme = EditorView.theme({
-  '&': { fontSize: '13px', height: '100%', background: '#090b0f' },
+  '&': { fontSize: '11px', height: '100%', background: '#090b0f' },
   '.cm-scroller': { fontFamily: "'SFMono-Regular', 'SF Mono', Menlo, Consolas, monospace", overflow: 'auto' },
-  '.cm-content': { minHeight: '390px', padding: '17px 8px 30px', caretColor: '#f4f4f5' },
-  '.cm-line': { padding: '0 8px' },
+  '.cm-content': { minHeight: '390px', padding: '8px 3px 10px', caretColor: '#f4f4f5' },
+  '.cm-line': { padding: '0 4px' },
   '.cm-gutters': { background: '#090b0f', borderRight: '1px solid #1e222a', color: '#4b5563' },
   '.cm-activeLine': { background: '#15181e' },
   '.cm-activeLineGutter': { background: '#15181e' },
