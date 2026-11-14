@@ -36,6 +36,7 @@ export async function checkShell(script: string, signal?: AbortSignal): Promise<
   if (!script.trim()) return [];
   if (!client) client = start().catch((error) => { client = undefined; throw error; });
   const check = await client;
+  // ShellCheck does not support zsh as a dialect; Bash diagnostics are advisory only.
   const result = await check.lint({ args: ['--format=json1', '--shell=bash', '-'], stdin: script }, { signal });
   if (!result.stdout) {
     if (result.exitCode > 1) throw new Error(result.stderr || 'ShellCheck não conseguiu analisar o script.');
