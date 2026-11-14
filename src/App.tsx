@@ -11,6 +11,8 @@ import { ManPopover } from './components/ManPopover';
 import { ShellEditor, type ShellEditorHandle } from './components/ShellEditor';
 import { HistoryPanel } from './components/HistoryPanel';
 import { WorkspacePanel } from './components/WorkspacePanel';
+import { ExplainPanel, type ExplainTarget } from './components/ExplainPanel';
+import './components/explain.css';
 import './components/workspace.css';
 import { ReferencePanel } from './components/ReferencePanel';
 import { SNIPPETS } from './lib/commands';
@@ -58,6 +60,7 @@ export function App() {
   const [findings, setFindings] = useState<Finding[]>([]);
   const [output, setOutput] = useState<Output[]>([]);
   const [explanation, setExplanation] = useState<string | null>(null);
+  const [explainTarget, setExplainTarget] = useState<ExplainTarget | null>(null);
   const [toast, setToast] = useState('');
   const [historyRevision, setHistoryRevision] = useState(0);
   const [showSnippets, setShowSnippets] = useState(false);
@@ -221,17 +224,12 @@ export function App() {
     element.addEventListener('pointerup', finish);
     element.addEventListener('pointercancel', finish);
   };
-  const explain = async () => {
-    if (!script.trim()) return notify('Cole ou escreva um comando primeiro.');
-    setBusy('explain');
-    try {
-      const response = await fetch('/api/explain?q=' + encodeURIComponent(script.slice(0, 1000)));
-      if (!response.ok) throw new Error('Explicação remota indisponível.');
-      const data = await response.json() as { explanation?: string };
-      setExplanation(data.explanation || 'Não foi encontrada explicação nesta referência.');
-    } catch (error) { notify(error instanceof Error ? error.message : 'Não foi possível explicar.'); }
-    finally { setBusy(null); }
+  const explain = () => {
+    const target = editor.current?.getExplainTarget() || { code: script, scope: 'script' as const, line: 1 };
+    if (!target.code.trim()) return notify('Selecione um trecho ou escreva um comando primeiro.');
+    setExplainTarget(target);
   };
+
 
   return (
     <div className="app-shell">
@@ -262,7 +260,7 @@ export function App() {
                 <section className="editor-panel">
                   <div className="panel-header">
                     <div className="panel-tabs"><span className="file-icon"><FileCode2 size={15}/></span><span>script.zsh</span><span className="unsaved-dot" aria-label="Rascunho local"/></div>
-                    <div className="panel-header-actions"><span className="language-label">Zsh</span><button title="Colar texto" onClick={paste} aria-label="Colar"><Clipboard size={15}/></button><button title="Copiar script" onClick={() => void copy()} aria-label="Copiar"><Copy size={15}/></button><button title="Salvar script" onClick={save} aria-label="Salvar"><Bookmark size={15}/></button></div>
+                    <div className="panel-header-actions"><span className="language-label">Zsh</span><button title="Colar texto" onClick={paste} aria-label="Colar"><Clipboard size={15}/></button><button title="Explicar seleção ou linha atual" aria-label="Explicar seleção ou linha atual" onClick={explain}><BookOpen size={15}/></button><button title="Copiar script" onClick={() => void copy()} aria-label="Copiar"><Copy size={15}/></button><button title="Salvar script" onClick={save} aria-label="Salvar"><Bookmark size={15}/></button></div>
                   </div>
                   <div className="editor-inner" style={{ height: editorHeight }}><ShellEditor ref={editor} code={script} onChange={change} onCursor={setCursor} onInspect={setInspected} onRun={() => { void run(); }}/></div>
                   <div className="pane-resizer" role="separator" aria-label="Redimensionar editor" aria-orientation="horizontal" onPointerDown={event => resize('editor', event)} />
@@ -306,7 +304,8 @@ export function App() {
                 <div className="subpanel-heading"><h3><CircleAlert size={17}/> Diagnósticos <span className="count-pill">{findings.length}</span></h3><Button variant="outline" size="sm" onClick={fix}><WandSparkles size={14}/> Aplicar correções possíveis</Button></div>
                 {findings.map((finding,i) => <div className="diagnostic-item" key={i}><span className={cn('severity',finding.level)}>{finding.level}</span><div><strong>SC{finding.code} <span>L{finding.line}:{finding.column}</span></strong><p>{finding.message}</p><a href={'https://www.shellcheck.net/wiki/SC'+finding.code} target="_blank" rel="noreferrer">Entenda esse diagnóstico ↗</a></div></div>)}
               </section>}
-              {explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div><pre>{explanation}</pre><p>Fonte: ManKier. Evite enviar comandos com segredos embutidos para serviços externos.</p></section>}
+              {false && explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div><pre>{explanation}</pre><p>Fonte: ManKier. Evite enviar comandos com segredos embutidos para serviços externos.</p></section>}
+              {explainTarget && <ExplainPanel target={explainTarget} onClose={() => setExplainTarget(null)} />}
               <WorkspacePanel />
               <div className="footer-advice"><Info size={15}/><span>O terminal executa Zsh em WebAssembly com filesystem virtual persistente. <strong>Não executa comandos no seu iPhone, servidor ou Codespace.</strong> Requisições HTTP externas não são habilitadas no sandbox.</span></div>
             </>} />
