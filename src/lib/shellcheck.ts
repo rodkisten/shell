@@ -1,3 +1,4 @@
+import { parse, LangVariant } from 'sh-syntax';
 export type Finding = {
   line: number;
   endLine?: number;
@@ -33,6 +34,8 @@ async function start() {
   });
 }
 export async function checkShell(script: string, signal?: AbortSignal): Promise<Finding[]> {
+  // Parse Zsh syntax first. ShellCheck's Bash dialect cannot validate Zsh-specific syntax.
+  await parse(script, { variant: LangVariant.LangZsh, keepComments: true });
   if (!script.trim()) return [];
   if (!client) client = start().catch((error) => { client = undefined; throw error; });
   const check = await client;
