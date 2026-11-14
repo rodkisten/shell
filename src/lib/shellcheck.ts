@@ -9,44 +9,27 @@ export type Finding = {
   message: string;
   fix?: { replacements: Array<{ line: number; column: number; endLine: number; endColumn: number; replacement: string }> };
 };
-let client: Promise<any> | undefined;
-async function start() {
-  if (!crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
-    throw new Error('ShellCheck precisa de isolamento COOP/COEP. Verifique os cabeçalhos da hospedagem e atualize o Safari.');
-  }
-  const { createShellCheck } = await import('@vscode-shellcheck/shellcheck-wasm');
-  const [{ default: wasmUrl }, { default: workerUrl }] = await Promise.all([
-    import('@vscode-shellcheck/shellcheck-wasm/shellcheck.wasm?url'),
-    import('@vscode-shellcheck/shellcheck-wasm/browser/worker.js?url'),
-  ]);
-  const module = WebAssembly.compileStreaming(fetch(wasmUrl));
-  return createShellCheck({
-    module,
-    createWorker() {
-      const worker = new Worker(workerUrl, { type: 'classic' });
-      return {
-        postMessage(message: unknown) { worker.postMessage(message); },
-        onMessage(listener: (message: unknown) => void) { worker.addEventListener('message', e => listener(e.data)); },
-        onError(listener: (error: unknown) => void) { worker.addEventListener('error', listener); },
-        terminate() { worker.terminate(); },
-      };
-    },
-  });
-}
+/**
+ * Syntax-only validation. The upstream Zsh parser is experimental and does not
+ * implement ShellCheck's semantic diagnostics. Never present Bash findings as
+ * authoritative Zsh errors.
+ */
 export async function checkShell(script: string, signal?: AbortSignal): Promise<Finding[]> {
-  // Parse Zsh syntax first. ShellCheck's Bash dialect cannot validate Zsh-specific syntax.
-  await parse(script, { variant: LangVariant.LangZsh, keepComments: true });
-  if (!script.trim()) return [];
-  if (!client) client = start().catch((error) => { client = undefined; throw error; });
-  const check = await client;
-  // ShellCheck does not support zsh as a dialect; Bash diagnostics are advisory only.
-  const result = await check.lint({ args: ['--format=json1', '--shell=bash', '-'], stdin: script }, { signal });
-  if (!result.stdout) {
-    if (result.exitCode > 1) throw new Error(result.stderr || 'ShellCheck não conseguiu analisar o script.');
+  if (!script.trim() || signal?.aborted) return [];
+  try {
+    await parse(script, { variant: LangVariant.LangZsh, keepComments: true });
     return [];
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const location = /(?:^|:)(\\d+):(\\d+)/.exec(message);
+    return [{
+      line: location ? Number(location[1]) : 1,
+      column: location ? Number(location[2]) : 1,
+      level: 'warning',
+      code: 0,
+      message: 'Parser experimental de Zsh: ' + message,
+    }];
   }
-  const data = JSON.parse(result.stdout) as { comments: Finding[] };
-  return data.comments || [];
 }
 function offset(text: string, line: number, column: number) {
   const lines = text.split('\n');
