@@ -10,7 +10,8 @@ async function load() {
 export async function formatShell(code: string, singleLine = false): Promise<string> {
   if (!code.trim()) return '';
   const { format } = await load();
-  return format(code, 'script.sh', {
+  // shfmt does not parse every Zsh-specific construct. Surface errors rather than rewriting syntax.
+  return format(code, 'script.zsh', {
     indent: 2,
     binaryNextLine: false,
     switchCaseIndent: true,
