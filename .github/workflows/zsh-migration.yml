@@ -1,0 +1,42 @@
+name: Zsh WASM migration validation
+on:
+  push:
+    branches: [feat/zsh-wasm-runtime]
+    paths:
+      - package.json
+      - src/**
+      - .github/workflows/zsh-migration.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Regenerate lockfile
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Commit lockfile changes
+        run: |
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add package-lock.json
+            git commit -m "chore: update lockfile for zsh-wasm [skip ci]"
+            git push
+          fi
+      - name: Install
+        run: npm ci
+      - name: Typecheck and build
+        run: npm run build
+      - name: Lint
+        run: npm run lint
