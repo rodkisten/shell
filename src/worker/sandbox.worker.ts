@@ -1,4 +1,4 @@
-import { runZshScript } from 'zsh-wasm';
+import { runZshScript } from '@brandon.zylstra/zsh-wasm';
 
 type Request = { id: number; action: 'execute' | 'reset'; script?: string };
 
