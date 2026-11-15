@@ -23,7 +23,7 @@ function tokenize(command: string): string[] | null {
       continue;
     }
     if (char === "'" || char === '"') { quote = char; started = true; continue; }
-    if (/\\s/.test(char)) {
+    if (/\s/.test(char)) {
       if (started) { tokens.push(token); token = ''; started = false; }
       continue;
     }
@@ -82,12 +82,12 @@ async function curlFetch(args: string[]): Promise<CommandResult> {
       redirect: follow ? 'follow' : 'manual', signal: AbortSignal.timeout(timeoutSeconds * 1000),
       credentials: 'omit',
     });
-    const headerText = `HTTP ${response.status} ${response.statusText}\\n${[...response.headers].map(([key, val]) => `${key}: ${val}`).join('\\n')}\\n\\n`;
-    if (fail && !response.ok) return { ok: false, stdout: '', stderr: `curl: HTTP ${response.status}\\n`, exitCode: 22 };
+    const headerText = `HTTP ${response.status} ${response.statusText}\n${[...response.headers].map(([key, val]) => `${key}: ${val}`).join('\n')}\n\n`;
+    if (fail && !response.ok) return { ok: false, stdout: '', stderr: `curl: HTTP ${response.status}\n`, exitCode: 22 };
     return { ok: true, stdout: (showHeaders || headOnly ? headerText : '') + (headOnly ? '' : await response.text()), stderr: '', exitCode: 0 };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, stdout: '', stderr: `curl: ${message}. Verifique CORS, conectividade e permissões do servidor.\\n`, exitCode: 7 };
+    return { ok: false, stdout: '', stderr: `curl: ${message}. Verifique CORS, conectividade e permissões do servidor.\n`, exitCode: 7 };
   }
 }
 
@@ -95,7 +95,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
   const { id, action, script } = event.data;
   try {
     if (action === 'reset') {
-      self.postMessage({ id, ok: true, stdout: 'Ambiente reiniciado.\\n', stderr: '', exitCode: 0 });
+      self.postMessage({ id, ok: true, stdout: 'Ambiente reiniciado.\n', stderr: '', exitCode: 0 });
       return;
     }
     if (!script?.trim() || script.length > 50_000) {
