@@ -34,10 +34,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-      - name: Build
-        run: npm run build
       - name: Skip obsolete deployments
         id: freshness
         env:
@@ -48,6 +44,12 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "Newer main commit exists; skipping obsolete deployment." >> "$GITHUB_STEP_SUMMARY"
           fi
+      - name: Install dependencies
+        if: steps.freshness.outputs.skip != 'true'
+        run: npm install --no-audit --no-fund
+      - name: Build
+        if: steps.freshness.outputs.skip != 'true'
+        run: npm run build
       - name: Deploy Worker and R2 binding
         if: steps.freshness.outputs.skip != 'true'
         env:
