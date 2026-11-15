@@ -10,6 +10,7 @@ import { Button } from './components/ui/button';
 import { ManPopover } from './components/ManPopover';
 import { ShellEditor, type ShellEditorHandle } from './components/ShellEditor';
 import { HistoryPanel } from './components/HistoryPanel';
+import { LinuxPanel } from './components/LinuxPanel';
 import { WorkspacePanel } from './components/WorkspacePanel';
 import './components/workspace.css';
 import { ReferencePanel } from './components/ReferencePanel';
@@ -42,6 +43,7 @@ function NavContents() {
     <div className="nav-group-label">WORKSPACE</div>
     <NavLink end to="/" className={({ isActive }) => cn('side-link', isActive && 'active')}><Code2 size={17} /> Editor <span className="shortcut-hint">⌘ 1</span></NavLink>
     <NavLink to="/biblioteca" className={({ isActive }) => cn('side-link', isActive && 'active')}><BookOpen size={17} /> Biblioteca</NavLink>
+    <NavLink to="/linux" className={({ isActive }) => cn('side-link', isActive && 'active')}><Terminal size={17} /> Alpine Linux <span className="shortcut-hint">v86</span></NavLink>
     <NavLink to="/touch" className={({ isActive }) => cn('side-link', isActive && 'active')}><Terminal size={17} /> Touch Commands</NavLink>
     <NavLink to="/historico" className={({ isActive }) => cn('side-link', isActive && 'active')}><Clock3 size={17} /> Histórico</NavLink>
     <div className="nav-group-label second">REFERÊNCIA</div>
@@ -271,7 +273,7 @@ export function App() {
 
       <div className="main-column">
         <header className="topbar">
-          <div className="breadcrumbs"><button className="mobile-menu-button" aria-label="Abrir menu" onClick={() => setMobileMenu(v=>!v)}><Menu size={20}/></button><span>Workspace</span><span className="slash">/</span><strong>{location.pathname === '/historico' ? 'Histórico' : location.pathname === '/biblioteca' ? 'Biblioteca' : 'Editor'}</strong></div>
+          <div className="breadcrumbs"><button className="mobile-menu-button" aria-label="Abrir menu" onClick={() => setMobileMenu(v=>!v)}><Menu size={20}/></button><span>Workspace</span><span className="slash">/</span><strong>{location.pathname === '/historico' ? 'Histórico' : location.pathname === '/biblioteca' ? 'Biblioteca' : location.pathname === '/linux' ? 'Alpine Linux' : 'Editor'}</strong></div>
           <div className="topbar-right"><span className="privacy-label"><span className="status-light"/> Armazenamento local</span><ManPopover command={inspected} onClose={() => setInspected(null)} onInsert={insert}/><a className="github-small" href="https://github.com/rodkisten/shell" target="_blank" rel="noreferrer" aria-label="GitHub"><Github size={17}/></a></div>
         </header>
         {mobileMenu && <div className="mobile-menu-sheet" onClick={() => setMobileMenu(false)}><NavContents /></div>}
@@ -339,6 +341,7 @@ export function App() {
               <WorkspacePanel />
               <div className="footer-advice"><Info size={15}/><span>O terminal executa Zsh em WebAssembly com filesystem virtual persistente. <strong>Não executa comandos no seu iPhone, servidor ou Codespace.</strong> Requisições HTTP externas não são habilitadas no sandbox.</span></div>
             </>} />
+            <Route path="/linux" element={<LinuxPanel />} />
             <Route path="/biblioteca" element={<ReferencePanel onInsert={insert} onInspect={setInspected}/>} />
             <Route path="/historico" element={<HistoryPanel revision={historyRevision} onRestore={restore} notify={notify}/>} />
             <Route path="*" element={<div className="empty-state"><h2>Página não encontrada</h2><Link to="/">Voltar ao editor</Link></div>} />
@@ -348,6 +351,7 @@ export function App() {
       <nav className="mobile-nav" aria-label="Navegação principal">
         <NavLink to="/" end className={({isActive}) => cn(isActive && 'active')}><Code2 size={20}/><span>Editor</span></NavLink>
         <NavLink to="/biblioteca" className={({isActive}) => cn(isActive && 'active')}><BookOpen size={20}/><span>Biblioteca</span></NavLink>
+        <NavLink to="/linux" className={({isActive}) => cn(isActive && 'active')}><Terminal size={20}/><span>Linux</span></NavLink>
         <NavLink to="/touch" className={({isActive}) => cn(isActive && 'active')}><Terminal size={20}/><span>Touch</span></NavLink>
         <NavLink to="/historico" className={({isActive}) => cn(isActive && 'active')}><Clock3 size={20}/><span>Histórico</span></NavLink>
       </nav>
