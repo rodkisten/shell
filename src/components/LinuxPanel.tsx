@@ -42,12 +42,25 @@ export function LinuxPanel() {
   const [settings, setSettings] = useState(false);
   const [memory, setMemory] = useState(128);
   const [snapshot, setSnapshot] = useState<File | null>(null);
+  const [assetError, setAssetError] = useState<string | null>(null);
   useEffect(() => () => { emulator.current?.destroy(); emulator.current = null; }, []);
   const boot = async () => {
     if (working || emulator.current || !container.current) return;
     setWorking(true);
     setStatus('Carregando emulador…');
     try {
+      setAssetError(null);
+      // Detect missing static assets before creating a VM that appears stuck.
+      for (const [name, url] of Object.entries(assets)) {
+        try {
+          const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+        } catch (error) {
+          const message = 'Arquivo ' + name + ' indisponível (' + url + '): ' + String(error);
+          setAssetError(message);
+          throw new Error(message);
+        }
+      }
       const V86 = await loadV86(assets.script);
       setStatus('Inicializando Alpine Linux…');
       const vm = new V86({
@@ -114,6 +127,7 @@ export function LinuxPanel() {
       </select></label>
       <button onClick={() => { localStorage.setItem(key, JSON.stringify(assets)); setStatus('Configuração salva neste navegador'); }}>Salvar configuração</button>
     </div>}
+    {assetError && <p role="alert" className="linux-note">{assetError}. Execute npm run linux:assets antes do build ou configure URLs válidas.</p>}
     <div className="linux-screen" ref={container}>
       <div className="linux-text-screen" />
       <canvas style={{ display: 'none' }} />
