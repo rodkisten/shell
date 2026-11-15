@@ -24,7 +24,10 @@ Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa soment
 - [x] Adicionar comando npm run linux:assets para baixar Alpine x86 e preparar arquivos v86 com verificação SHA-256; exige release compatível.
 - [x] Exibir erros de assets ausentes antes de iniciar a VM.
 - [x] Adicionar workflow manual para compilar libv86.js e v86.wasm da mesma revisão do código-fonte, baixar Alpine com SHA-256 e disponibilizar artifact.
-- [ ] Executar e validar workflow, baixar artifact para o deploy e disponibilizar em /v86 (publicação ainda não automatizada).
+- [x] Workflow de build dos assets validado em execução confirmada pelo usuário.
+- [x] Bucket R2 `shell-linux-assets` criado na Cloudflare (2026-11-15).
+- [x] Endpoint Worker `/v86/*` integrado ao binding R2 e workflow com publicação opt-in.
+- [ ] Publicar cinco objetos em R2 e confirmar respostas HTTP 200/206/HEAD; bucket inicialmente vazio.
 - [ ] Validar boot do Alpine no Safari iPhone e no desktop.
 - [ ] Configurar networking de convidado e testar apk/curl no Linux.
 - [ ] Implementar persistência automática de disco/snapshot no IndexedDB.
@@ -96,6 +99,21 @@ O BusyBox não inclui automaticamente `jq`, `column` nem todos os utilitários
 GNU. A integração de `curl | jq` e a sincronização entre runtimes continuam pendentes.
 
 ## Alpine Linux (v86)
+
+### Publicação Cloudflare R2
+
+O bucket `shell-linux-assets` existe na conta Cloudflare. O workflow **Linux VM assets** aceita `publish_r2=true` e envia os cinco arquivos para `v86/` no bucket. Para publicar, configure os secrets de repositório `CLOUDFLARE_API_TOKEN` (R2 Object Read & Write) e `CLOUDFLARE_ACCOUNT_ID`. Não coloque tokens no código. Execute o workflow com a opção de publicação, então verifique o deploy do Worker que contém o binding `LINUX_ASSETS`.
+
+Smoke test após publicação e deploy:
+
+```bash
+BASE_URL="https://SEU-DOMINIO"
+curl -fsSI "$BASE_URL/v86/v86.wasm"
+curl -fsSI -H 'Range: bytes=0-1023' "$BASE_URL/v86/alpine.iso"
+curl -fsS -D - -o /dev/null -H 'Range: bytes=0-1023' "$BASE_URL/v86/alpine.iso"
+```
+
+A última requisição deve retornar `206 Partial Content` e `Content-Range: bytes 0-1023/<tamanho>`. Ainda não foi comprovado o boot da VM.
 
 ### Compilação reprodutível (GitHub Actions)
 
