@@ -67,6 +67,8 @@ export function App() {
   const [sideBySide, setSideBySide] = useState(() => localStorage.getItem('shellconductor:side-by-side') === 'true');
   const [splitRatio, setSplitRatio] = useState(() => Number(localStorage.getItem('shellconductor:split-ratio')) || 50);
   const [autoRun, setAutoRun] = useState(() => localStorage.getItem('shellconductor:auto-run') === 'true');
+  const [editorFontSize, setEditorFontSize] = useState(() => Math.max(9, Math.min(14, Number(localStorage.getItem('shellconductor:editor-font-size')) || 11)));
+  const [editorWordWrap, setEditorWordWrap] = useState(() => localStorage.getItem('shellconductor:editor-word-wrap') !== 'false');
   const [editorHeight, setEditorHeight] = useState(() => Number(localStorage.getItem('shellconductor:editor-height')) || 390);
   const [terminalHeight, setTerminalHeight] = useState(() => Number(localStorage.getItem('shellconductor:terminal-height')) || 260);
   const [runRevision, setRunRevision] = useState(0);
@@ -223,6 +225,8 @@ export function App() {
     element.addEventListener('pointerup', finish);
     element.addEventListener('pointercancel', finish);
   };
+  useEffect(() => { localStorage.setItem('shellconductor:editor-font-size', String(editorFontSize)); }, [editorFontSize]);
+  useEffect(() => { localStorage.setItem('shellconductor:editor-word-wrap', String(editorWordWrap)); }, [editorWordWrap]);
   useEffect(() => { localStorage.setItem('shellconductor:side-by-side', String(sideBySide)); }, [sideBySide]);
   useEffect(() => { localStorage.setItem('shellconductor:split-ratio', String(splitRatio)); }, [splitRatio]);
 
@@ -292,9 +296,9 @@ export function App() {
                 <section className="editor-panel" style={sideBySide ? { gridColumn: 1, gridRow: 1 } : undefined}>
                   <div className="panel-header">
                     <div className="panel-tabs"><span className="file-icon"><FileCode2 size={15}/></span><span>script.zsh</span><span className="unsaved-dot" aria-label="Rascunho local"/></div>
-                    <div className="panel-header-actions"><span className="language-label">Zsh</span><button title="Colar texto" onClick={paste} aria-label="Colar"><Clipboard size={15}/></button><button title="Copiar script" onClick={() => void copy()} aria-label="Copiar"><Copy size={15}/></button><button title="Salvar script" onClick={save} aria-label="Salvar"><Bookmark size={15}/></button></div>
+                    <div className="panel-header-actions"><label title="Tamanho da fonte do editor" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11 }}>Fonte <select aria-label="Tamanho da fonte" value={editorFontSize} onChange={event => setEditorFontSize(Number(event.target.value))} style={{ background: "#141519", color: "#eee", border: "1px solid #34363d", borderRadius: 5, padding: "4px 2px", fontSize: 12 }}>{[9,10,11,12,13,14].map(size => <option key={size} value={size}>{size}px</option>)}</select></label><label title="Quebrar linhas longas" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, whiteSpace: "nowrap" }}><input type="checkbox" checked={editorWordWrap} onChange={event => setEditorWordWrap(event.target.checked)} /> Wrap</label><span className="language-label">Zsh</span><button title="Colar texto" onClick={paste} aria-label="Colar"><Clipboard size={15}/></button><button title="Copiar script" onClick={() => void copy()} aria-label="Copiar"><Copy size={15}/></button><button title="Salvar script" onClick={save} aria-label="Salvar"><Bookmark size={15}/></button></div>
                   </div>
-                  <div className="editor-inner" style={{ height: editorHeight }}><ShellEditor ref={editor} code={script} onChange={change} onCursor={setCursor} onInspect={setInspected} onRun={() => { void run(); }}/></div>
+                  <div className="editor-inner" style={{ height: editorHeight }}><ShellEditor ref={editor} code={script} fontSize={editorFontSize} wordWrap={editorWordWrap} onChange={change} onCursor={setCursor} onInspect={setInspected} onRun={() => { void run(); }}/></div>
                   <div className="pane-resizer" role="separator" aria-label="Redimensionar editor" aria-orientation="horizontal" onPointerDown={event => resize('editor', event)} />
                   <div className="editor-keyboard">{shortcuts.map((item,i) => <button key={i} onMouseDown={e => e.preventDefault()} onClick={() => insert(item.value)}>{item.label}</button>)}</div>
                   <div className="editor-footer"><div className="footer-meta"><span><span className="status-light"/> Pronto</span><span>{script.split('\n').length} linhas</span><span>UTF-8</span></div><span>⌘ ↵ para executar</span></div>
