@@ -96,6 +96,7 @@ export function LinuxPanel() {
       setStatus('Inicializando Alpine Linux…');
       const vm = new V86({
         wasm_path: assets.wasm,
+        screen_container: container.current,
         memory_size: memory * 1024 * 1024,
         vga_memory_size: 4 * 1024 * 1024,
         bios: { url: assets.bios },
@@ -151,7 +152,7 @@ export function LinuxPanel() {
       clearWatchdog();
       watchdog.current = setTimeout(() => {
         if (screenSeen.current) return;
-        setBootWarning('Após 45 segundos não foi detectado texto VGA nem saída serial. A CPU pode estar executando sem vídeo ou o boot pode ter travado. Confira o diagnóstico VGA.');
+        setBootWarning('Sem saída serial ou texto VGA após 45 segundos. A ISO Alpine oficial pode usar VGA sem serial; se a tela continuar preta, confira o firmware e a configuração da imagem.');
         log('Timeout: sem texto VGA ou serial após 45 segundos');
       }, 45000);
     } catch (error) {
