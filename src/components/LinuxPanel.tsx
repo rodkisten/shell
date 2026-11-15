@@ -41,7 +41,7 @@ export function LinuxPanel() {
   const [status, setStatus] = useState('Desligado');
   const [working, setWorking] = useState(false);
   const [settings, setSettings] = useState(false);
-  const [memory, setMemory] = useState(512);
+  const [memory, setMemory] = useState(2048);
   const [snapshot, setSnapshot] = useState<File | null>(null);
   const [assetError, setAssetError] = useState<string | null>(null);
   const [events, setEvents] = useState<string[]>([]);
@@ -108,7 +108,7 @@ export function LinuxPanel() {
         autostart: true,
       });
       emulator.current = vm;
-      log('Máquina virtual criada; aguardando firmware e kernel');
+      log('Máquina virtual criada com ' + memory + ' MiB RAM; aguardando firmware e kernel');
       // LinuxOnTab advances a stalled ISOLINUX boot prompt with Enter.
       let taps = 0;
       const bootKeys = setInterval(() => {
@@ -138,7 +138,7 @@ export function LinuxPanel() {
         }
       }, 1200);
       setProgress(70);
-      vm.add_listener('emulator-ready', () => { log('Emulador pronto'); setStatus('Firmware pronto; aguardando Alpine…'); setProgress(80); });
+      vm.add_listener('emulator-ready', () => { log('Emulador pronto (' + memory + ' MiB RAM)'); setStatus('Firmware pronto; aguardando Alpine…'); setProgress(80); });
       vm.add_listener('emulator-started', () => { log('CPU iniciada (não confirma boot do Linux)'); setStatus('CPU iniciada; aguardando saída do Alpine…'); setProgress(85); });
       vm.add_listener('emulator-stopped', () => { log('CPU parada'); setStatus('Emulador pausado'); });
       vm.add_listener('emulator-error', (...args) => { const message = 'Erro interno v86: ' + args.map(String).join(' '); log(message); setAssetError(message); setStatus('Falha no emulador'); clearWatchdog(); });
@@ -202,11 +202,11 @@ export function LinuxPanel() {
         <input value={assets[field]} onChange={event => setAssets(prev => ({ ...prev, [field]: event.target.value }))} />
       </label>)}
       <label>RAM (MiB)<select value={memory} onChange={event => setMemory(Number(event.target.value))}>
-        <option value={64}>64</option><option value={128}>128</option><option value={256}>256</option><option value={512}>512</option>
+        <option value={64}>64</option><option value={128}>128</option><option value={256}>256</option><option value={512}>512</option><option value={1024}>1024</option><option value={2048}>2048</option><option value={3072}>3072</option>
       </select></label>
       <button onClick={() => { localStorage.setItem(key, JSON.stringify(assets)); setStatus('Configuração salva neste navegador'); }}>Salvar configuração</button>
     </div>}
-    <div className="linux-progress" role="status"><div><span>Leitura aleatória da ISO</span><strong>{isoRange}</strong></div><div><span>Inicialização</span><strong>{progress}%</strong></div><progress max={100} value={progress} /><small>{progress === 100 ? 'Saída serial recebida' : 'Progresso do carregamento, não do boot completo'}</small></div>
+    <div className="linux-progress" role="status"><small>Imagem atual: Alpine Virt x86 oficial. LinuxOnTab usa uma imagem Alpine adaptada para console serial e 2 GiB de RAM por padrão.</small><div><span>Leitura aleatória da ISO</span><strong>{isoRange}</strong></div><div><span>Inicialização</span><strong>{progress}%</strong></div><progress max={100} value={progress} /><small>{progress === 100 ? 'Saída serial recebida' : 'Progresso do carregamento, não do boot completo'}</small></div>
     {bootWarning && <p className="linux-note" role="alert">⚠ {bootWarning}</p>}
     {assetError && <p role="alert" className="linux-note">{assetError}. Execute npm run linux:assets antes do build ou configure URLs válidas.</p>}
     {!emulator.current && status === "Desligado" && <div className="linux-boot-placeholder"><strong>Alpine Linux · v86</strong><span>Pressione “Iniciar Linux” para carregar a máquina virtual.</span></div>}
