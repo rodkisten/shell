@@ -23,7 +23,8 @@ Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa soment
 - [x] Adicionar exportação/importação de snapshots manuais.
 - [x] Adicionar comando npm run linux:assets para baixar Alpine x86 e preparar arquivos v86 com verificação SHA-256; exige release compatível.
 - [x] Exibir erros de assets ausentes antes de iniciar a VM.
-- [ ] Confirmar fonte oficial de binários v86 compatíveis, disponibilizar os arquivos em /v86 e automatizar publicação no deploy.
+- [x] Adicionar workflow manual para compilar libv86.js e v86.wasm da mesma revisão do código-fonte, baixar Alpine com SHA-256 e disponibilizar artifact.
+- [ ] Executar e validar workflow, baixar artifact para o deploy e disponibilizar em /v86 (publicação ainda não automatizada).
 - [ ] Validar boot do Alpine no Safari iPhone e no desktop.
 - [ ] Configurar networking de convidado e testar apk/curl no Linux.
 - [ ] Implementar persistência automática de disco/snapshot no IndexedDB.
@@ -95,6 +96,12 @@ O BusyBox não inclui automaticamente `jq`, `column` nem todos os utilitários
 GNU. A integração de `curl | jq` e a sincronização entre runtimes continuam pendentes.
 
 ## Alpine Linux (v86)
+
+### Compilação reprodutível (GitHub Actions)
+
+Abra [Linux VM assets](https://github.com/rodkisten/shell/actions/workflows/linux-v86-assets.yml) e execute manualmente. O workflow compila `libv86.js` e `v86.wasm` da **mesma revisão** do repositório v86, copia as BIOS, baixa a ISO Alpine x86, valida SHA-256 e publica um artifact temporário `shellconductor-v86-alpine-x86`. **Ele não faz deploy automaticamente**: ainda é necessário publicar o conteúdo de `public/v86` junto com os assets do site. O workflow ainda precisa de execução real e pode exigir ajustes de toolchain.
+
+
 
 Acesse **/linux** para abrir a interface de uma VM Linux opcional. A VM usa a
 API do [v86](https://github.com/copy/v86), que emula x86 32-bit, e não altera
