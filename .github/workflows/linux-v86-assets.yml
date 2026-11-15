@@ -1,0 +1,68 @@
+name: Linux VM assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      v86_ref:
+        description: v86 git ref (tag or commit recommended)
+        required: true
+        default: master
+        type: string
+      alpine_version:
+        description: Alpine Virt x86 version
+        required: true
+        default: 3.24.4
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-v86:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld nasm default-jre make jq curl
+          rustup target add wasm32-unknown-unknown
+      - name: Checkout v86 sources
+        env:
+          V86_REF: ${{ inputs.v86_ref }}
+        run: |
+          git clone --recursive https://github.com/copy/v86.git /tmp/v86
+          cd /tmp/v86
+          git checkout "$V86_REF"
+          git submodule update --init --recursive
+          git rev-parse HEAD | tee "$GITHUB_WORKSPACE/v86-source-sha.txt"
+      - name: Build browser v86 and WASM from same source
+        run: |
+          cd /tmp/v86
+          make build/libv86.js build/v86.wasm
+          mkdir -p "$GITHUB_WORKSPACE/public/v86"
+          cp build/libv86.js build/v86.wasm bios/seabios.bin bios/vgabios.bin "$GITHUB_WORKSPACE/public/v86/"
+      - name: Fetch and verify Alpine ISO
+        env:
+          ALPINE_VERSION: ${{ inputs.alpine_version }}
+        run: |
+          # Download only the ISO; v86 is built locally from a consistent source revision.
+          LINUX_ASSETS_DIR="$GITHUB_WORKSPACE/public/v86" bash scripts/prepare-alpine-iso.sh
+      - name: Verify artifacts
+        run: |
+          test -s public/v86/libv86.js
+          test -s public/v86/v86.wasm
+          test -s public/v86/seabios.bin
+          test -s public/v86/vgabios.bin
+          test -s public/v86/alpine.iso
+          du -h public/v86/*
+          sha256sum public/v86/* | tee v86-assets.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shellconductor-v86-alpine-x86
+          path: |
+            public/v86/
+            v86-source-sha.txt
+            v86-assets.sha256
+          retention-days: 7
