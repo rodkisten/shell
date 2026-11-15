@@ -49,14 +49,19 @@ export function LinuxPanel() {
   const [bootWarning, setBootWarning] = useState('');
   const [isoRange, setIsoRange] = useState('Não testado');
   const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const screenPoll = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [vgaState, setVgaState] = useState('Aguardando');
+  const [vgaText, setVgaText] = useState('');
+  const screenSeen = useRef(false);
   const log = (message: string) => setEvents(previous => [...previous.slice(-39), new Date().toLocaleTimeString('pt-BR') + ' · ' + message]);
   const clearWatchdog = () => { if (watchdog.current) clearTimeout(watchdog.current); watchdog.current = null; };
-  useEffect(() => () => { clearWatchdog(); emulator.current?.destroy(); emulator.current = null; }, []);
+  const stopScreenPoll = () => { if (screenPoll.current) clearInterval(screenPoll.current); screenPoll.current = null; };
+  useEffect(() => () => { clearWatchdog(); stopScreenPoll(); emulator.current?.destroy(); emulator.current = null; }, []);
   const boot = async () => {
     if (working || emulator.current || !container.current) return;
     setWorking(true);
     setStatus('Carregando emulador…');
-    setProgress(0); setEvents([]); setSerial(''); setBootWarning(''); setIsoRange('Verificando…');
+    setProgress(0); setEvents([]); setSerial(''); setBootWarning(''); setIsoRange('Verificando…'); setVgaText(''); setVgaState('Aguardando'); screenSeen.current = false;
     log('Iniciando pré-verificação dos arquivos');
     try {
       setAssetError(null);
@@ -102,6 +107,27 @@ export function LinuxPanel() {
       });
       emulator.current = vm;
       log('Máquina virtual criada; aguardando firmware e kernel');
+      // Alpine may boot exclusively through VGA, without serial output.
+      stopScreenPoll();
+      screenPoll.current = setInterval(() => {
+        const root = container.current;
+        if (!root || emulator.current !== vm) return;
+        const textScreen = root.querySelector<HTMLElement>('.linux-text-screen');
+        const rawText = (textScreen?.innerText || textScreen?.textContent || '').replace(/\u00a0/g, ' ').trim();
+        const meaningful = rawText.split('\n').map(line => line.trimEnd()).filter(Boolean).slice(-24).join('\n');
+        const canvas = root.querySelector<HTMLCanvasElement>('canvas');
+        const canvasVisible = !!canvas && getComputedStyle(canvas).display !== 'none';
+        setVgaState(meaningful ? 'Texto VGA detectado' : canvasVisible ? 'Canvas VGA visível (boot não confirmado)' : 'Sem vídeo VGA');
+        if (meaningful) {
+          setVgaText(meaningful.slice(-5000));
+          if (!screenSeen.current) {
+            screenSeen.current = true;
+            log('Saída textual VGA detectada');
+            setStatus('Saída VGA detectada; verificando boot…');
+            clearWatchdog();
+          }
+        }
+      }, 1200);
       setProgress(70);
       vm.add_listener('emulator-ready', () => { log('Emulador pronto'); setStatus('Firmware pronto; aguardando Alpine…'); setProgress(80); });
       vm.add_listener('emulator-started', () => { log('CPU iniciada (não confirma boot do Linux)'); setStatus('CPU iniciada; aguardando saída do Alpine…'); setProgress(85); });
@@ -116,15 +142,16 @@ export function LinuxPanel() {
       });
       clearWatchdog();
       watchdog.current = setTimeout(() => {
-        setBootWarning('A CPU iniciou, mas nenhuma saída serial foi detectada em 45 segundos. O vídeo pode estar travado ou a ISO pode não ter iniciado. Verifique o diagnóstico e tente reiniciar.');
-        log('Timeout: boot não confirmado após 45 segundos');
+        if (screenSeen.current) return;
+        setBootWarning('Após 45 segundos não foi detectado texto VGA nem saída serial. A CPU pode estar executando sem vídeo ou o boot pode ter travado. Confira o diagnóstico VGA.');
+        log('Timeout: sem texto VGA ou serial após 45 segundos');
       }, 45000);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setStatus(message); log('ERRO: ' + message);
     } finally { setWorking(false); }
   };
-  const shutdown = () => { clearWatchdog(); emulator.current?.destroy(); emulator.current = null; setStatus('Desligado'); setProgress(0); log('Máquina virtual desligada'); };
+  const shutdown = () => { clearWatchdog(); stopScreenPoll(); emulator.current?.destroy(); emulator.current = null; setStatus('Desligado'); setProgress(0); log('Máquina virtual desligada'); };
   const save = async () => {
     if (!emulator.current) return;
     setWorking(true);
@@ -178,7 +205,7 @@ export function LinuxPanel() {
       <div className="linux-text-screen" />
       <canvas style={{ display: 'none' }} />
     </div>
-    <details className="linux-diagnostics" open><summary>Diagnóstico de inicialização · {events.length} eventos</summary><pre>{events.join('\n') || 'Aguardando inicialização…'}</pre>{serial && <><strong>Console serial</strong><pre>{serial}</pre></>}</details>
+    <details className="linux-diagnostics" open><div>Vídeo VGA: <strong>{vgaState}</strong></div>{vgaText && <><strong>Texto VGA</strong><pre>{vgaText}</pre></>}<summary>Diagnóstico de inicialização · {events.length} eventos</summary><pre>{events.join('\n') || 'Aguardando inicialização…'}</pre>{serial && <><strong>Console serial</strong><pre>{serial}</pre></>}</details>
     <div className="linux-snapshot">
       <label>Restaurar snapshot <input type="file" accept=".state,.bin" onChange={event => setSnapshot(event.target.files?.[0] || null)}/></label>
       <button disabled={!snapshot || !emulator.current || working} onClick={() => void restore()}>Restaurar</button>
