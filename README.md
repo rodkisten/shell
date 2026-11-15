@@ -30,16 +30,19 @@ Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa soment
 ### Runtime Zsh, Unix e WASM
 - [x] Zsh WebAssembly isolado em worker com filesystem IDBFS persistente.
 - [ ] Criar interface CommandRuntime para binários WASM e adapters de rede, com cancelamento, timeout e streaming.
-- [ ] Avaliar e integrar BusyBox WASI / GNU tools WASM **reais**; não confundir autocomplete com suporte de execução.
+- [x] Integrar BusyBox WASM via wasi-sh como runtime POSIX opt-in (`# shellconductor:busybox` ou `busybox-sh`), com carregamento dinâmico.
+- [ ] Validar BusyBox no build e no Safari; verificar empacotamento do WASM e arquivos de lock.
 - [ ] Integrar jq WASM real para filtros JSON, com entrada/saída e códigos de erro corretos.
-- [ ] Disponibilizar awk, sed, sort, column, grep, cut, uniq, head, tail, tr, wc, find, xargs, tee, cat, ls, cp, mv, rm, mkdir, touch, basename, dirname e outros comandos comuns conforme suporte verificável.
+- [x] Disponibilizar no runtime BusyBox opt-in os applets declarados pelo wasi-sh, incluindo awk, sed, sort, grep, cut, uniq, head, tail, tr, wc, find, cat, ls, cp, mv, rm, mkdir, touch, basename e dirname (pendente validação no projeto).
+- [ ] Adicionar `column`, `tee` e demais comandos não confirmados no conjunto de applets do wasi-sh; integrar ferramentas WASM adicionais.
 - [x] Adapter experimental de curl via fetch para chamadas isoladas (GET, POST, HEAD, headers, corpo, timeout e mensagens de CORS); pipelines ainda não suportados.
 - [ ] Validar o adapter curl em navegador real e integrar ao dispatcher de pipelines.
 - [ ] Considerar wget via fetch usando o mesmo adapter.
 - [ ] Conectar os comandos ao Zsh existente sem trocar silenciosamente sua semântica por ash/bash.
 - [ ] Garantir pipelines e redirecionamentos reais: stdin/stdout/stderr, pipefail, exit codes, arquivos e comandos compostos.
 - [ ] Compartilhar filesystem virtual entre runtimes ou implementar sincronização explícita e consistente.
-- [ ] Lazy-load dos módulos WASM, cache local e controle de tamanho do bundle.
+- [x] Lazy import do módulo wasi-sh ao selecionar BusyBox.
+- [ ] Cache local de WASM, medição de bundle e carregamento sob demanda de outros módulos.
 - [ ] Validar limites de memória, timeout, cancelamento, segurança de rede e CORS.
 
 ### Qualidade e documentação
@@ -54,10 +57,30 @@ Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa soment
 - Real man page details, synopsis, flags and command explanation from the [ManKier API v2](https://www.mankier.com/api), fetched through the Cloudflare Worker.
 - Code formatting and one-line / multi-line conversion through the current sh-syntax integration.
 - Experimental Zsh syntax diagnostics in CodeMirror. Full semantic ShellCheck WASM integration is planned, not yet active.
-- Isolated [Zsh WebAssembly](https://github.com/brandonzylstra/zsh-wasm) with persistent virtual filesystem. Separate WASM Unix utilities and cross-runtime pipelines are planned.
+- Isolated [Zsh WebAssembly](https://github.com/brandonzylstra/zsh-wasm) with persistent virtual filesystem. A separate opt-in BusyBox WASM POSIX runtime is available; cross-runtime pipelines are still planned.
 - Saved commands, runs and current draft persisted in IndexedDB, capped at 150 history records. No sign-in.
 - Safari touch-first UI, compact command toolbar, safe-area navigation, keyboard-friendly text size and PWA manifest.
 - React Router navigation: editor, reference library and saved history.
+
+## BusyBox WASM (POSIX opt-in)
+
+O Zsh continua sendo o interpretador padrão. Para executar **applets BusyBox reais**
+e pipelines POSIX no runtime independente wasi-sh, comece o script com:
+
+```sh
+# shellconductor:busybox
+printf 'banana\\nmaçã\\nbanana\\n' | sort | uniq -c
+printf 'a,b\\n1,2\\n' | awk -F, '{ print $2 }'
+printf 'abc\\n' | sed 's/b/X/'
+```
+
+Alternativamente, use `busybox-sh` como primeira palavra, seguida pelo script
+POSIX. **Isso executa ash/BusyBox, não Zsh**. Variáveis, arquivos e diretórios
+do Zsh IDBFS não são compartilhados com o filesystem efêmero do BusyBox.
+O pacote é carregado dinamicamente apenas quando selecionado.
+
+O BusyBox não inclui automaticamente `jq`, `column` nem todos os utilitários
+GNU. A integração de `curl | jq` e a sincronização entre runtimes continuam pendentes.
 
 ## Touch Commands / VS Code sidebar
 
