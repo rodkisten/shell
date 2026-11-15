@@ -65,7 +65,7 @@ jobs:
           from pathlib import Path
           base = Path('public/v86')
           wasm = (base / 'v86.wasm').read_bytes()
-          assert wasm[:4] == b'\\x00asm', 'v86.wasm is not a WASM module'
+          assert wasm[:4] == bytes.fromhex('0061736d'), 'v86.wasm is not a WASM module'
           js = (base / 'libv86.js').read_text()
           assert len(js) > 10000, 'libv86.js appears truncated'
           iso = (base / 'alpine.iso').read_bytes()[:0x8006]
