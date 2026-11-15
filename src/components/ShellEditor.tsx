@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { EditorState, StateEffect, StateField } from '@codemirror/state';
+import { Compartment, EditorState, StateEffect, StateField } from '@codemirror/state';
 import { Decoration, type DecorationSet } from '@codemirror/view';
 import { checkShell } from '../lib/shellcheck';
 import { embeddedShellHighlight } from '../lib/highlight';
@@ -27,6 +27,8 @@ const diagnosticsField = StateField.define<DecorationSet>({
 export type ShellEditorHandle = { insert(text: string): void; focus(): void };
 type Props = {
   code: string;
+  fontSize: number;
+  wordWrap: boolean;
   onChange(value: string): void;
   onCursor(value: number): void;
   onInspect(command: string): void;
@@ -34,7 +36,7 @@ type Props = {
 };
 
 const shellTheme = EditorView.theme({
-  '&': { fontSize: '11px', height: '100%', background: '#090b0f' },
+  '&': { height: '100%', background: '#090b0f' },
   '.cm-scroller': { fontFamily: "'SFMono-Regular', 'SF Mono', Menlo, Consolas, monospace", overflow: 'auto' },
   '.cm-content': { minHeight: '390px', padding: '8px 3px 10px', caretColor: '#f4f4f5' },
   '.cm-line': { padding: '0 4px' },
@@ -55,10 +57,12 @@ const shellTheme = EditorView.theme({
 }, { dark: true });
 
 export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEditor(
-  { code, onChange, onCursor, onInspect, onRun }, ref,
+  { code, fontSize, wordWrap, onChange, onCursor, onInspect, onRun }, ref,
 ) {
   const node = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
+  const fontCompartment = useRef(new Compartment());
+  const wrapCompartment = useRef(new Compartment());
   const callbacks = useRef({ onChange, onCursor, onInspect, onRun });
   callbacks.current = { onChange, onCursor, onInspect, onRun };
 
@@ -104,7 +108,8 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           embeddedShellHighlight,
           diagnosticsField,
           shellTheme,
-          EditorView.lineWrapping,
+          fontCompartment.current.of(EditorView.theme({ '&': { fontSize: `${fontSize}px` } })),
+          wrapCompartment.current.of(wordWrap ? EditorView.lineWrapping : []),
           EditorState.tabSize.of(2),
           keymap.of([indentWithTab, { key: 'Mod-Enter', run() { callbacks.current.onRun(); return true; } }]),
           autocompletion({ override: [complete], activateOnTyping: true, maxRenderedOptions: 8, closeOnBlur: false }),
@@ -137,6 +142,14 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
     return () => { view.destroy(); editor.current = null; };
   // Editor must be created once. New values are synchronized by the effect below.
   }, []);
+
+  useEffect(() => {
+    editor.current?.dispatch({ effects: fontCompartment.current.reconfigure(EditorView.theme({ '&': { fontSize: `${fontSize}px` } })) });
+  }, [fontSize]);
+
+  useEffect(() => {
+    editor.current?.dispatch({ effects: wrapCompartment.current.reconfigure(wordWrap ? EditorView.lineWrapping : []) });
+  }, [wordWrap]);
 
   useEffect(() => {
     let cancelled = false;
