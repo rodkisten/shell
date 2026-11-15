@@ -13,7 +13,8 @@ Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa soment
 - [x] Parser experimental Zsh com marcações sublinhadas no editor (debounce de 450 ms; **não** equivale a ShellCheck completo).
 - [ ] ShellCheck WASM semântico em tempo real, quando compatível com a sintaxe analisada; não sinalizar construções Zsh válidas como erros Bash.
 - [ ] Painel de problemas sincronizado com as marcações, severidade, localização, tooltip e navegação para a linha.
-- [ ] Corrigir diagnóstico e aplicar quick fixes seguros; diferenciar parser Zsh de ShellCheck.
+- [x] Corrigir extração de linha/coluna dos erros do parser Zsh e evitar aplicação de diagnósticos obsoletos.
+- [ ] Aplicar quick fixes seguros; diferenciar parser Zsh de ShellCheck.
 - [ ] Validar marcações, debounce e execução no Safari iPhone.
 
 ### Layout e terminal
@@ -32,7 +33,8 @@ Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa soment
 - [ ] Avaliar e integrar BusyBox WASI / GNU tools WASM **reais**; não confundir autocomplete com suporte de execução.
 - [ ] Integrar jq WASM real para filtros JSON, com entrada/saída e códigos de erro corretos.
 - [ ] Disponibilizar awk, sed, sort, column, grep, cut, uniq, head, tail, tr, wc, find, xargs, tee, cat, ls, cp, mv, rm, mkdir, touch, basename, dirname e outros comandos comuns conforme suporte verificável.
-- [ ] Integrar curl via fetch (GET, POST, headers, corpo, códigos HTTP, stderr e flags suportadas), com limites e mensagens explícitas de CORS.
+- [x] Adapter experimental de curl via fetch para chamadas isoladas (GET, POST, HEAD, headers, corpo, timeout e mensagens de CORS); pipelines ainda não suportados.
+- [ ] Validar o adapter curl em navegador real e integrar ao dispatcher de pipelines.
 - [ ] Considerar wget via fetch usando o mesmo adapter.
 - [ ] Conectar os comandos ao Zsh existente sem trocar silenciosamente sua semântica por ash/bash.
 - [ ] Garantir pipelines e redirecionamentos reais: stdin/stdout/stderr, pipefail, exit codes, arquivos e comandos compostos.
@@ -48,11 +50,11 @@ Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa soment
 
 ## Features
 
-- Bash editor with syntax highlighting, contextual completion, clickable commands, examples and manual popovers.
+- Zsh editor with syntax highlighting, contextual completion, clickable commands, examples and manual popovers.
 - Real man page details, synopsis, flags and command explanation from the [ManKier API v2](https://www.mankier.com/api), fetched through the Cloudflare Worker.
-- [shfmt](https://github.com/mvdan/sh) as WebAssembly for code formatting and the one-line / multi-line conversion.
-- [ShellCheck](https://www.shellcheck.net/) as WebAssembly, showing warnings and available automatic fixes with source links.
-- Isolated [Bashkit WebAssembly](https://github.com/everruns/bashkit) with pipes, variables, loops, functions, `jq`, `awk`, `sed`, virtual filesystem and limits on execution.
+- Code formatting and one-line / multi-line conversion through the current sh-syntax integration.
+- Experimental Zsh syntax diagnostics in CodeMirror. Full semantic ShellCheck WASM integration is planned, not yet active.
+- Isolated [Zsh WebAssembly](https://github.com/brandonzylstra/zsh-wasm) with persistent virtual filesystem. Separate WASM Unix utilities and cross-runtime pipelines are planned.
 - Saved commands, runs and current draft persisted in IndexedDB, capped at 150 history records. No sign-in.
 - Safari touch-first UI, compact command toolbar, safe-area navigation, keyboard-friendly text size and PWA manifest.
 - React Router navigation: editor, reference library and saved history.
@@ -99,14 +101,14 @@ After the connection is made, Cloudflare automatically builds/deploys on commits
 
 ### Worker headers
 
-Static asset headers are defined in `public/_headers`, including `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. This is necessary for the ShellCheck browser engine (`SharedArrayBuffer`, modern Safari required). ShellCheck is loaded only when validation is requested. Other tools do not require cross-origin isolation.
+Static asset headers are defined in `public/_headers`, including `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. Cross-origin isolation may be needed for future WASM tools; the current parser is sh-syntax. Other tools do not require cross-origin isolation.
 
 ### Security and limitations
 
-- **Executing** means running inside an isolated Bash-like virtual environment, **not** your real iPhone terminal or Cloud Shell. It does not run SSH, your system binaries, or arbitrary installed programs. HTTP via curl/wget is not enabled in the browser WASM sandbox. Never treat the result as authoritative execution on Linux.
-- Bashkit's shell is highly capable but not identical to Bash on every platform, and the tool can be resource-limited or interrupted.
-- shfmt and ShellCheck are not AI code repair. The “apply fixes” action only performs fixes explicitly emitted by ShellCheck. Some diagnostics require manual edits.
-- One-line conversion uses shfmt's grammar, not a destructive newline replacement. When complex constructs cannot become a single line, they remain multiline.
+- **Executing** means running inside isolated Zsh WebAssembly, **not** your real iPhone terminal or Cloud Shell. It does not run SSH, your system binaries, or arbitrary installed programs. A standalone curl adapter uses browser fetch and is subject to CORS; curl within Zsh pipelines and wget are not implemented. Never treat the result as authoritative execution on Linux.
+- The Zsh WASM runtime does not include a complete Linux distribution; individual Unix utilities must be verified before claiming support.
+- The current experimental Zsh parser only reports syntax errors. It does not emit semantic ShellCheck findings or automatic fixes.
+- One-line conversion uses sh-syntax grammar, not a destructive newline replacement. When complex constructs cannot become a single line, they remain multiline.
 - Mankier API requests are sent for command names or complete code only when users open a manual/explanation. Avoid sharing secrets. The server caches responses for a short time.
 - Scripts and history remain in local IndexedDB. Safari private browsing or clearing site data may remove them.
 - The UI is optimized for desktop and iPhone Safari but requires a modern browser to run WASM.
