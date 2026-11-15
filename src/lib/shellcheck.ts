@@ -21,7 +21,7 @@ export async function checkShell(script: string, signal?: AbortSignal): Promise<
     return [];
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const location = /(?:^|:)(\\d+):(\\d+)/.exec(message);
+    const location = /(?:^|:|\s)(\d+):(\d+)/.exec(message);
     return [{
       line: location ? Number(location[1]) : 1,
       column: location ? Number(location[2]) : 1,
