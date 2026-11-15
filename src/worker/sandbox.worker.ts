@@ -3,6 +3,30 @@ import { runZshScript } from '@brandon.zylstra/zsh-wasm';
 type Request = { id: number; action: 'execute' | 'reset'; script?: string };
 type CommandResult = { ok: boolean; stdout: string; stderr: string; exitCode: number };
 
+// BusyBox is a separate POSIX ash runtime, not an alias for Zsh.
+// Lazy import keeps the WASM runtime out of the initial editor bundle.
+async function runBusyBox(script: string): Promise<CommandResult> {
+  const { run } = await import('wasi-sh');
+  const result = await run({ script });
+  return {
+    ok: result.exitCode === 0,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.exitCode,
+  };
+}
+
+function busyBoxScript(script: string): string | null {
+  const trimmed = script.trim();
+  // Opt-in for complete POSIX shell scripts and real BusyBox pipelines.
+  const directive = /^#\\s*shellconductor:busybox\\s*(?:\\r?\\n|$)/i;
+  if (directive.test(trimmed)) return trimmed.replace(directive, '');
+  // Explicit shell selection, without hijacking ordinary Zsh commands.
+  const prefix = /^busybox-sh(?:\\s+|$)/;
+  if (prefix.test(trimmed)) return trimmed.replace(prefix, '');
+  return null;
+}
+
 // This adapter intentionally handles only a standalone curl invocation. Running
 // curl inside Zsh pipelines requires a shared process/stream bridge; never
 // silently emulate a pipeline with string concatenation.
@@ -100,6 +124,12 @@ self.onmessage = async (event: MessageEvent<Request>) => {
     }
     if (!script?.trim() || script.length > 50_000) {
       throw new Error('Script vazio ou muito grande (limite: 50 KB).');
+    }
+    const posixScript = busyBoxScript(script);
+    if (posixScript !== null) {
+      if (!posixScript.trim()) throw new Error('BusyBox: script vazio.');
+      self.postMessage({ id, ...await runBusyBox(posixScript) });
+      return;
     }
     const tokens = tokenize(script.trim());
     if (tokens?.[0] === 'curl') {
