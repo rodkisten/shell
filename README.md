@@ -4,6 +4,48 @@ A mobile-first shell workbench for learning and daily use. Designed for the iPho
 
 **Stack:** React 19 + React Router (library / SPA) + Vite 7 + TypeScript + shadcn-style Radix primitives + Tailwind v4 + CodeMirror 6 + Cloudflare Workers.
 
+## Roadmap de implementação (checklist consolidada)
+
+Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa somente após a implementação; commits não substituem validação de build ou teste no Safari.
+
+### Editor e diagnósticos
+- [x] Editor CodeMirror 6 com syntax highlighting, autocomplete e atalhos.
+- [x] Parser experimental Zsh com marcações sublinhadas no editor (debounce de 450 ms; **não** equivale a ShellCheck completo).
+- [ ] ShellCheck WASM semântico em tempo real, quando compatível com a sintaxe analisada; não sinalizar construções Zsh válidas como erros Bash.
+- [ ] Painel de problemas sincronizado com as marcações, severidade, localização, tooltip e navegação para a linha.
+- [ ] Corrigir diagnóstico e aplicar quick fixes seguros; diferenciar parser Zsh de ShellCheck.
+- [ ] Validar marcações, debounce e execução no Safari iPhone.
+
+### Layout e terminal
+- [x] Editor acima do terminal, com alturas ajustáveis.
+- [x] Alternância para layout lado a lado, divisor arrastável e preferência persistida.
+- [ ] Validar layout horizontal/vertical, drag e proporções em telas pequenas e Safari iPhone.
+- [ ] Corrigir proporção/colunas em todos os breakpoints e tornar os controles acessíveis por teclado.
+- [x] Histórico de execuções e separação visual entre registros (CSS existente).
+- [ ] Separador visível e consistente entre **cada comando executado**, incluindo comandos de scripts compostos, com texto original, duração, exit code, stdout e stderr.
+- [ ] Syntax highlighting no output (incluindo JSON, erros e sequências ANSI) sem executar HTML recebido.
+- [ ] Manter opção de autoexecução com atraso e checkbox, sem bloquear edição durante execução.
+
+### Runtime Zsh, Unix e WASM
+- [x] Zsh WebAssembly isolado em worker com filesystem IDBFS persistente.
+- [ ] Criar interface CommandRuntime para binários WASM e adapters de rede, com cancelamento, timeout e streaming.
+- [ ] Avaliar e integrar BusyBox WASI / GNU tools WASM **reais**; não confundir autocomplete com suporte de execução.
+- [ ] Integrar jq WASM real para filtros JSON, com entrada/saída e códigos de erro corretos.
+- [ ] Disponibilizar awk, sed, sort, column, grep, cut, uniq, head, tail, tr, wc, find, xargs, tee, cat, ls, cp, mv, rm, mkdir, touch, basename, dirname e outros comandos comuns conforme suporte verificável.
+- [ ] Integrar curl via fetch (GET, POST, headers, corpo, códigos HTTP, stderr e flags suportadas), com limites e mensagens explícitas de CORS.
+- [ ] Considerar wget via fetch usando o mesmo adapter.
+- [ ] Conectar os comandos ao Zsh existente sem trocar silenciosamente sua semântica por ash/bash.
+- [ ] Garantir pipelines e redirecionamentos reais: stdin/stdout/stderr, pipefail, exit codes, arquivos e comandos compostos.
+- [ ] Compartilhar filesystem virtual entre runtimes ou implementar sincronização explícita e consistente.
+- [ ] Lazy-load dos módulos WASM, cache local e controle de tamanho do bundle.
+- [ ] Validar limites de memória, timeout, cancelamento, segurança de rede e CORS.
+
+### Qualidade e documentação
+- [ ] Atualizar documentação de arquitetura e limitações reais; remover referências legadas a Bashkit/shfmt que não representem a implementação atual.
+- [ ] Validar typecheck, lint e build, e corrigir regressões.
+- [ ] Fazer smoke tests manuais de pipelines, jq, awk, sed, sort, curl, persistência e layout mobile.
+- [ ] Registrar commits por bloco de trabalho, não um commit por arquivo; acompanhar conflitos com main.
+
 ## Features
 
 - Bash editor with syntax highlighting, contextual completion, clickable commands, examples and manual popovers.
