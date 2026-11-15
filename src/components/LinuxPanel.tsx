@@ -4,6 +4,7 @@ type Emulator = {
   stop(): void; run(): void; destroy(): void;
   save_state(): Promise<ArrayBuffer>;
   restore_state(state: ArrayBuffer): Promise<void>;
+  keyboard_send_scancodes?(codes: number[]): void;
   add_listener(event: string, callback: (...args: unknown[]) => void): void;
 };
 type Constructor = new (options: Record<string, unknown>) => Emulator;
@@ -40,7 +41,7 @@ export function LinuxPanel() {
   const [status, setStatus] = useState('Desligado');
   const [working, setWorking] = useState(false);
   const [settings, setSettings] = useState(false);
-  const [memory, setMemory] = useState(128);
+  const [memory, setMemory] = useState(512);
   const [snapshot, setSnapshot] = useState<File | null>(null);
   const [assetError, setAssetError] = useState<string | null>(null);
   const [events, setEvents] = useState<string[]>([]);
@@ -97,16 +98,23 @@ export function LinuxPanel() {
         wasm_path: assets.wasm,
         memory_size: memory * 1024 * 1024,
         vga_memory_size: 4 * 1024 * 1024,
-        screen_container: container.current,
         bios: { url: assets.bios },
         vga_bios: { url: assets.vga },
-        cdrom: { url: assets.image, async: true },
+        cdrom: { url: assets.image },
+        disable_mouse: true,
         // Alpine may use the VGA console only; serial output is an additional signal.
         // Preserve the emulated text screen so VGA BIOS messages remain inspectable.
         autostart: true,
       });
       emulator.current = vm;
       log('Máquina virtual criada; aguardando firmware e kernel');
+      // LinuxOnTab advances a stalled ISOLINUX boot prompt with Enter.
+      let taps = 0;
+      const bootKeys = setInterval(() => {
+        if (emulator.current !== vm || taps++ >= 20) { clearInterval(bootKeys); return; }
+        try { vm.keyboard_send_scancodes?.([0x1c, 0x9c]); } catch { /* unsupported */ }
+      }, 1500);
+      setTimeout(() => clearInterval(bootKeys), 30000);
       // Alpine may boot exclusively through VGA, without serial output.
       stopScreenPoll();
       screenPoll.current = setInterval(() => {
@@ -201,6 +209,7 @@ export function LinuxPanel() {
     {bootWarning && <p className="linux-note" role="alert">⚠ {bootWarning}</p>}
     {assetError && <p role="alert" className="linux-note">{assetError}. Execute npm run linux:assets antes do build ou configure URLs válidas.</p>}
     {!emulator.current && status === "Desligado" && <div className="linux-boot-placeholder"><strong>Alpine Linux · v86</strong><span>Pressione “Iniciar Linux” para carregar a máquina virtual.</span></div>}
+    <div className="linux-serial-terminal"><strong>Terminal serial COM1</strong><pre>{serial || 'Aguardando saída serial do Alpine…'}</pre></div>
     <div className="linux-screen" ref={container} aria-label="Tela da máquina virtual Alpine Linux">
       <div className="linux-text-screen" />
       <canvas style={{ display: 'none' }} />
