@@ -262,3 +262,5 @@ a{color:inherit;text-decoration:none}
 .workspace-layout.is-split>.actions-panel{grid-column:1/-1;grid-row:2}
 @media(max-width:600px){.workspace-layout.is-split{grid-template-columns:minmax(0,1fr);gap:12px}.workspace-layout.is-split>.editor-panel{grid-column:1;grid-row:1}.workspace-layout.is-split>.split-divider{display:none}.workspace-layout.is-split>.terminal-panel{grid-column:1;grid-row:2}.workspace-layout.is-split>.actions-panel{grid-column:1;grid-row:3}}
 .panel-header{min-width:0}.panel-tabs{min-width:0;flex-shrink:1}.panel-header-actions{min-width:0;overflow-x:auto;scrollbar-width:none;flex-shrink:1}.panel-header-actions::-webkit-scrollbar{display:none}
+
+.linux-boot-placeholder{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:12px;min-height:260px;text-align:center;color:#a1a1aa;font-size:12px;padding:24px}.linux-boot-placeholder strong{font-size:18px;color:#e4e4e7}
