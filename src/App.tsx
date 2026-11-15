@@ -214,7 +214,7 @@ export function App() {
     const move = (e: PointerEvent) => {
       const bounds = parent.getBoundingClientRect();
       const available = Math.max(1, bounds.width - 300);
-      setSplitRatio(Math.max(25, Math.min(75, ((e.clientX - bounds.left) / available) * 100)));
+      setSplitRatio(Math.max(25, Math.min(75, ((e.clientX - bounds.left) / Math.max(1, bounds.width)) * 100)));
     };
     const finish = () => {
       element.removeEventListener('pointermove', move);
@@ -290,9 +290,9 @@ export function App() {
               </div>
               <label className="auto-run-toggle"><input type="checkbox" checked={autoRun} onChange={event => setAutoRun(event.target.checked)} /> Executar automaticamente <span>850 ms após parar de digitar</span></label>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
-                <button type="button" aria-pressed={sideBySide} onClick={() => setSideBySide(value => !value)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', border: '1px solid #34363d', borderRadius: 7, background: '#141519', color: '#ddd', fontSize: 12 }}><ArrowLeftRight size={15}/> {sideBySide ? 'Painéis empilhados' : 'Painéis lado a lado'}</button>
+                <Link to="/linux" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", color: "#ddd", fontSize: 12 }}><Terminal size={15}/> Alpine Linux</Link><button type="button" aria-pressed={sideBySide} onClick={() => setSideBySide(value => !value)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', border: '1px solid #34363d', borderRadius: 7, background: '#141519', color: '#ddd', fontSize: 12 }}><ArrowLeftRight size={15}/> {sideBySide ? 'Painéis empilhados' : 'Painéis lado a lado'}</button>
               </div>
-              <div className="workspace-layout" style={sideBySide ? { gridTemplateColumns: `minmax(0, ${splitRatio}fr) 8px minmax(0, ${100 - splitRatio}fr)`, gap: 8, alignItems: 'start' } : undefined}>
+              <div className={cn("workspace-layout", sideBySide && "is-split")} style={sideBySide ? { "--editor-share": `${splitRatio}fr`, "--terminal-share": `${100 - splitRatio}fr` } as React.CSSProperties : undefined}>
                 <section className="editor-panel" style={sideBySide ? { gridColumn: 1, gridRow: 1 } : undefined}>
                   <div className="panel-header">
                     <div className="panel-tabs"><span className="file-icon"><FileCode2 size={15}/></span><span>script.zsh</span><span className="unsaved-dot" aria-label="Rascunho local"/></div>
@@ -303,7 +303,7 @@ export function App() {
                   <div className="editor-keyboard">{shortcuts.map((item,i) => <button key={i} onMouseDown={e => e.preventDefault()} onClick={() => insert(item.value)}>{item.label}</button>)}</div>
                   <div className="editor-footer"><div className="footer-meta"><span><span className="status-light"/> Pronto</span><span>{script.split('\n').length} linhas</span><span>UTF-8</span></div><span>⌘ ↵ para executar</span></div>
                 </section>
-              {sideBySide && <div role="separator" aria-label="Redimensionar painéis lado a lado" aria-orientation="vertical" onPointerDown={splitResize} style={{ gridColumn: 2, gridRow: 1, alignSelf: 'stretch', cursor: 'col-resize', touchAction: 'none', background: '#292b30', borderRadius: 6, minHeight: 220 }} />}
+              {sideBySide && <div className="split-divider" role="separator" aria-label="Redimensionar painéis lado a lado" aria-orientation="vertical" onPointerDown={splitResize} style={{ gridColumn: 2, gridRow: 1, alignSelf: 'stretch', cursor: 'col-resize', touchAction: 'none', background: '#292b30', borderRadius: 6, minHeight: 220 }} />}
               <section className="terminal-panel" style={sideBySide ? { gridColumn: 3, gridRow: 1, marginTop: 0 } : undefined}>
                 <button className="terminal-heading" onClick={() => setShowOutput(v => !v)} aria-expanded={showOutput}><span><Terminal size={17}/> Terminal <span className="terminal-secondary">/ sandbox</span></span><div><span className="mini-status"><span className="status-light"/> WASM</span><ChevronDown className={cn(!showOutput && 'rotate')} size={16}/></div></button>
                 {showOutput && <><div className="terminal-body" style={{ height: terminalHeight, overflow: 'auto' }}>
