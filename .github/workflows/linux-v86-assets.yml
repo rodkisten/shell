@@ -26,7 +26,7 @@ jobs:
       - name: Install native toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang lld nasm default-jre make jq curl
+          sudo apt-get install -y clang lld nasm default-jre make jq curl wget python3
           rustup target add wasm32-unknown-unknown
       - name: Checkout v86 sources
         env:
@@ -36,6 +36,11 @@ jobs:
           cd /tmp/v86
           git checkout "$V86_REF"
           git submodule update --init --recursive
+          # Pin a compatible toolchain if the source repository provides one.
+          if [ -f rust-toolchain.toml ]; then
+            rustup show active-toolchain
+            rustup target add wasm32-unknown-unknown
+          fi
           git rev-parse HEAD | tee "$GITHUB_WORKSPACE/v86-source-sha.txt"
       - name: Build browser v86 and WASM from same source
         run: |
@@ -56,6 +61,17 @@ jobs:
           test -s public/v86/seabios.bin
           test -s public/v86/vgabios.bin
           test -s public/v86/alpine.iso
+          python3 - <<'PY'
+          from pathlib import Path
+          base = Path('public/v86')
+          wasm = (base / 'v86.wasm').read_bytes()
+          assert wasm[:4] == b'\\x00asm', 'v86.wasm is not a WASM module'
+          js = (base / 'libv86.js').read_text()
+          assert len(js) > 10000, 'libv86.js appears truncated'
+          iso = (base / 'alpine.iso').read_bytes()[:0x8006]
+          assert iso[0x8001:0x8006] == b'CD001', 'Alpine image is not ISO9660'
+          print('Validated WASM magic, JS bundle size, and ISO9660 signature')
+          PY
           du -h public/v86/*
           sha256sum public/v86/* | tee v86-assets.sha256
       - uses: actions/upload-artifact@v4
