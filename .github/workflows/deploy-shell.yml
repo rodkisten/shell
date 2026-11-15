@@ -1,0 +1,63 @@
+name: Deploy ShellConductor
+run-name: "🚀 Shell deploy · ${{ github.ref_name }} · ${{ github.event_name }}"
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "worker/**"
+      - "public/**"
+      - "index.html"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.*"
+      - "tsconfig*.json"
+      - "wrangler.jsonc"
+      - ".github/workflows/deploy-shell.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shell-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    name: Build and deploy to Cloudflare
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Deploy Worker and R2 binding
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          : "${CLOUDFLARE_API_TOKEN:?Missing CLOUDFLARE_API_TOKEN in production environment}"
+          : "${CLOUDFLARE_ACCOUNT_ID:?Missing CLOUDFLARE_ACCOUNT_ID in production environment}"
+          npx wrangler deploy
+      - name: Verify Alpine asset HTTP headers
+        run: |
+          set -euo pipefail
+          url="https://shell.migos.club/v86/alpine.iso"
+          for attempt in 1 2 3 4 5; do
+            status="$(curl -sSL -o /dev/null -w '%{http_code}' -I "$url" || true)"
+            if [ "$status" = 200 ]; then break; fi
+            echo "HEAD returned $status (attempt $attempt)"
+            sleep 5
+          done
+          test "$status" = 200
+          headers="$(curl -fsSI -H 'Range: bytes=0-1023' "$url")"
+          printf '%s\n' "$headers"
+          printf '%s\n' "$headers" | grep -qi '^HTTP/.* 206'
+          printf '%s\n' "$headers" | grep -qi '^content-range: bytes 0-1023/'
+          echo "Alpine ISO is reachable with HTTP Range support"
