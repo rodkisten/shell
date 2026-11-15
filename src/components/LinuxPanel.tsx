@@ -200,8 +200,8 @@ export function LinuxPanel() {
     <div className="linux-progress" role="status"><div><span>Leitura aleatória da ISO</span><strong>{isoRange}</strong></div><div><span>Inicialização</span><strong>{progress}%</strong></div><progress max={100} value={progress} /><small>{progress === 100 ? 'Saída serial recebida' : 'Progresso do carregamento, não do boot completo'}</small></div>
     {bootWarning && <p className="linux-note" role="alert">⚠ {bootWarning}</p>}
     {assetError && <p role="alert" className="linux-note">{assetError}. Execute npm run linux:assets antes do build ou configure URLs válidas.</p>}
+    {!emulator.current && status === "Desligado" && <div className="linux-boot-placeholder"><strong>Alpine Linux · v86</strong><span>Pressione “Iniciar Linux” para carregar a máquina virtual.</span></div>}
     <div className="linux-screen" ref={container} aria-label="Tela da máquina virtual Alpine Linux">
-      {!emulator.current && <div className="linux-boot-placeholder"><strong>Alpine Linux · v86</strong><span>Pressione “Iniciar Linux” para carregar a máquina virtual.</span></div>}
       <div className="linux-text-screen" />
       <canvas style={{ display: 'none' }} />
     </div>
