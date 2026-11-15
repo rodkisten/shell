@@ -130,7 +130,8 @@ export function LinuxPanel() {
       <button onClick={() => { localStorage.setItem(key, JSON.stringify(assets)); setStatus('Configuração salva neste navegador'); }}>Salvar configuração</button>
     </div>}
     {assetError && <p role="alert" className="linux-note">{assetError}. Execute npm run linux:assets antes do build ou configure URLs válidas.</p>}
-    <div className="linux-screen" ref={container}>
+    <div className="linux-screen" ref={container} aria-label="Tela da máquina virtual Alpine Linux">
+      {!emulator.current && <div className="linux-boot-placeholder"><strong>Alpine Linux · v86</strong><span>Pressione “Iniciar Linux” para carregar a máquina virtual.</span></div>}
       <div className="linux-text-screen" />
       <canvas style={{ display: 'none' }} />
     </div>
