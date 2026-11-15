@@ -35,9 +35,71 @@ async function manPage(name: string) {
   return json({ error: 'Man page não encontrada' }, 404);
 }
 
+type LinuxBucket = {
+  get(key: string, options?: { range?: { offset?: number; length?: number; suffix?: number } }): Promise<{
+    body: ReadableStream; size: number; httpEtag: string;
+    writeHttpMetadata(headers: Headers): void;
+  } | null>;
+};
+type Env = { LINUX_ASSETS?: LinuxBucket };
+const linuxAssets = new Set(['libv86.js', 'v86.wasm', 'seabios.bin', 'vgabios.bin', 'alpine.iso']);
+
+async function linuxAsset(request: Request, env: Env): Promise<Response> {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405 });
+  const filename = new URL(request.url).pathname.slice('/v86/'.length);
+  if (!linuxAssets.has(filename)) return new Response('Not found', { status: 404 });
+  if (!env.LINUX_ASSETS) return new Response('Linux R2 bucket not configured', { status: 503 });
+  const rangeHeader = request.headers.get('Range');
+  let range: { offset?: number; length?: number; suffix?: number } | undefined;
+  if (rangeHeader) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
+    if (!match || (!match[1] && !match[2])) return new Response(null, { status: 416 });
+    if (!match[1]) range = { suffix: Number(match[2]) };
+    else {
+      const start = Number(match[1]);
+      const end = match[2] ? Number(match[2]) : undefined;
+      if (!Number.isSafeInteger(start) || (end !== undefined && (!Number.isSafeInteger(end) || end < start))) return new Response(null, { status: 416 });
+      range = end === undefined ? { offset: start } : { offset: start, length: end - start + 1 };
+    }
+  }
+  const key = 'v86/' + filename;
+  const object = await env.LINUX_ASSETS.get(key, range ? { range } : undefined);
+  if (!object) return new Response('Not found', { status: 404 });
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set('ETag', object.httpEtag);
+  headers.set('Accept-Ranges', 'bytes');
+  headers.set('Cache-Control', 'public, max-age=3600');
+  const contentType: Record<string, string> = {
+    'libv86.js': 'text/javascript; charset=utf-8',
+    'v86.wasm': 'application/wasm',
+    'alpine.iso': 'application/octet-stream',
+    'seabios.bin': 'application/octet-stream',
+    'vgabios.bin': 'application/octet-stream',
+  };
+  headers.set('Content-Type', contentType[filename]);
+  // R2 returns a bounded body for ranged reads. Calculate the actual interval.
+  let start = 0;
+  let length = object.size;
+  if (range) {
+    if (range.suffix !== undefined) {
+      length = Math.min(range.suffix, object.size);
+      start = object.size - length;
+    } else {
+      start = range.offset ?? 0;
+      length = Math.min(range.length ?? object.size, Math.max(0, object.size - start));
+    }
+    if (!length || start >= object.size) return new Response(null, { status: 416, headers: { 'Content-Range': 'bytes */' + object.size } });
+    headers.set('Content-Range', 'bytes ' + start + '-' + (start + length - 1) + '/' + object.size);
+  }
+  headers.set('Content-Length', String(length));
+  return new Response(request.method === 'HEAD' ? null : object.body, { status: range ? 206 : 200, headers });
+}
+
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/v86/')) return linuxAsset(request, env);
     if (url.pathname.startsWith('/api/')) {
       if (request.method !== 'GET') return json({ error: 'Método não permitido' }, 405);
       if (url.pathname.startsWith('/api/man/')) return manPage(decodeURIComponent(url.pathname.slice('/api/man/'.length)));
