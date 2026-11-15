@@ -75,8 +75,10 @@ export function LinuxPanel() {
       });
       emulator.current = vm;
       vm.add_listener('emulator-ready', () => setStatus('Emulador pronto; aguardando boot do Alpine'));
-      vm.add_listener('emulator-started', () => setStatus('Linux em execução'));
+      vm.add_listener('emulator-started', () => setStatus('CPU da VM iniciada; boot do Alpine ainda não confirmado'));
       vm.add_listener('emulator-stopped', () => setStatus('Emulador pausado'));
+      vm.add_listener('emulator-error', () => setStatus('Erro interno do emulador; consulte o console'));
+      vm.add_listener('download-error', () => setStatus('Erro ao carregar imagem ou firmware; verifique rede e CORS'));
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally { setWorking(false); }
