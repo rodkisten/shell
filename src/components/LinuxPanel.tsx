@@ -47,6 +47,7 @@ export function LinuxPanel() {
   const [progress, setProgress] = useState(0);
   const [serial, setSerial] = useState('');
   const [bootWarning, setBootWarning] = useState('');
+  const [isoRange, setIsoRange] = useState('Não testado');
   const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
   const log = (message: string) => setEvents(previous => [...previous.slice(-39), new Date().toLocaleTimeString('pt-BR') + ' · ' + message]);
   const clearWatchdog = () => { if (watchdog.current) clearTimeout(watchdog.current); watchdog.current = null; };
@@ -55,7 +56,7 @@ export function LinuxPanel() {
     if (working || emulator.current || !container.current) return;
     setWorking(true);
     setStatus('Carregando emulador…');
-    setProgress(0); setEvents([]); setSerial(''); setBootWarning('');
+    setProgress(0); setEvents([]); setSerial(''); setBootWarning(''); setIsoRange('Verificando…');
     log('Iniciando pré-verificação dos arquivos');
     try {
       setAssetError(null);
@@ -73,6 +74,16 @@ export function LinuxPanel() {
           throw new Error(message);
         }
       }
+      // HEAD 200 does not prove the async CD-ROM can read sectors.
+      setStatus('Testando leitura parcial da ISO…');
+      const sector = await fetch(assets.image, { headers: { Range: 'bytes=32769-32773' }, cache: 'no-store' });
+      const bytes = new Uint8Array(await sector.arrayBuffer());
+      const signature = String.fromCharCode(...bytes);
+      const range = sector.headers.get('content-range') || 'sem Content-Range';
+      const rangeOK = sector.status === 206 && bytes.length === 5 && signature === 'CD001';
+      setIsoRange(rangeOK ? 'OK · HTTP 206 · ISO9660 CD001' : 'FALHA · HTTP ' + sector.status + ' · ' + range + ' · assinatura ' + JSON.stringify(signature));
+      log('Leitura aleatória ISO: HTTP ' + sector.status + ', ' + range + ', assinatura ' + JSON.stringify(signature));
+      if (!rangeOK) throw new Error('ISO não suporta leitura parcial válida (Range 206 / CD001). O v86 não consegue ler o CD-ROM de forma assíncrona.');
       setStatus('Carregando JavaScript do v86…');
       const V86 = await loadV86(assets.script);
       log('API V86 carregada'); setProgress(60);
@@ -85,6 +96,8 @@ export function LinuxPanel() {
         bios: { url: assets.bios },
         vga_bios: { url: assets.vga },
         cdrom: { url: assets.image, async: true },
+        // Alpine may use the VGA console only; serial output is an additional signal.
+        // Preserve the emulated text screen so VGA BIOS messages remain inspectable.
         autostart: true,
       });
       emulator.current = vm;
@@ -157,7 +170,7 @@ export function LinuxPanel() {
       </select></label>
       <button onClick={() => { localStorage.setItem(key, JSON.stringify(assets)); setStatus('Configuração salva neste navegador'); }}>Salvar configuração</button>
     </div>}
-    <div className="linux-progress" role="status"><div><span>Inicialização</span><strong>{progress}%</strong></div><progress max={100} value={progress} /><small>{progress === 100 ? 'Saída serial recebida' : 'Progresso do carregamento, não do boot completo'}</small></div>
+    <div className="linux-progress" role="status"><div><span>Leitura aleatória da ISO</span><strong>{isoRange}</strong></div><div><span>Inicialização</span><strong>{progress}%</strong></div><progress max={100} value={progress} /><small>{progress === 100 ? 'Saída serial recebida' : 'Progresso do carregamento, não do boot completo'}</small></div>
     {bootWarning && <p className="linux-note" role="alert">⚠ {bootWarning}</p>}
     {assetError && <p role="alert" className="linux-note">{assetError}. Execute npm run linux:assets antes do build ou configure URLs válidas.</p>}
     <div className="linux-screen" ref={container} aria-label="Tela da máquina virtual Alpine Linux">
