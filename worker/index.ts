@@ -38,6 +38,7 @@ async function manPage(name: string) {
 type LinuxBucket = {
   get(key: string, options?: { range?: { offset?: number; length?: number; suffix?: number } }): Promise<{
     body: ReadableStream; size: number; httpEtag: string;
+    range?: { offset: number; length: number };
     writeHttpMetadata(headers: Headers): void;
   } | null>;
 };
@@ -54,7 +55,11 @@ async function linuxAsset(request: Request, env: Env): Promise<Response> {
   if (rangeHeader) {
     const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
     if (!match || (!match[1] && !match[2])) return new Response(null, { status: 416 });
-    if (!match[1]) range = { suffix: Number(match[2]) };
+    if (!match[1]) {
+      const suffix = Number(match[2]);
+      if (!Number.isSafeInteger(suffix) || suffix <= 0) return new Response(null, { status: 416 });
+      range = { suffix };
+    }
     else {
       const start = Number(match[1]);
       const end = match[2] ? Number(match[2]) : undefined;
@@ -78,11 +83,14 @@ async function linuxAsset(request: Request, env: Env): Promise<Response> {
     'vgabios.bin': 'application/octet-stream',
   };
   headers.set('Content-Type', contentType[filename]);
-  // R2 returns a bounded body for ranged reads. Calculate the actual interval.
+  // R2 returns the original object size and the actual bounded interval.
   let start = 0;
   let length = object.size;
   if (range) {
-    if (range.suffix !== undefined) {
+    if (object.range) {
+      start = object.range.offset;
+      length = object.range.length;
+    } else if (range.suffix !== undefined) {
       length = Math.min(range.suffix, object.size);
       start = object.size - length;
     } else {
