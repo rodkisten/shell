@@ -8,6 +8,11 @@ on:
         required: true
         default: master
         type: string
+      publish_r2:
+        description: Publish verified artifacts to Cloudflare R2 (requires secrets)
+        required: true
+        default: false
+        type: boolean
       alpine_version:
         description: Alpine Virt x86 version
         required: true
@@ -82,3 +87,19 @@ jobs:
             v86-source-sha.txt
             v86-assets.sha256
           retention-days: 7
+
+      - name: Publish verified assets to R2
+        if: ${{ inputs.publish_r2 }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -Eeuo pipefail
+          : "${CLOUDFLARE_API_TOKEN:?Missing CLOUDFLARE_API_TOKEN secret}"
+          : "${CLOUDFLARE_ACCOUNT_ID:?Missing CLOUDFLARE_ACCOUNT_ID secret}"
+          for file in libv86.js v86.wasm seabios.bin vgabios.bin alpine.iso; do
+            echo "::group::Upload $file"
+            npx --yes wrangler@4 r2 object put "shell-linux-assets/v86/$file" --file "public/v86/$file" --remote
+            echo "::endgroup::"
+          done
+          echo "Published five v86 assets to shell-linux-assets"
