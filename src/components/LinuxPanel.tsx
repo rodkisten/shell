@@ -43,25 +43,39 @@ export function LinuxPanel() {
   const [memory, setMemory] = useState(128);
   const [snapshot, setSnapshot] = useState<File | null>(null);
   const [assetError, setAssetError] = useState<string | null>(null);
-  useEffect(() => () => { emulator.current?.destroy(); emulator.current = null; }, []);
+  const [events, setEvents] = useState<string[]>([]);
+  const [progress, setProgress] = useState(0);
+  const [serial, setSerial] = useState('');
+  const [bootWarning, setBootWarning] = useState('');
+  const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const log = (message: string) => setEvents(previous => [...previous.slice(-39), new Date().toLocaleTimeString('pt-BR') + ' · ' + message]);
+  const clearWatchdog = () => { if (watchdog.current) clearTimeout(watchdog.current); watchdog.current = null; };
+  useEffect(() => () => { clearWatchdog(); emulator.current?.destroy(); emulator.current = null; }, []);
   const boot = async () => {
     if (working || emulator.current || !container.current) return;
     setWorking(true);
     setStatus('Carregando emulador…');
+    setProgress(0); setEvents([]); setSerial(''); setBootWarning('');
+    log('Iniciando pré-verificação dos arquivos');
     try {
       setAssetError(null);
       // Detect missing static assets before creating a VM that appears stuck.
-      for (const [name, url] of Object.entries(assets)) {
+      for (const [index, [name, url]] of Object.entries(assets).entries()) {
+        setStatus('Verificando ' + name + '…');
         try {
           const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
           if (!response.ok) throw new Error('HTTP ' + response.status);
+          log(name + ': HTTP ' + response.status + ', ' + (response.headers.get('content-length') || 'tamanho desconhecido') + ' bytes');
+          setProgress((index + 1) * 10);
         } catch (error) {
           const message = 'Arquivo ' + name + ' indisponível (' + url + '): ' + String(error);
           setAssetError(message);
           throw new Error(message);
         }
       }
+      setStatus('Carregando JavaScript do v86…');
       const V86 = await loadV86(assets.script);
+      log('API V86 carregada'); setProgress(60);
       setStatus('Inicializando Alpine Linux…');
       const vm = new V86({
         wasm_path: assets.wasm,
@@ -74,16 +88,30 @@ export function LinuxPanel() {
         autostart: true,
       });
       emulator.current = vm;
-      vm.add_listener('emulator-ready', () => setStatus('Emulador pronto; aguardando boot do Alpine'));
-      vm.add_listener('emulator-started', () => setStatus('CPU da VM iniciada; boot do Alpine ainda não confirmado'));
-      vm.add_listener('emulator-stopped', () => setStatus('Emulador pausado'));
-      vm.add_listener('emulator-error', () => setStatus('Erro interno do emulador; consulte o console'));
-      vm.add_listener('download-error', () => setStatus('Erro ao carregar imagem ou firmware; verifique rede e CORS'));
+      log('Máquina virtual criada; aguardando firmware e kernel');
+      setProgress(70);
+      vm.add_listener('emulator-ready', () => { log('Emulador pronto'); setStatus('Firmware pronto; aguardando Alpine…'); setProgress(80); });
+      vm.add_listener('emulator-started', () => { log('CPU iniciada (não confirma boot do Linux)'); setStatus('CPU iniciada; aguardando saída do Alpine…'); setProgress(85); });
+      vm.add_listener('emulator-stopped', () => { log('CPU parada'); setStatus('Emulador pausado'); });
+      vm.add_listener('emulator-error', (...args) => { const message = 'Erro interno v86: ' + args.map(String).join(' '); log(message); setAssetError(message); setStatus('Falha no emulador'); clearWatchdog(); });
+      vm.add_listener('download-error', (...args) => { const message = 'Falha no download: ' + args.map(String).join(' '); log(message); setAssetError(message); setStatus('Falha ao baixar firmware ou ISO'); clearWatchdog(); });
+      vm.add_listener('serial0-output-byte', (...args) => {
+        const byte = Number(args[0]);
+        if (!Number.isFinite(byte)) return;
+        setSerial(previous => (previous + String.fromCharCode(byte)).slice(-6000));
+        if (byte === 10) { setProgress(100); clearWatchdog(); setStatus('Saída serial detectada; Alpine em inicialização'); }
+      });
+      clearWatchdog();
+      watchdog.current = setTimeout(() => {
+        setBootWarning('A CPU iniciou, mas nenhuma saída serial foi detectada em 45 segundos. O vídeo pode estar travado ou a ISO pode não ter iniciado. Verifique o diagnóstico e tente reiniciar.');
+        log('Timeout: boot não confirmado após 45 segundos');
+      }, 45000);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      setStatus(message); log('ERRO: ' + message);
     } finally { setWorking(false); }
   };
-  const shutdown = () => { emulator.current?.destroy(); emulator.current = null; setStatus('Desligado'); };
+  const shutdown = () => { clearWatchdog(); emulator.current?.destroy(); emulator.current = null; setStatus('Desligado'); setProgress(0); log('Máquina virtual desligada'); };
   const save = async () => {
     if (!emulator.current) return;
     setWorking(true);
@@ -129,12 +157,15 @@ export function LinuxPanel() {
       </select></label>
       <button onClick={() => { localStorage.setItem(key, JSON.stringify(assets)); setStatus('Configuração salva neste navegador'); }}>Salvar configuração</button>
     </div>}
+    <div className="linux-progress" role="status"><div><span>Inicialização</span><strong>{progress}%</strong></div><progress max={100} value={progress} /><small>{progress === 100 ? 'Saída serial recebida' : 'Progresso do carregamento, não do boot completo'}</small></div>
+    {bootWarning && <p className="linux-note" role="alert">⚠ {bootWarning}</p>}
     {assetError && <p role="alert" className="linux-note">{assetError}. Execute npm run linux:assets antes do build ou configure URLs válidas.</p>}
     <div className="linux-screen" ref={container} aria-label="Tela da máquina virtual Alpine Linux">
       {!emulator.current && <div className="linux-boot-placeholder"><strong>Alpine Linux · v86</strong><span>Pressione “Iniciar Linux” para carregar a máquina virtual.</span></div>}
       <div className="linux-text-screen" />
       <canvas style={{ display: 'none' }} />
     </div>
+    <details className="linux-diagnostics" open><summary>Diagnóstico de inicialização · {events.length} eventos</summary><pre>{events.join('\n') || 'Aguardando inicialização…'}</pre>{serial && <><strong>Console serial</strong><pre>{serial}</pre></>}</details>
     <div className="linux-snapshot">
       <label>Restaurar snapshot <input type="file" accept=".state,.bin" onChange={event => setSnapshot(event.target.files?.[0] || null)}/></label>
       <button disabled={!snapshot || !emulator.current || working} onClick={() => void restore()}>Restaurar</button>
