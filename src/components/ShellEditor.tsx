@@ -1,6 +1,8 @@
 import * as React from 'react';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { EditorState } from '@codemirror/state';
+import { EditorState, StateEffect, StateField } from '@codemirror/state';
+import { Decoration, type DecorationSet } from '@codemirror/view';
+import { checkShell } from '../lib/shellcheck';
 import { embeddedShellHighlight } from '../lib/highlight';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { basicSetup } from 'codemirror';
@@ -10,6 +12,17 @@ import { shell } from '@codincod/codemirror-lang-shell';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { contextualHints } from '../lib/suggestions';
 import { byName, SNIPPETS } from '../lib/commands';
+
+const setDiagnostics = StateEffect.define<DecorationSet>();
+const diagnosticsField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(value, transaction) {
+    value = value.map(transaction.changes);
+    for (const effect of transaction.effects) if (effect.is(setDiagnostics)) value = effect.value;
+    return value;
+  },
+  provide: field => EditorView.decorations.from(field),
+});
 
 export type ShellEditorHandle = { insert(text: string): void; focus(): void };
 type Props = {
@@ -37,6 +50,7 @@ const shellTheme = EditorView.theme({
   '.cm-completionDetail': { fontStyle: 'normal', color: '#a1a1aa', paddingLeft: '14px' },
   '.cm-tooltip.cm-completionInfo': { background: '#17181c', border: '1px solid #34363e', maxWidth: '280px', whiteSpace: 'pre-wrap' },
   '.cm-focused': { outline: 'none' },
+  '.shell-diagnostic': { textDecoration: 'underline wavy #f59e0b', textUnderlineOffset: '3px' },
 }, { dark: true });
 
 export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEditor(
@@ -87,6 +101,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           oneDark,
           shell(),
           embeddedShellHighlight,
+          diagnosticsField,
           shellTheme,
           EditorView.lineWrapping,
           EditorState.tabSize.of(2),
@@ -121,6 +136,25 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
     return () => { view.destroy(); editor.current = null; };
   // Editor must be created once. New values are synchronized by the effect below.
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const view = editor.current;
+      if (!view) return;
+      const source = view.state.doc.toString();
+      const findings = await checkShell(source).catch(() => []);
+      if (cancelled || !editor.current || editor.current.state.doc.toString() !== source) return;
+      const marks = findings.flatMap(finding => {
+        const line = view.state.doc.line(Math.max(1, Math.min(finding.line, view.state.doc.lines)));
+        const from = Math.min(line.to, line.from + Math.max(0, finding.column - 1));
+        const to = Math.min(line.to, Math.max(from + 1, line.from + (finding.endColumn ?? finding.column + 1) - 1));
+        return from < to ? [Decoration.mark({ class: 'shell-diagnostic', attributes: { title: finding.message } }).range(from, to)] : [];
+      });
+      view.dispatch({ effects: setDiagnostics.of(Decoration.set(marks, true)) });
+    }, 450);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [code]);
 
   useEffect(() => {
     const view = editor.current;
