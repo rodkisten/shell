@@ -51,6 +51,7 @@ const shellTheme = EditorView.theme({
   '.cm-tooltip.cm-completionInfo': { background: '#17181c', border: '1px solid #34363e', maxWidth: '280px', whiteSpace: 'pre-wrap' },
   '.cm-focused': { outline: 'none' },
   '.shell-diagnostic': { textDecoration: 'underline wavy #f59e0b', textUnderlineOffset: '3px' },
+  '.shell-diagnostic-error': { textDecorationColor: '#fb7185' },
 }, { dark: true });
 
 export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEditor(
@@ -144,12 +145,12 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       if (!view) return;
       const source = view.state.doc.toString();
       const findings = await checkShell(source).catch(() => []);
-      if (cancelled || !editor.current || editor.current.state.doc.toString() !== source) return;
+      if (cancelled || editor.current !== view || view.state.doc.toString() !== source) return;
       const marks = findings.flatMap(finding => {
         const line = view.state.doc.line(Math.max(1, Math.min(finding.line, view.state.doc.lines)));
         const from = Math.min(line.to, line.from + Math.max(0, finding.column - 1));
         const to = Math.min(line.to, Math.max(from + 1, line.from + (finding.endColumn ?? finding.column + 1) - 1));
-        return from < to ? [Decoration.mark({ class: 'shell-diagnostic', attributes: { title: finding.message } }).range(from, to)] : [];
+        return from < to ? [Decoration.mark({ class: finding.level === 'error' ? 'shell-diagnostic shell-diagnostic-error' : 'shell-diagnostic', attributes: { title: finding.message, 'aria-label': finding.message } }).range(from, to)] : [];
       });
       view.dispatch({ effects: setDiagnostics.of(Decoration.set(marks, true)) });
     }, 450);
