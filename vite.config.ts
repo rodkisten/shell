@@ -6,5 +6,7 @@ import { cloudflare } from '@cloudflare/vite-plugin';
 export default defineConfig({
   plugins: [react(), tailwindcss(), cloudflare({ viteEnvironment: { name: 'worker' } })],
   build: { target: 'es2022', cssCodeSplit: true, sourcemap: true },
+  // WASI and shell workers import split chunks, which IIFE bundles cannot load.
+  worker: { format: 'es' },
   server: { host: '0.0.0.0' },
 });
