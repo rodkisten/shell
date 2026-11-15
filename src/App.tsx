@@ -62,6 +62,8 @@ export function App() {
   const [historyRevision, setHistoryRevision] = useState(0);
   const [showSnippets, setShowSnippets] = useState(false);
   const [showOutput, setShowOutput] = useState(true);
+  const [sideBySide, setSideBySide] = useState(() => localStorage.getItem('shellconductor:side-by-side') === 'true');
+  const [splitRatio, setSplitRatio] = useState(() => Number(localStorage.getItem('shellconductor:split-ratio')) || 50);
   const [autoRun, setAutoRun] = useState(() => localStorage.getItem('shellconductor:auto-run') === 'true');
   const [editorHeight, setEditorHeight] = useState(() => Number(localStorage.getItem('shellconductor:editor-height')) || 390);
   const [terminalHeight, setTerminalHeight] = useState(() => Number(localStorage.getItem('shellconductor:terminal-height')) || 260);
@@ -199,6 +201,29 @@ export function App() {
     return () => clearTimeout(timer);
   }, [runRevision, autoRun]);
 
+  const splitResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const element = event.currentTarget;
+    const parent = element.parentElement;
+    if (!parent) return;
+    element.setPointerCapture(event.pointerId);
+    const move = (e: PointerEvent) => {
+      const bounds = parent.getBoundingClientRect();
+      const available = Math.max(1, bounds.width - 300);
+      setSplitRatio(Math.max(25, Math.min(75, ((e.clientX - bounds.left) / available) * 100)));
+    };
+    const finish = () => {
+      element.removeEventListener('pointermove', move);
+      element.removeEventListener('pointerup', finish);
+      element.removeEventListener('pointercancel', finish);
+    };
+    element.addEventListener('pointermove', move);
+    element.addEventListener('pointerup', finish);
+    element.addEventListener('pointercancel', finish);
+  };
+  useEffect(() => { localStorage.setItem('shellconductor:side-by-side', String(sideBySide)); }, [sideBySide]);
+  useEffect(() => { localStorage.setItem('shellconductor:split-ratio', String(splitRatio)); }, [splitRatio]);
+
   const resize = (target: 'editor' | 'terminal', event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     const origin = event.clientY;
@@ -258,8 +283,11 @@ export function App() {
                 <p>Escreva, entenda e execute scripts. Tudo em um lugar, sem sair do navegador.</p>
               </div>
               <label className="auto-run-toggle"><input type="checkbox" checked={autoRun} onChange={event => setAutoRun(event.target.checked)} /> Executar automaticamente <span>850 ms após parar de digitar</span></label>
-              <div className="workspace-layout">
-                <section className="editor-panel">
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+                <button type="button" aria-pressed={sideBySide} onClick={() => setSideBySide(value => !value)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', border: '1px solid #34363d', borderRadius: 7, background: '#141519', color: '#ddd', fontSize: 12 }}><ArrowLeftRight size={15}/> {sideBySide ? 'Painéis empilhados' : 'Painéis lado a lado'}</button>
+              </div>
+              <div className="workspace-layout" style={sideBySide ? { gridTemplateColumns: `minmax(0, ${splitRatio}fr) 8px minmax(0, ${100 - splitRatio}fr)`, gap: 8, alignItems: 'start' } : undefined}>
+                <section className="editor-panel" style={sideBySide ? { gridColumn: 1, gridRow: 1 } : undefined}>
                   <div className="panel-header">
                     <div className="panel-tabs"><span className="file-icon"><FileCode2 size={15}/></span><span>script.zsh</span><span className="unsaved-dot" aria-label="Rascunho local"/></div>
                     <div className="panel-header-actions"><span className="language-label">Zsh</span><button title="Colar texto" onClick={paste} aria-label="Colar"><Clipboard size={15}/></button><button title="Copiar script" onClick={() => void copy()} aria-label="Copiar"><Copy size={15}/></button><button title="Salvar script" onClick={save} aria-label="Salvar"><Bookmark size={15}/></button></div>
@@ -269,7 +297,8 @@ export function App() {
                   <div className="editor-keyboard">{shortcuts.map((item,i) => <button key={i} onMouseDown={e => e.preventDefault()} onClick={() => insert(item.value)}>{item.label}</button>)}</div>
                   <div className="editor-footer"><div className="footer-meta"><span><span className="status-light"/> Pronto</span><span>{script.split('\n').length} linhas</span><span>UTF-8</span></div><span>⌘ ↵ para executar</span></div>
                 </section>
-              <section className="terminal-panel">
+              {sideBySide && <div role="separator" aria-label="Redimensionar painéis lado a lado" aria-orientation="vertical" onPointerDown={splitResize} style={{ gridColumn: 2, gridRow: 1, alignSelf: 'stretch', cursor: 'col-resize', touchAction: 'none', background: '#292b30', borderRadius: 6, minHeight: 220 }} />}
+              <section className="terminal-panel" style={sideBySide ? { gridColumn: 3, gridRow: 1, marginTop: 0 } : undefined}>
                 <button className="terminal-heading" onClick={() => setShowOutput(v => !v)} aria-expanded={showOutput}><span><Terminal size={17}/> Terminal <span className="terminal-secondary">/ sandbox</span></span><div><span className="mini-status"><span className="status-light"/> WASM</span><ChevronDown className={cn(!showOutput && 'rotate')} size={16}/></div></button>
                 {showOutput && <><div className="terminal-body" style={{ height: terminalHeight, overflow: 'auto' }}>
                   {output.length ? output.map(item => <div className="terminal-run" key={item.id}><div className="terminal-prompt"><span>❯</span> {item.script.split('\n').find(line => line.trim() && !line.startsWith('#')) || 'script.zsh'}</div>{item.stdout && <pre>{item.stdout}</pre>}{item.stderr && <pre className="terminal-error">{item.stderr}</pre>}<div className={cn('terminal-exit',item.exitCode !== 0 && 'bad')}>Processo finalizado com código {item.exitCode} · {new Date(item.time).toLocaleTimeString('pt-BR')}</div></div>) :
@@ -277,7 +306,7 @@ export function App() {
                   <div className="pane-resizer" role="separator" aria-label="Redimensionar terminal" aria-orientation="horizontal" onPointerDown={event => resize('terminal', event)} />
                   <div className="terminal-bottom"><span><ShieldCheck size={13}/> Ambiente isolado</span><div><button onClick={async () => { try { await resetShell(); notify('Sandbox zerado.'); } catch { notify('Não foi possível reiniciar.'); } }}><RotateCcw size={13}/> Reiniciar</button><button onClick={() => setOutput([])}><Trash2 size={13}/> Limpar saída</button></div></div></>}
               </section>
-                <section className="actions-panel">
+                <section className="actions-panel" style={sideBySide ? { gridColumn: '1 / -1', gridRow: 2 } : undefined}>
                   <div className="toolbox-title"><span className="eyebrow">FERRAMENTAS</span><h3>Ações rápidas <Sparkles size={15}/></h3></div>
                   <div className="tool-primary">
                     <Button onClick={() => { void run(); }} disabled={!!busy} className="run-button">{busy === 'run' ? <LoaderCircle className="spin" size={16}/> : <Play size={16} fill="currentColor" />} Executar no sandbox</Button>
