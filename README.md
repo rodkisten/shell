@@ -17,6 +17,16 @@ Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa soment
 - [ ] Aplicar quick fixes seguros; diferenciar parser Zsh de ShellCheck.
 - [ ] Validar marcações, debounce e execução no Safari iPhone.
 
+### Linux v86 + Alpine
+- [x] Criar painel Linux opcional em /linux, com navegação desktop/mobile.
+- [x] Integrar API de inicialização v86, RAM configurável e URLs de BIOS/WASM/ISO.
+- [x] Adicionar exportação/importação de snapshots manuais.
+- [ ] Empacotar e hospedar libv86.js, v86.wasm, SeaBIOS/VGABIOS e imagem Alpine x86 32-bit em /v86.
+- [ ] Validar boot do Alpine no Safari iPhone e no desktop.
+- [ ] Configurar networking de convidado e testar apk/curl no Linux.
+- [ ] Implementar persistência automática de disco/snapshot no IndexedDB.
+- [ ] Integrar teclado virtual, terminal serial e gestos mobile.
+
 ### Layout e terminal
 - [x] Editor acima do terminal, com alturas ajustáveis.
 - [x] Alternância para layout lado a lado, divisor arrastável e preferência persistida.
@@ -81,6 +91,33 @@ O pacote é carregado dinamicamente apenas quando selecionado.
 
 O BusyBox não inclui automaticamente `jq`, `column` nem todos os utilitários
 GNU. A integração de `curl | jq` e a sincronização entre runtimes continuam pendentes.
+
+## Alpine Linux (v86)
+
+Acesse **/linux** para abrir a interface de uma VM Linux opcional. A VM usa a
+API do [v86](https://github.com/copy/v86), que emula x86 32-bit, e não altera
+o Zsh ou o BusyBox. O painel inclui boot, desligamento, RAM configurável,
+exportação e restauração **manual** de snapshots.
+
+**Pré-requisito de deploy:** os binários e a imagem não estão incluídos neste
+repositório. Antes de iniciar a VM, disponibilize estes arquivos no domínio
+da aplicação (por exemplo, via Cloudflare R2 ou assets estáticos):
+
+- `/v86/libv86.js`: bundle browser do v86, com API global `V86`
+- `/v86/v86.wasm`: engine WASM compatível com o bundle
+- `/v86/seabios.bin` e `/v86/vgabios.bin`: firmwares do v86
+- `/v86/alpine.iso`: imagem bootável Alpine Linux **x86 32-bit**, não x86_64
+
+A tela **Configurar imagens** permite substituir cada URL e salva a configuração
+localmente. A ISO é carregada por requisições HTTP Range (`206 Partial Content`);
+se hospedada em outro domínio, também precisa de CORS adequado. Não confunda
+a ISO x86 com Alpine aarch64 ou x86_64. O v86 original não emula kernel x86_64.
+
+**Limitações atuais:** esta etapa implementa a interface e a integração com a
+API do v86, mas **não inclui os arquivos binários**, nem comprova boot bem-sucedido.
+A rede do convidado, instalação com `apk`, persistência automática e compatibilidade
+com Safari iPhone ainda precisam de validação. O snapshot é um arquivo local
+exportado manualmente; ele não substitui um disco persistente.
 
 ## Touch Commands / VS Code sidebar
 
