@@ -11,6 +11,8 @@ import { autocompletion, type CompletionContext } from '@codemirror/autocomplete
 import { shell } from '@codincod/codemirror-lang-shell';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { contextualHints } from '../lib/suggestions';
+import { explainKnownShellTokens } from '../lib/semantic-shell';
+import { hoverTooltip } from '@codemirror/view';
 import { byName, SNIPPETS } from '../lib/commands';
 
 const setDiagnostics = StateEffect.define<DecorationSet>();
@@ -106,6 +108,33 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           oneDark,
           shell(),
           embeddedShellHighlight,
+          hoverTooltip((view, pos) => {
+            const token = explainKnownShellTokens(view.state.doc.toString())
+              .find((item) => item.from <= pos && pos < item.to);
+            if (!token) return null;
+            return {
+              pos: token.from,
+              end: token.to,
+              above: true,
+              create() {
+                const dom = document.createElement('div');
+                dom.className = 'shell-semantic-tooltip';
+                dom.style.cssText = 'max-width:min(85vw,360px);padding:10px 12px;white-space:normal;background:#17181c;color:#f5f5f5;border:1px solid #34363e;border-radius:10px;line-height:1.5';
+                const title = document.createElement('strong');
+                title.textContent = token.title;
+                const detail = document.createElement('div');
+                detail.textContent = token.description;
+                dom.append(title, detail);
+                if (token.example) {
+                  const example = document.createElement('code');
+                  example.textContent = token.example;
+                  example.style.cssText = 'display:block;margin-top:6px;white-space:pre-wrap;color:#a5b4fc';
+                  dom.append(example);
+                }
+                return { dom };
+              },
+            };
+          }, { hoverTime: 250 }),
           diagnosticsField,
           shellTheme,
           fontCompartment.current.of(EditorView.theme({ '&': { fontSize: `${fontSize}px` } })),
