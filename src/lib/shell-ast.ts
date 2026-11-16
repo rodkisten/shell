@@ -120,7 +120,7 @@ export function inspectShellAst(ast: unknown, source = '', maxNodes = 350, maxDe
     if (['Pos', 'End', 'Start', 'Stop', 'Position', 'Location', 'Loc'].includes(label)) return;
     const kind = kindOf(obj, label);
     const from = position(obj.Pos ?? obj.pos ?? obj.Start ?? obj.start, index);
-    const to = position(obj.End ?? obj.end ?? obj.Stop ?? obj.stop, lineOffsets, source);
+    const to = position(obj.End ?? obj.end ?? obj.Stop ?? obj.stop, index);
     const validRange = from !== undefined && to !== undefined &&
       from >= 0 && to > from && to <= source.length &&
       (parentId === undefined || (() => {
