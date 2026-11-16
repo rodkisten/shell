@@ -1,4 +1,5 @@
 import { parse, LangVariant } from 'sh-syntax';
+import process from 'node:process';
 
 const samples = {
   pipeline: 'printf "%s\\n" café | grep café',
@@ -20,9 +21,9 @@ for (const [name, source] of Object.entries(samples)) {
   try {
     const ast = await parse(source, { variant: LangVariant.LangZsh, keepComments: true });
     if (!ast || typeof ast !== 'object') throw new Error('Parser did not return an AST object');
-    console.log('AST_FIXTURE', JSON.stringify({ name, source, shape: summarize(ast) }));
+    process.stdout.write('AST_FIXTURE ' + JSON.stringify({ name, source, shape: summarize(ast) }) + '\n');
   } catch (error) {
-    console.error('AST_FIXTURE_FAILED', name, error);
+    process.stderr.write('AST_FIXTURE_FAILED ' + name + ' ' + String(error) + '\n');
     process.exitCode = 1;
   }
 }
