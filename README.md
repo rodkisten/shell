@@ -16,7 +16,8 @@ Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa soment
 - [x] Criar formato interno de especificações CLI e suporte inicial a subcomandos, flags com valores e argumentos posicionais (Git, Docker, curl, npm).
 - [ ] Importar e normalizar specs de subcomandos e flags do Fig/Carapace, preservando procedência.
 - [ ] Completar flags agrupadas, valores inline, comandos aninhados, comentários inline, redirecionamentos e variações por versão da CLI.
-- [ ] Painel de explicação por nó, navegação bidirecional com CodeMirror e interação touch no Safari.
+- [x] Painel inicial de explicação acionado por toque no CodeMirror, com descrição, exemplo e fonte.
+- [ ] Navegação bidirecional por nós da AST e validação touch no Safari.
 - [ ] Validar typecheck, lint, build e comportamento em Safari iPhone.
 
 ### Editor e diagnósticos
