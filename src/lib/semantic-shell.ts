@@ -38,6 +38,7 @@ export function explainKnownShellTokens(code: string): SemanticToken[] {
   let activeSpec: CliSpec | undefined;
   let pendingValue: string | undefined;
   let positionalIndex = 0;
+  let redirectTarget = false;
   let lineStart = 0;
 
   for (const line of code.split('\n')) {
@@ -50,10 +51,18 @@ export function explainKnownShellTokens(code: string): SemanticToken[] {
       const value = match[0];
       const from = lineStart + (match.index ?? 0);
       const to = from + value.length;
+      // Shell comments begin at a token boundary, not inside quoted strings.
+      if (value.startsWith('#')) break;
+      if (redirectTarget) {
+        tokens.push({ from, to, text: value, kind: 'option', title: 'Destino do redirecionamento', description: 'Caminho usado pelo operador de redirecionamento anterior.', source: 'shell' });
+        redirectTarget = false;
+        continue;
+      }
       const operator = operators[value];
       if (operator) {
         tokens.push({ from, to, text: value, kind: 'operator', title: value, description: operator, source: 'shell' });
-        expectingCommand = value !== '>' && value !== '>>' && value !== '<';
+        redirectTarget = value === '>' || value === '>>' || value === '<';
+        expectingCommand = !redirectTarget;
         if (expectingCommand) { currentCommand = ''; activeSpec = undefined; pendingValue = undefined; positionalIndex = 0; }
         continue;
       }
@@ -118,6 +127,7 @@ export function explainKnownShellTokens(code: string): SemanticToken[] {
     activeSpec = undefined;
     pendingValue = undefined;
     positionalIndex = 0;
+    redirectTarget = false;
   }
   return tokens;
 }
