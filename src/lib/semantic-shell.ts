@@ -42,10 +42,9 @@ export function explainKnownShellTokens(code: string): SemanticToken[] {
   let lineStart = 0;
 
   for (const line of code.split('\n')) {
-    // Fail closed for compound syntax: a flat token stream cannot distinguish
-    // command positions inside shell control flow or nested substitutions.
-    const complex = /(?:^|[;\\s])(?:if|then|elif|else|fi|for|while|until|do|done|case|esac|function)\\b|\\$\\(|\\$\\{|\x60|<<|\\(\\(/.test(line);
-    if (complex) {
+    // The current token scanner is intentionally not a shell AST.
+    // Skip compound syntax rather than incorrectly labeling control words.
+    if (/(?:^|[;\s])(?:if|then|elif|else|fi|for|while|until|do|done|case|esac|function)\b|\$\(|\$\{|\x60|<<|\(\(/.test(line)) {
       lineStart += line.length + 1;
       continue;
     }
@@ -60,9 +59,7 @@ export function explainKnownShellTokens(code: string): SemanticToken[] {
       const to = from + value.length;
       // Shell comments begin at a token boundary, not inside quoted strings.
       if (value.startsWith('#')) break;
-      // Never infer semantics from variable expansions or dynamic command names.
-      if (value.includes('
-      if (redirectTarget) {
+      if (value.includes('      if (redirectTarget) {
         tokens.push({ from, to, text: value, kind: 'option', title: 'Destino do redirecionamento', description: 'Caminho usado pelo operador de redirecionamento anterior.', source: 'shell' });
         redirectTarget = false;
         continue;
@@ -140,7 +137,7 @@ export function explainKnownShellTokens(code: string): SemanticToken[] {
   }
   return tokens;
 }
-) || value.includes('\\\\')) {
+)) {
         expectingCommand = false;
         activeSpec = undefined;
         pendingValue = undefined;
