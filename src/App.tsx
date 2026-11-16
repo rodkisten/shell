@@ -16,6 +16,8 @@ import './components/workspace.css';
 import { ReferencePanel } from './components/ReferencePanel';
 import { SNIPPETS } from './lib/commands';
 import { contextualHints } from './lib/suggestions';
+import { explainKnownShellTokens } from './lib/semantic-shell';
+import { parse, LangVariant } from 'sh-syntax';
 import { formatShell } from './lib/format';
 import { checkShell, applyAvailableFixes, type Finding } from './lib/shellcheck';
 import { cancelShell, executeScript, resetShell } from './lib/terminal';
@@ -256,12 +258,19 @@ export function App() {
     if (!script.trim()) return notify('Cole ou escreva um comando primeiro.');
     setBusy('explain');
     try {
-      const response = await fetch('/api/explain?q=' + encodeURIComponent(script.slice(0, 1000)));
-      if (!response.ok) throw new Error('Explicação remota indisponível.');
-      const data = await response.json() as { explanation?: string };
-      setExplanation(data.explanation || 'Não foi encontrada explicação nesta referência.');
-    } catch (error) { notify(error instanceof Error ? error.message : 'Não foi possível explicar.'); }
-    finally { setBusy(null); }
+      // Validate with the already-installed shell parser. Do not send scripts
+      // (which may contain credentials) to the remote documentation endpoint.
+      await parse(script, { variant: LangVariant.LangZsh, keepComments: true });
+      const tokens = explainKnownShellTokens(script);
+      const steps = tokens.map((token, index) =>
+        `${index + 1}. ${token.text} · ${token.title}\n   ${token.description}${token.example ? '\n   Exemplo: ' + token.example : ''}`
+      );
+      setExplanation(steps.length
+        ? ['Análise local (catálogo + operadores)', '', ...steps, '', 'Nota: somente trechos reconhecidos são explicados. Ainda não há resolução completa de AST, expansões dinâmicas ou especificações externas.'].join('\n')
+        : 'A sintaxe é válida, mas nenhum comando ou operador foi reconhecido pelo catálogo local. Não foi inferido um significado.');
+    } catch (error) {
+      setExplanation('Não foi possível analisar a sintaxe Zsh: ' + (error instanceof Error ? error.message : String(error)));
+    } finally { setBusy(null); }
   };
 
   return (
@@ -321,7 +330,7 @@ export function App() {
                   <div className="tool-group">
                     <button className="tool-action" onClick={() => void convert(false)} disabled={!!busy}><span className="tool-icon"><WandSparkles size={17}/></span><span><strong>Formatar script</strong><small>sh-syntax • Zsh experimental</small></span><span className="tool-kbd">⌘ ⇧ F</span></button>
                     <button className="tool-action" onClick={() => void check()} disabled={!!busy}><span className="tool-icon"><ShieldCheck size={17}/></span><span><strong>Validar e diagnosticar</strong><small>sh-syntax • análise sintática</small></span><span className="arrow-small">↗</span></button>
-                    <button className="tool-action" onClick={() => void explain()} disabled={!!busy}><span className="tool-icon"><BookOpen size={17}/></span><span><strong>Explicar comando</strong><small>Man page + opções em contexto</small></span><span className="arrow-small">↗</span></button>
+                    <button className="tool-action" onClick={() => void explain()} disabled={!!busy}><span className="tool-icon"><BookOpen size={17}/></span><span><strong>Explicar comando</strong><small>Passo a passo local · sem IA</small></span><span className="arrow-small">↗</span></button>
                   </div>
                   <div className="toolbox-divider"/>
                   <span className="eyebrow">CONVERSOR</span>
@@ -341,7 +350,7 @@ export function App() {
                 <div className="subpanel-heading"><h3><CircleAlert size={17}/> Diagnósticos <span className="count-pill">{findings.length}</span></h3><Button variant="outline" size="sm" onClick={fix}><WandSparkles size={14}/> Aplicar correções possíveis</Button></div>
                 {findings.map((finding,i) => <div className="diagnostic-item" key={i}><span className={cn('severity',finding.level)}>{finding.level}</span><div><strong>SC{finding.code} <span>L{finding.line}:{finding.column}</span></strong><p>{finding.message}</p><a href={'https://www.shellcheck.net/wiki/SC'+finding.code} target="_blank" rel="noreferrer">Entenda esse diagnóstico ↗</a></div></div>)}
               </section>}
-              {explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div><pre>{explanation}</pre><p>Fonte: ManKier. Evite enviar comandos com segredos embutidos para serviços externos.</p></section>}
+              {explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div><pre>{explanation}</pre><p>Fonte: catálogo local e parser sh-syntax. Nenhum código é enviado para análise remota.</p></section>}
               <WorkspacePanel />
               <div className="footer-advice"><Info size={15}/><span>O terminal executa Zsh em WebAssembly com filesystem virtual persistente. <strong>Não executa comandos no seu iPhone, servidor ou Codespace.</strong> Requisições HTTP externas não são habilitadas no sandbox.</span></div>
             </>} />
