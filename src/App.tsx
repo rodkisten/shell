@@ -18,6 +18,7 @@ import { SNIPPETS } from './lib/commands';
 import { contextualHints } from './lib/suggestions';
 import { explainKnownShellTokens, type SemanticToken } from './lib/semantic-shell';
 import { parse, LangVariant } from 'sh-syntax';
+import { inspectShellAst } from './lib/shell-ast';
 import { formatShell } from './lib/format';
 import { checkShell, applyAvailableFixes, type Finding } from './lib/shellcheck';
 import { cancelShell, executeScript, resetShell } from './lib/terminal';
@@ -261,14 +262,15 @@ export function App() {
     try {
       // Validate with the already-installed shell parser. Do not send scripts
       // (which may contain credentials) to the remote documentation endpoint.
-      await parse(script, { variant: LangVariant.LangZsh, keepComments: true });
+      const ast = await parse(script, { variant: LangVariant.LangZsh, keepComments: true });
+      const overview = inspectShellAst(ast);
       const tokens = explainKnownShellTokens(script);
       const steps = tokens.map((token, index) =>
         `${index + 1}. ${token.text} · ${token.title}\n   ${token.description}${token.example ? '\n   Exemplo: ' + token.example : ''}`
       );
       setExplanation(steps.length
-        ? ['Análise local (catálogo + operadores)', '', ...steps, '', 'Nota: somente trechos reconhecidos são explicados. Ainda não há resolução completa de AST, expansões dinâmicas ou especificações externas.'].join('\n')
-        : 'A sintaxe é válida, mas nenhum comando ou operador foi reconhecido pelo catálogo local. Não foi inferido um significado.');
+        ? ['AST real (sh-syntax / mvdan)', ...overview.lines, overview.truncated ? '… árvore truncada para proteger o desempenho no celular.' : '', '', 'Análise semântica parcial (catálogo + operadores)', '', ...steps, '', 'A AST é estrutural; efeitos de expansões dinâmicas e comandos externos não são inferidos.'].join('\n')
+        : ['AST real (sh-syntax / mvdan)', ...overview.lines, '', 'Nenhum comando reconhecido pelo catálogo semântico local.'].join('\n'));
     } catch (error) {
       setExplanation('Não foi possível analisar a sintaxe Zsh: ' + (error instanceof Error ? error.message : String(error)));
     } finally { setBusy(null); }
