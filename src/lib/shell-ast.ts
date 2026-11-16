@@ -58,6 +58,7 @@ function record(value: unknown): Record<string, unknown> | null {
 function positionIndex(source: string) {
   const byteToUtf16 = new Map<number, number>();
   const lineOffsets = [0];
+  const utf16ToByte = new Map<number, number>();
   const encoder = new TextEncoder();
   let byte = 0;
   for (let i = 0; i < source.length;) {
@@ -65,12 +66,14 @@ function positionIndex(source: string) {
     if (point === undefined) break;
     const char = String.fromCodePoint(point);
     byteToUtf16.set(byte, i);
+    utf16ToByte.set(i, byte);
     if (char === '\n') lineOffsets.push(i + char.length);
     byte += encoder.encode(char).length;
     i += char.length;
   }
   byteToUtf16.set(byte, source.length);
-  return { byteToUtf16, lineOffsets };
+  utf16ToByte.set(source.length, byte);
+  return { byteToUtf16, utf16ToByte, lineOffsets };
 }
 
 function position(value: unknown, index: ReturnType<typeof positionIndex>): number | undefined {
@@ -87,7 +90,7 @@ function position(value: unknown, index: ReturnType<typeof positionIndex>): numb
   const start = index.lineOffsets[line - 1];
   if (start === undefined) return undefined;
   // Columns from mvdan are byte-based, not JavaScript string indices.
-  const byteStart = [...index.byteToUtf16.entries()].find(([, utf16]) => utf16 === start)?.[0];
+  const byteStart = index.utf16ToByte.get(start);
   return byteStart === undefined ? undefined : index.byteToUtf16.get(byteStart + col - 1);
 }
 
@@ -96,6 +99,46 @@ function kindOf(obj: Record<string, unknown>, label: string): string {
     if (typeof obj[key] === 'string') return obj[key] as string;
   }
   return label;
+}
+
+/** Only genuine shell constructs get semantic descriptions. */
+function explainNode(kind: string, obj: Record<string, unknown>): string {
+  const fallback = descriptions[kind] ?? 'Estrutura sintática identificada; comportamento não inferido.';
+  if (kind === 'Stmt') {
+    const background = obj.Background ?? obj.background;
+    const negated = obj.Negated ?? obj.negated;
+    const flags = [
+      background === true ? 'Executa em segundo plano.' : '',
+      negated === true ? 'Inverte o status de saída do comando.' : '',
+    ].filter(Boolean);
+    return flags.length ? fallback + ' ' + flags.join(' ') : fallback;
+  }
+  if (kind === 'BinaryCmd') {
+    const op = obj.Op ?? obj.op;
+    if (typeof op === 'string') {
+      const meaning: Record<string, string> = {
+        '&&': 'O comando à direita só executa se o da esquerda tiver sucesso.',
+        '||': 'O comando à direita só executa se o da esquerda falhar.',
+        '|': 'A saída padrão à esquerda alimenta a entrada padrão à direita.',
+        '|&': 'Saída padrão e erros à esquerda alimentam o próximo comando.',
+      };
+      return meaning[op] ?? fallback;
+    }
+  }
+  if (kind === 'Redirect') {
+    const op = obj.Op ?? obj.op;
+    if (typeof op === 'string') {
+      const meaning: Record<string, string> = {
+        '>': 'Redireciona a saída, substituindo o conteúdo do destino.',
+        '>>': 'Acrescenta a saída ao destino.',
+        '<': 'Lê a entrada do destino.',
+        '<<': 'Usa um here-document como entrada.',
+        '<<<': 'Usa uma string como entrada.',
+      };
+      return meaning[op] ?? fallback;
+    }
+  }
+  return fallback;
 }
 
 export function inspectShellAst(ast: unknown, source = '', maxNodes = 350, maxDepth = 18): AstOverview {
@@ -118,6 +161,9 @@ export function inspectShellAst(ast: unknown, source = '', maxNodes = 350, maxDe
     if (!obj) return;
     // Position and other parser metadata are not syntax nodes.
     if (['Pos', 'End', 'Start', 'Stop', 'Position', 'Location', 'Loc'].includes(label)) return;
+    // Ignore standalone position records and arbitrary metadata objects.
+    if ((typeof obj.Offset === 'number' || typeof obj.offset === 'number') &&
+        !('Pos' in obj) && !('pos' in obj) && !('End' in obj) && !('end' in obj)) return;
     const kind = kindOf(obj, label);
     const from = position(obj.Pos ?? obj.pos ?? obj.Start ?? obj.start, index);
     const to = position(obj.End ?? obj.end ?? obj.Stop ?? obj.stop, index);
@@ -131,7 +177,7 @@ export function inspectShellAst(ast: unknown, source = '', maxNodes = 350, maxDe
     const id = String(nodes.length);
     const node: ShellAstNode = {
       id, kind, label, depth, parentId,
-      description: descriptions[kind] ?? 'Nó sintático do script shell.',
+      description: explainNode(kind, obj),
       navigable: validRange,
       ...(validRange ? { from, to } : {}),
     };
