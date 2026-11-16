@@ -59,7 +59,7 @@ export function explainKnownShellTokens(code: string): SemanticToken[] {
       const to = from + value.length;
       // Shell comments begin at a token boundary, not inside quoted strings.
       if (value.startsWith('#')) break;
-      if (value.includes('      if (redirectTarget) {
+      if (redirectTarget) {
         tokens.push({ from, to, text: value, kind: 'option', title: 'Destino do redirecionamento', description: 'Caminho usado pelo operador de redirecionamento anterior.', source: 'shell' });
         redirectTarget = false;
         continue;
