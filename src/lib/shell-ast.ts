@@ -77,6 +77,8 @@ function positionIndex(source: string) {
 }
 
 function position(value: unknown, index: ReturnType<typeof positionIndex>): number | undefined {
+  if (typeof value === 'number' && Number.isSafeInteger(value))
+    return index.byteToUtf16.get(value);
   const obj = record(value);
   if (!obj) return undefined;
   const offset = obj.Offset ?? obj.offset;
@@ -167,10 +169,18 @@ export function inspectShellAst(ast: unknown, source = '', maxNodes = 350, maxDe
     if ((typeof obj.Offset === 'number' || typeof obj.offset === 'number') &&
         !('Pos' in obj) && !('pos' in obj) && !('End' in obj) && !('end' in obj)) return;
     const kind = kindOf(obj, label);
+    if (typeof obj.type !== 'string' && label !== 'File') {
+      // The parser also returns position metadata objects. They are not nodes.
+      for (const child of Object.values(obj)) {
+        if (child && typeof child === 'object') visit(child, depth, label, parentId);
+      }
+      return;
+    }
     // Only known syntax kinds have established semantics. An arbitrary
     // object property name must not be promoted into a shell operation.
-    const from = position(obj.Pos ?? obj.pos ?? obj.Start ?? obj.start, index);
-    const to = position(obj.End ?? obj.end ?? obj.Stop ?? obj.stop, index);
+    // Verified sh-syntax AST uses numeric UTF-8 start/end fields.
+    const from = position(obj.start ?? obj.Start ?? obj.Pos ?? obj.pos, index);
+    const to = position(obj.end ?? obj.End ?? obj.Stop ?? obj.stop, index);
     const validRange = from !== undefined && to !== undefined &&
       from >= 0 && to > from && to <= source.length &&
       (parentId === undefined || (() => {
