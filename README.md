@@ -13,8 +13,9 @@ Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa soment
 - [x] Botão **Explicar comando** usa validação Zsh do sh-syntax e catálogo local; não envia o script à API remota.
 - [x] Identificar explicitamente a cobertura parcial, sem apresentar tokenização como AST semântica completa.
 - [ ] Interpretar a AST tipada real do sh-syntax, inclusive nós aninhados, variáveis e redirecionamentos.
-- [ ] Importar e normalizar specs de subcomandos e flags (Fig/Carapace), preservando procedência.
-- [ ] Cobrir argumentos posicionais, flags agrupadas, valores inline e variações por versão da CLI.
+- [x] Criar formato interno de especificações CLI e suporte inicial a subcomandos, flags com valores e argumentos posicionais (Git, Docker, curl, npm).
+- [ ] Importar e normalizar specs de subcomandos e flags do Fig/Carapace, preservando procedência.
+- [ ] Completar flags agrupadas, valores inline, comandos aninhados, comentários inline, redirecionamentos e variações por versão da CLI.
 - [ ] Painel de explicação por nó, navegação bidirecional com CodeMirror e interação touch no Safari.
 - [ ] Validar typecheck, lint, build e comportamento em Safari iPhone.
 
