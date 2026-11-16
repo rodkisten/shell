@@ -9,11 +9,33 @@ import { basicSetup } from 'codemirror';
 import { indentWithTab } from '@codemirror/commands';
 import { autocompletion, type CompletionContext } from '@codemirror/autocomplete';
 import { shell } from '@codincod/codemirror-lang-shell';
+import { syntaxTree } from '@codemirror/language';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { contextualHints } from '../lib/suggestions';
 import { explainKnownShellTokens, type SemanticToken } from '../lib/semantic-shell';
 import { hoverTooltip } from '@codemirror/view';
 import { byName, SNIPPETS } from '../lib/commands';
+
+/**
+ * Lezer supplies structural context for the shell editor. This is a syntax
+ * breadcrumb, not a claim that the editor grammar is a full semantic Bash AST.
+ */
+function withSyntaxContext(token: SemanticToken, state: EditorState): SemanticToken {
+  const root = syntaxTree(state);
+  if (token.from >= root.length) return token;
+  let node = root.resolveInner(token.from, 1);
+  const names: string[] = [];
+  while (node && names.length < 8) {
+    if (!node.type.isAnonymous && node.name && node.name !== '⚠') names.push(node.name);
+    node = node.parent;
+  }
+  const path = names.reverse().join(' › ');
+  if (!path) return token;
+  return {
+    ...token,
+    description: token.description + '\\n\\nEstrutura sintática (CodeMirror): ' + path,
+  };
+}
 
 const setDiagnostics = StateEffect.define<DecorationSet>();
 const diagnosticsField = StateField.define<DecorationSet>({
@@ -117,9 +139,10 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           shell(),
           embeddedShellHighlight,
           hoverTooltip((view, pos) => {
-            const token = explainKnownShellTokens(view.state.doc.toString())
+            const match = explainKnownShellTokens(view.state.doc.toString())
               .find((item) => item.from <= pos && pos < item.to);
-            if (!token) return null;
+            if (!match) return null;
+            const token = withSyntaxContext(match, view.state);
             return {
               pos: token.from,
               end: token.to,
@@ -160,7 +183,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
               // semantic selection as pointer interaction.
               const token = explainKnownShellTokens(update.state.doc.toString())
                 .find((item) => item.from <= pos && pos < item.to);
-              if (token) callbacks.current.onSemanticInspect(token);
+              if (token) callbacks.current.onSemanticInspect(withSyntaxContext(token, update.state));
             }
           }),
           EditorView.domEventHandlers({
@@ -170,7 +193,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
               const token = explainKnownShellTokens(instance.state.doc.toString())
                 .find((item) => item.from <= pos && pos < item.to);
               if (token) {
-                callbacks.current.onSemanticInspect(token);
+                callbacks.current.onSemanticInspect(withSyntaxContext(token, instance.state));
                 if (token.kind === 'command' && byName.has(token.text)) {
                   callbacks.current.onInspect(token.text);
                 }
