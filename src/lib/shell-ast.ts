@@ -115,6 +115,8 @@ function explainNode(kind: string, obj: Record<string, unknown>): string {
   }
   if (kind === 'BinaryCmd') {
     const op = obj.Op ?? obj.op;
+    // Some mvdan/sh wrappers encode operators as numeric enums. Never guess
+    // their meaning without a verified mapping from the installed parser.
     if (typeof op === 'string') {
       const meaning: Record<string, string> = {
         '&&': 'O comando à direita só executa se o da esquerda tiver sucesso.',
@@ -122,7 +124,7 @@ function explainNode(kind: string, obj: Record<string, unknown>): string {
         '|': 'A saída padrão à esquerda alimenta a entrada padrão à direita.',
         '|&': 'Saída padrão e erros à esquerda alimentam o próximo comando.',
       };
-      return meaning[op] ?? fallback;
+      return Object.hasOwn(meaning, op) ? meaning[op] : fallback;
     }
   }
   if (kind === 'Redirect') {
@@ -165,6 +167,8 @@ export function inspectShellAst(ast: unknown, source = '', maxNodes = 350, maxDe
     if ((typeof obj.Offset === 'number' || typeof obj.offset === 'number') &&
         !('Pos' in obj) && !('pos' in obj) && !('End' in obj) && !('end' in obj)) return;
     const kind = kindOf(obj, label);
+    // Only known syntax kinds have established semantics. An arbitrary
+    // object property name must not be promoted into a shell operation.
     const from = position(obj.Pos ?? obj.pos ?? obj.Start ?? obj.start, index);
     const to = position(obj.End ?? obj.end ?? obj.Stop ?? obj.stop, index);
     const validRange = from !== undefined && to !== undefined &&
