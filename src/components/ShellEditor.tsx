@@ -146,7 +146,15 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           placeholder('Cole um script do ChatGPT ou comece a escrever…'),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) callbacks.current.onChange(update.state.doc.toString());
-            if (update.docChanged || update.selectionSet) callbacks.current.onCursor(update.state.selection.main.head);
+            if (update.docChanged || update.selectionSet) {
+              const pos = update.state.selection.main.head;
+              callbacks.current.onCursor(pos);
+              // Keyboard navigation and iOS caret movement use the same
+              // semantic selection as pointer interaction.
+              const token = explainKnownShellTokens(update.state.doc.toString())
+                .find((item) => item.from <= pos && pos < item.to);
+              if (token) callbacks.current.onSemanticInspect(token);
+            }
           }),
           EditorView.domEventHandlers({
             pointerup(event, instance) {
