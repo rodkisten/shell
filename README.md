@@ -13,7 +13,9 @@ Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa soment
 - [x] Botão **Explicar comando** usa validação Zsh do sh-syntax e catálogo local; não envia o script à API remota.
 - [x] Identificar explicitamente a cobertura parcial, sem apresentar tokenização como AST semântica completa.
 - [x] Exibir a AST estrutural real retornada por `sh-syntax`, com travessia limitada para desempenho no Safari.
-- [ ] Tipar e interpretar semanticamente nós AST (`Stmt`, `CallExpr`, `IfClause`, `ForClause`, `CmdSubst`, `Redirect`) com ranges de origem e navegação no CodeMirror 6.
+- [x] Criar modelo de nós AST com descrição, hierarquia, limites de percurso e ranges quando expostos pelo parser.
+- [x] Exibir lista de nós selecionáveis no painel, com navegação para o CodeMirror 6 quando há range válido.
+- [ ] Validar os formatos concretos de posições/tipos do sh-syntax e completar interpretação semântica de `Stmt`, `CallExpr`, `IfClause`, `ForClause`, `CmdSubst`, `Redirect`.
 - [x] Criar formato interno de especificações CLI e suporte inicial a subcomandos, flags com valores e argumentos posicionais (Git, Docker, curl, npm).
 - [ ] Importar e normalizar specs de subcomandos e flags do Fig/Carapace, preservando procedência.
 - [x] Evitar explicações enganosas em linhas com estruturas de controle, substituições e expansões dinâmicas (cobertura conservadora).
