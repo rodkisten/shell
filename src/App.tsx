@@ -314,7 +314,7 @@ export function App() {
                       <strong style={{fontSize:13}}>{semanticSelection.title}</strong>
                       <button type="button" aria-label="Fechar explicação" onClick={() => setSemanticSelection(null)} style={{minWidth:36,minHeight:36,color:'inherit'}}><X size={17}/></button>
                     </div>
-                    <code style={{display:'block',marginTop:4,fontSize:12,color:'#a5b4fc'}}>{semanticSelection.text}</code>
+                    <button type="button" onClick={() => editor.current?.reveal(semanticSelection.from, semanticSelection.to)} title="Selecionar trecho no editor" style={{display:'block',marginTop:4,fontSize:12,color:'#a5b4fc',textAlign:'left',minHeight:36,overflowWrap:'anywhere'}}><code>{semanticSelection.text}</code> <span aria-hidden="true">↗</span></button>
                     <p style={{fontSize:13,lineHeight:1.55,margin:'8px 0 0'}}>{semanticSelection.description}</p>
                     {semanticSelection.example && <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',fontSize:12,marginTop:8}}>{semanticSelection.example}</pre>}
                     <small style={{display:'block',marginTop:8,color:'#a1a1aa'}}>Fonte: {semanticSelection.source === 'cli-spec' ? 'especificação CLI local' : semanticSelection.source === 'shell' ? 'operador shell' : 'catálogo local'}. Análise parcial.</small>
