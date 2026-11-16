@@ -23,7 +23,7 @@ import { byName, SNIPPETS } from '../lib/commands';
 function withSyntaxContext(token: SemanticToken, state: EditorState): SemanticToken {
   const root = syntaxTree(state);
   if (token.from >= root.length) return token;
-  let node = root.resolveInner(token.from, 1);
+  let node: ReturnType<typeof root.resolveInner> | null = root.resolveInner(token.from, 1);
   const names: string[] = [];
   while (node && names.length < 8) {
     if (!node.type.isAnonymous && node.name && node.name !== '⚠') names.push(node.name);
