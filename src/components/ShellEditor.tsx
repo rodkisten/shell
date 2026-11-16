@@ -26,7 +26,7 @@ const diagnosticsField = StateField.define<DecorationSet>({
   provide: field => EditorView.decorations.from(field),
 });
 
-export type ShellEditorHandle = { insert(text: string): void; focus(): void };
+export type ShellEditorHandle = { insert(text: string): void; focus(): void; reveal(from: number, to: number): void };
 type Props = {
   code: string;
   fontSize: number;
@@ -78,6 +78,13 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       view.focus();
     },
     focus() { editor.current?.focus(); },
+    reveal(from, to) {
+      const view = editor.current;
+      if (!view) return;
+      if (from < 0 || to < from || to > view.state.doc.length) return;
+      view.dispatch({ selection: { anchor: from, head: to }, scrollIntoView: true });
+      view.focus();
+    },
   }), []);
 
   useEffect(() => {
