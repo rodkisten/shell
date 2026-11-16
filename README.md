@@ -8,6 +8,16 @@ A mobile-first shell workbench for learning and daily use. Designed for the iPho
 
 Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa somente após a implementação; commits não substituem validação de build ou teste no Safari.
 
+### Explicação semântica local (PR #4)
+- [x] Hover contextual de comandos, opções conhecidas e operadores no CodeMirror 6.
+- [x] Botão **Explicar comando** usa validação Zsh do sh-syntax e catálogo local; não envia o script à API remota.
+- [x] Identificar explicitamente a cobertura parcial, sem apresentar tokenização como AST semântica completa.
+- [ ] Interpretar a AST tipada real do sh-syntax, inclusive nós aninhados, variáveis e redirecionamentos.
+- [ ] Importar e normalizar specs de subcomandos e flags (Fig/Carapace), preservando procedência.
+- [ ] Cobrir argumentos posicionais, flags agrupadas, valores inline e variações por versão da CLI.
+- [ ] Painel de explicação por nó, navegação bidirecional com CodeMirror e interação touch no Safari.
+- [ ] Validar typecheck, lint, build e comportamento em Safari iPhone.
+
 ### Editor e diagnósticos
 - [x] Editor CodeMirror 6 com syntax highlighting, autocomplete e atalhos.
 - [x] Parser experimental Zsh com marcações sublinhadas no editor (debounce de 450 ms; **não** equivale a ShellCheck completo).
