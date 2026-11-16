@@ -271,7 +271,7 @@ export function App() {
         `${index + 1}. ${token.text} · ${token.title}\n   ${token.description}${token.example ? '\n   Exemplo: ' + token.example : ''}`
       );
       setExplanation(steps.length
-        ? ['AST real (sh-syntax / mvdan)', ...overview.lines, overview.truncated ? '… árvore truncada para proteger o desempenho no celular.' : '', '', 'Análise semântica parcial (catálogo + operadores)', '', ...steps, '', 'A AST é estrutural; efeitos de expansões dinâmicas e comandos externos não são inferidos.'].join('\n')
+        ? ['AST real (sh-syntax / mvdan)', `${overview.navigableCount}/${overview.count} nós com posição verificável`, ...overview.lines, overview.truncated ? '… árvore truncada para proteger o desempenho no celular.' : '', '', 'Análise semântica parcial (catálogo + operadores)', '', ...steps, '', 'A AST é estrutural; efeitos de expansões dinâmicas e comandos externos não são inferidos.'].join('\n')
         : ['AST real (sh-syntax / mvdan)', ...overview.lines, '', 'Nenhum comando reconhecido pelo catálogo semântico local.'].join('\n'));
     } catch (error) {
       setAstNodes([]);
