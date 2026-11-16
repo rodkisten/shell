@@ -11,7 +11,7 @@ import { autocompletion, type CompletionContext } from '@codemirror/autocomplete
 import { shell } from '@codincod/codemirror-lang-shell';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { contextualHints } from '../lib/suggestions';
-import { explainKnownShellTokens } from '../lib/semantic-shell';
+import { explainKnownShellTokens, type SemanticToken } from '../lib/semantic-shell';
 import { hoverTooltip } from '@codemirror/view';
 import { byName, SNIPPETS } from '../lib/commands';
 
@@ -34,6 +34,7 @@ type Props = {
   onChange(value: string): void;
   onCursor(value: number): void;
   onInspect(command: string): void;
+  onSemanticInspect(token: SemanticToken): void;
   onRun(): void;
 };
 
@@ -59,14 +60,14 @@ const shellTheme = EditorView.theme({
 }, { dark: true });
 
 export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEditor(
-  { code, fontSize, wordWrap, onChange, onCursor, onInspect, onRun }, ref,
+  { code, fontSize, wordWrap, onChange, onCursor, onInspect, onSemanticInspect, onRun }, ref,
 ) {
   const node = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
   const fontCompartment = useRef(new Compartment());
   const wrapCompartment = useRef(new Compartment());
-  const callbacks = useRef({ onChange, onCursor, onInspect, onRun });
-  callbacks.current = { onChange, onCursor, onInspect, onRun };
+  const callbacks = useRef({ onChange, onCursor, onInspect, onSemanticInspect, onRun });
+  callbacks.current = { onChange, onCursor, onInspect, onSemanticInspect, onRun };
 
   useImperativeHandle(ref, () => ({
     insert(text) {
@@ -151,14 +152,12 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
             pointerup(event, instance) {
               const pos = instance.posAtCoords({ x: event.clientX, y: event.clientY });
               if (pos == null) return false;
-              const line = instance.state.doc.lineAt(pos);
-              const at = pos - line.from;
-              const matcher = /(?:^|[|;&]\s*)(?:sudo\s+)?([\w.+-]+)/g;
-              for (const match of line.text.matchAll(matcher)) {
-                const index = (match.index ?? 0) + match[0].lastIndexOf(match[1]);
-                if (at >= index && at <= index + match[1].length && byName.has(match[1])) {
-                  callbacks.current.onInspect(match[1]);
-                  break;
+              const token = explainKnownShellTokens(instance.state.doc.toString())
+                .find((item) => item.from <= pos && pos < item.to);
+              if (token) {
+                callbacks.current.onSemanticInspect(token);
+                if (token.kind === 'command' && byName.has(token.text)) {
+                  callbacks.current.onInspect(token.text);
                 }
               }
               return false;
