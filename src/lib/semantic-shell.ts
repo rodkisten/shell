@@ -1,4 +1,5 @@
 import { byName } from './commands';
+import { cliSpecs, type CliSpec } from './cli-specs';
 
 /**
  * Initial offline semantic lookup layer for CodeMirror.
@@ -14,7 +15,7 @@ export type SemanticToken = {
   title: string;
   description: string;
   example?: string;
-  source: 'catalog' | 'shell';
+  source: 'catalog' | 'shell' | 'cli-spec';
 };
 
 const operators: Record<string, string> = {
@@ -34,6 +35,9 @@ export function explainKnownShellTokens(code: string): SemanticToken[] {
   const tokens: SemanticToken[] = [];
   let expectingCommand = true;
   let currentCommand = '';
+  let activeSpec: CliSpec | undefined;
+  let pendingValue: string | undefined;
+  let positionalIndex = 0;
   let lineStart = 0;
 
   for (const line of code.split('\n')) {
@@ -50,12 +54,15 @@ export function explainKnownShellTokens(code: string): SemanticToken[] {
       if (operator) {
         tokens.push({ from, to, text: value, kind: 'operator', title: value, description: operator, source: 'shell' });
         expectingCommand = value !== '>' && value !== '>>' && value !== '<';
-        if (expectingCommand) currentCommand = '';
+        if (expectingCommand) { currentCommand = ''; activeSpec = undefined; pendingValue = undefined; positionalIndex = 0; }
         continue;
       }
       if (value === '&') {
         expectingCommand = true;
         currentCommand = '';
+        activeSpec = undefined;
+        pendingValue = undefined;
+        positionalIndex = 0;
         continue;
       }
       if (expectingCommand) {
@@ -63,11 +70,39 @@ export function explainKnownShellTokens(code: string): SemanticToken[] {
         if (value === 'sudo' || value === 'command' || value === 'builtin') continue;
         expectingCommand = false;
         currentCommand = value;
+        activeSpec = cliSpecs[value];
+        pendingValue = undefined;
+        positionalIndex = 0;
         const entry = byName.get(value);
-        if (entry) tokens.push({
-          from, to, text: value, kind: 'command', title: entry.title,
-          description: entry.description, example: entry.example, source: 'catalog',
+        if (entry || activeSpec) tokens.push({
+          from, to, text: value, kind: 'command', title: entry?.title ?? activeSpec?.name ?? value,
+          description: activeSpec?.description ?? entry?.description ?? '', example: entry?.example,
+          source: activeSpec ? 'cli-spec' : 'catalog',
         });
+        continue;
+      }
+      if (pendingValue) {
+        tokens.push({ from, to, text: value, kind: 'option', title: 'Valor de ' + pendingValue, description: 'Valor fornecido para a opção ' + pendingValue + '.', source: 'cli-spec' });
+        pendingValue = undefined;
+        continue;
+      }
+      if (activeSpec?.subcommands?.[value]) {
+        activeSpec = activeSpec.subcommands[value];
+        positionalIndex = 0;
+        tokens.push({ from, to, text: value, kind: 'command', title: currentCommand + ' ' + value, description: activeSpec.description, source: 'cli-spec' });
+        continue;
+      }
+      const optionName = value.startsWith('--') ? value.split('=')[0] : value;
+      const option = activeSpec?.options?.find(item => item.names.includes(optionName));
+      if (option) {
+        tokens.push({ from, to, text: value, kind: 'option', title: currentCommand + ' ' + optionName, description: option.description, source: 'cli-spec' });
+        if (option.takesValue && !value.includes('=')) pendingValue = optionName;
+        continue;
+      }
+      if (activeSpec && !value.startsWith('-')) {
+        const label = activeSpec.positionals?.[Math.min(positionalIndex, (activeSpec.positionals?.length ?? 1) - 1)];
+        if (label) tokens.push({ from, to, text: value, kind: 'option', title: label, description: 'Argumento posicional: ' + label + '.', source: 'cli-spec' });
+        positionalIndex++;
         continue;
       }
       const entry = byName.get(currentCommand);
@@ -80,6 +115,9 @@ export function explainKnownShellTokens(code: string): SemanticToken[] {
     lineStart += line.length + 1;
     expectingCommand = true;
     currentCommand = '';
+    activeSpec = undefined;
+    pendingValue = undefined;
+    positionalIndex = 0;
   }
   return tokens;
 }
