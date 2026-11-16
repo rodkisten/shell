@@ -11,12 +11,15 @@ export type ShellAstNode = {
   to?: number;
   parentId?: string;
   description: string;
+  navigable: boolean;
 };
 export type AstOverview = {
   lines: string[];
   nodes: ShellAstNode[];
   truncated: boolean;
   count: number;
+  navigableCount: number;
+  unresolvedCount: number;
 };
 
 const descriptions: Record<string, string> = {
@@ -46,16 +49,31 @@ function record(value: unknown): Record<string, unknown> | null {
     ? value as Record<string, unknown> : null;
 }
 
-function position(value: unknown, lineOffsets: number[]): number | undefined {
+function position(value: unknown, lineOffsets: number[], source: string): number | undefined {
   const obj = record(value);
   if (!obj) return undefined;
+  // mvdan offsets are UTF-8 byte offsets, whereas CodeMirror uses UTF-16.
+  // Prefer line/column conversion below; raw byte offsets need conversion.
   const offset = obj.Offset ?? obj.offset;
-  if (typeof offset === 'number' && Number.isFinite(offset) && offset >= 0) return offset;
   const line = obj.Line ?? obj.line;
   const col = obj.Col ?? obj.col ?? obj.Column ?? obj.column;
   if (typeof line === 'number' && typeof col === 'number' && line > 0 && col > 0) {
     const start = lineOffsets[line - 1];
-    if (start !== undefined) return start + col - 1;
+    if (start !== undefined) {
+      const lineEnd = source.indexOf('\n', start);
+      const content = source.slice(start, lineEnd < 0 ? undefined : lineEnd);
+      const bytes = new TextEncoder().encode(content);
+      const prefix = bytes.slice(0, col - 1);
+      const decoded = new TextDecoder().decode(prefix);
+      if (new TextEncoder().encode(decoded).length === prefix.length) return start + decoded.length;
+    }
+  }
+  if (typeof offset === 'number' && Number.isInteger(offset) && offset >= 0) {
+    const encoded = new TextEncoder().encode(source);
+    if (offset > encoded.length) return undefined;
+    const prefix = encoded.slice(0, offset);
+    const decoded = new TextDecoder().decode(prefix);
+    if (new TextEncoder().encode(decoded).length === prefix.length) return decoded.length;
   }
   return undefined;
 }
@@ -87,14 +105,20 @@ export function inspectShellAst(ast: unknown, source = '', maxNodes = 350, maxDe
     const obj = record(value);
     if (!obj) return;
     const kind = kindOf(obj, label);
-    const from = position(obj.Pos ?? obj.pos ?? obj.Start ?? obj.start, lineOffsets);
-    const to = position(obj.End ?? obj.end ?? obj.Stop ?? obj.stop, lineOffsets);
+    const from = position(obj.Pos ?? obj.pos ?? obj.Start ?? obj.start, lineOffsets, source);
+    const to = position(obj.End ?? obj.end ?? obj.Stop ?? obj.stop, lineOffsets, source);
     const validRange = from !== undefined && to !== undefined &&
-      from >= 0 && to >= from && to <= source.length;
+      from >= 0 && to > from && to <= source.length &&
+      (parentId === undefined || (() => {
+        const parent = nodes[Number(parentId)];
+        return parent?.from === undefined || parent.to === undefined ||
+          (from >= parent.from && to <= parent.to);
+      })());
     const id = String(nodes.length);
     const node: ShellAstNode = {
       id, kind, label, depth, parentId,
       description: descriptions[kind] ?? 'Nó sintático do script shell.',
+      navigable: validRange,
       ...(validRange ? { from, to } : {}),
     };
     nodes.push(node);
@@ -107,5 +131,7 @@ export function inspectShellAst(ast: unknown, source = '', maxNodes = 350, maxDe
   }
 
   visit(ast, 0, 'File');
-  return { lines, nodes, count: nodes.length, truncated };
+  const navigableCount = nodes.filter(node => node.navigable).length;
+  return { lines, nodes, count: nodes.length, navigableCount,
+    unresolvedCount: nodes.length - navigableCount, truncated };
 }
