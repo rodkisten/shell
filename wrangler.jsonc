@@ -4,6 +4,9 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-11-09",
   "r2_buckets": [{ "binding": "LINUX_ASSETS", "bucket_name": "shell-linux-assets" }],
+  "previews": {
+    "r2_buckets": [{ "binding": "LINUX_ASSETS", "bucket_name": "shell-linux-assets-preview" }]
+  },
   "observability": {
     "enabled": true
   },
