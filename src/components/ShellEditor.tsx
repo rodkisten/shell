@@ -12,7 +12,7 @@ import { shell } from '@codincod/codemirror-lang-shell';
 import { syntaxTree } from '@codemirror/language';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { contextualHints } from '../lib/suggestions';
-import { explainKnownShellTokens, type SemanticToken } from '../lib/semantic-shell';
+import { explainKnownShellTokens, prepareShellAnalysis, type SemanticToken } from '../lib/semantic-shell';
 import { hoverTooltip } from '@codemirror/view';
 import { byName, SNIPPETS } from '../lib/commands';
 
@@ -88,6 +88,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
   const editor = useRef<EditorView | null>(null);
   const fontCompartment = useRef(new Compartment());
   const wrapCompartment = useRef(new Compartment());
+  const analysisRevision = useRef(0);
   const callbacks = useRef({ onChange, onCursor, onInspect, onSemanticInspect, onRun });
   callbacks.current = { onChange, onCursor, onInspect, onSemanticInspect, onRun };
 
@@ -175,7 +176,18 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           autocompletion({ override: [complete], activateOnTyping: true, maxRenderedOptions: 8, closeOnBlur: false }),
           placeholder('Cole um script do ChatGPT ou comece a escrever…'),
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) callbacks.current.onChange(update.state.doc.toString());
+            if (update.docChanged) {
+              callbacks.current.onChange(update.state.doc.toString());
+              const source = update.state.doc.toString();
+              const revision = ++analysisRevision.current;
+              void prepareShellAnalysis(source).then(() => {
+                const current = editor.current;
+                if (!current || revision !== analysisRevision.current || current.state.doc.toString() !== source) return;
+                const pos = current.state.selection.main.head;
+                const token = explainKnownShellTokens(source).find(item => item.from <= pos && pos < item.to);
+                if (token) callbacks.current.onSemanticInspect(withSyntaxContext(token, current.state));
+              }).catch(() => undefined);
+            }
             if (update.docChanged || update.selectionSet) {
               const pos = update.state.selection.main.head;
               callbacks.current.onCursor(pos);
@@ -205,7 +217,8 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       }),
     });
     editor.current = view;
-    return () => { view.destroy(); editor.current = null; };
+    void prepareShellAnalysis(view.state.doc.toString()).catch(() => undefined);
+    return () => { analysisRevision.current++; view.destroy(); editor.current = null; };
   // Editor must be created once. New values are synchronized by the effect below.
   }, []);
 
