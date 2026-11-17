@@ -104,7 +104,7 @@ function kindOf(obj: Record<string, unknown>, label: string): string {
 }
 
 /** Only genuine shell constructs get semantic descriptions. */
-function explainNode(kind: string, obj: Record<string, unknown>, source: string, from?: number, to?: number): string {
+function explainNode(kind: string, obj: Record<string, unknown>, source: string, index: ReturnType<typeof positionIndex>, from?: number, to?: number): string {
   const fallback = descriptions[kind] ?? 'Estrutura sintática identificada; comportamento não inferido.';
   if (kind === 'Stmt') {
     const background = obj.Background ?? obj.background;
@@ -139,8 +139,8 @@ function explainNode(kind: string, obj: Record<string, unknown>, source: string,
     if (typeof op === 'number' && from !== undefined && to !== undefined) {
       const x = record(obj.x ?? obj.X);
       const y = record(obj.y ?? obj.Y);
-      const leftEnd = typeof x?.end === 'number' ? x.end : undefined;
-      const rightStart = typeof y?.start === 'number' ? y.start : undefined;
+      const leftEnd = position(x?.end, index);
+      const rightStart = position(y?.start, index);
       // Inspect only the operator gap. Never infer meaning from an enum value.
       if (leftEnd !== undefined && rightStart !== undefined) {
         const gap = source.slice(leftEnd, rightStart).trim();
@@ -233,7 +233,7 @@ export function inspectShellAst(ast: unknown, source = '', maxNodes = 350, maxDe
     const id = String(nodes.length);
     const node: ShellAstNode = {
       id, kind, label, depth, parentId,
-      description: explainNode(kind, obj, source, from, to),
+      description: explainNode(kind, obj, source, index, from, to),
       navigable: validRange,
       ...(validRange ? { from, to } : {}),
     };
