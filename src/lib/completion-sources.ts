@@ -41,7 +41,10 @@ export function fromFig(spec: unknown): CompletionItem[] {
     const node = record(value);
     if (!node || seen.has(node)) return;
     seen.add(node);
+    // Fig allows aliases as arrays and nested option/subcommand groups.
+    // Do not flatten argument suggestions into executable commands.
     for (const name of names(node.name)) {
+      if (kind === 'option' && !name.startsWith('-')) continue;
       output.push({
         name,
         description: description(node.description),
