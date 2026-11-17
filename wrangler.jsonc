@@ -9,6 +9,12 @@
   },
   "routes": [
     {
+      "pattern": "shell.migos.club",
+      "custom_domain": true,
+      "previews_enabled": false,
+      "enabled": true
+    },
+    {
       "pattern": "preview.shell.migos.club",
       "custom_domain": true,
       "previews_enabled": true,
