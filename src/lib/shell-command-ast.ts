@@ -55,10 +55,12 @@ export async function activeShellCommand(
     }
   };
   walk(ast);
-  // Only extend an AST command across trailing horizontal whitespace. A\n  // newline or shell separator ends its completion context.\n  const candidates = calls.filter(call =>
+  // Only extend an AST command across trailing horizontal whitespace.
+  // A newline or shell separator ends its completion context.
+  const candidates = calls.filter(call =>
     typeof call.start === 'number' && typeof call.end === 'number'
     && call.start <= cursor && call.end <= cursor
-    && !/[\\r\\n;|&]/.test(source.slice(call.end, cursor))
+    && !/[\r\n;|&]/.test(source.slice(call.end, cursor))
     && source.slice(call.end, cursor).trim() === '',
   ).sort((a, b) => (b.start ?? 0) - (a.start ?? 0));
   const call = candidates[0];
