@@ -145,7 +145,19 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
         }
         syntaxNode = syntaxNode.parent;
       }
+      // Never suggest a new flag after the end-of-options marker, or while
+      // the cursor is providing the value for a known value-taking option.
+      // Keep this conservative: quoted/complex shell segments are already
+      // excluded by the syntax guard above.
+      const priorWords = segment.slice(0, Math.max(0, segment.length - before.text.length))
+        .trim().split(/\s+/).filter(Boolean);
+      const markerIndex = priorWords.indexOf('--');
+      const lastWord = priorWords.at(-1);
+      const awaitingOptionValue = Boolean(lastWord && figCurlOptions.some(
+        item => item.name === lastWord && item.takesValue,
+      ));
       const figOptions = !isLiteralOrComment && command && before.text.startsWith('-')
+        && markerIndex === -1 && !awaitingOptionValue
         ? figCurlOptions.filter(item => item.name.startsWith(before.text))
           .map(item => ({ label: item.name, type: 'property', detail: 'Fig · curl', info: item.description, apply: item.name }))
         : [];
