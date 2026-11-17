@@ -132,7 +132,9 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       // are metadata sources only and never re-parse shell text.
       const active = await activeShellCommand(source, context.pos);
       const cliItems = cliCompletions(active, context.pos);
-      const hints = contextualHintsFromActive(active, context.pos);
+      const hints = active && context.pos > active.executableTo
+        ? []
+        : contextualHintsFromActive(active, context.pos);
       const editingCommand = !active || context.pos <= active.executableTo;
       const snippets = editingCommand && before.text
         ? SNIPPETS.filter(s => s.id.startsWith(before.text))
@@ -167,7 +169,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           boost: 10,
         })),
       ].filter(item => {
-        const key = item.type + ':' + item.label;
+        const key = item.label;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;

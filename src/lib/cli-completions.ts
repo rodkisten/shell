@@ -1,6 +1,6 @@
 import type { ActiveShellCommand } from './shell-command-ast';
 import { cliSpecs, type CliOption, type CliSpec } from './cli-specs';
-import { fromFigWords, type CompletionItem } from './completion-sources';
+import { fromFigWordsContext, type CompletionItem } from './completion-sources';
 import figCurl from './specs/fig-curl.json';
 import figDocker from './specs/fig-docker.json';
 import figNpm from './specs/fig-npm.json';
@@ -113,10 +113,14 @@ function fromCliSpec(executable: string, words: readonly string[]): CliCompletio
   return output;
 }
 
-function fromFigSpec(executable: string, words: readonly string[]): CliCompletion[] {
+function fromFigSpec(executable: string, words: readonly string[]): { items: CliCompletion[]; awaitingValue: boolean; positionalOnly: boolean } {
   const spec = figSpecs[executable];
-  if (!spec) return [];
-  return fromFigWords(spec, words)
+  if (!spec) return { items: [], awaitingValue: false, positionalOnly: false };
+  const context = fromFigWordsContext(spec, words);
+  return {
+    awaitingValue: context.awaitingValue,
+    positionalOnly: context.positionalOnly,
+    items: context.items
     .filter((item): item is CompletionItem & { kind: 'subcommand' | 'option' } =>
       item.kind === 'subcommand' || item.kind === 'option'
     )
@@ -127,7 +131,8 @@ function fromFigSpec(executable: string, words: readonly string[]): CliCompletio
       source: 'fig' as const,
       detail: 'Fig · ' + executable,
       ...(item.takesValue ? { takesValue: true } : {}),
-    }));
+    })),
+  };
 }
 
 export function cliCompletions(
@@ -138,10 +143,15 @@ export function cliCompletions(
   const { completedWords, needle, positionalOnly } = completionCursor(active, cursor);
   if (positionalOnly) return [];
 
+  const rootSpec = cliSpecs[active.executable];
+  const localState = rootSpec ? resolveSpec(rootSpec, completedWords) : undefined;
+  const figState = fromFigSpec(active.executable, completedWords);
+  if (localState?.awaitingValue || figState.awaitingValue || figState.positionalOnly) return [];
+
   const merged = new Map<string, CliCompletion>();
   const candidates = [
     ...fromCliSpec(active.executable, completedWords),
-    ...fromFigSpec(active.executable, completedWords),
+    ...figState.items,
   ];
 
   for (const candidate of candidates) {
