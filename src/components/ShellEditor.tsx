@@ -13,6 +13,8 @@ import { syntaxTree } from '@codemirror/language';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { contextualHints } from '../lib/suggestions';
 import figCurl from '../lib/specs/fig-curl.json';
+import figNpm from '../lib/specs/fig-npm.json';
+import figDocker from '../lib/specs/fig-docker.json';
 import { fromFig } from '../lib/completion-sources';
 import { explainKnownShellTokens, prepareShellAnalysis, type SemanticToken } from '../lib/semantic-shell';
 import { hoverTooltip } from '@codemirror/view';
@@ -124,7 +126,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       // intentionally excluded so completions stay offline and predictable.
       const figOptions = /^\\s*curl(?:\\s|$)/.test(source.slice(0, context.pos))
         ? fromFig(figCurl).filter(item => item.kind === 'option' && item.name.startsWith(before.text))
-          .map(item => ({ label: item.name, type: 'property', detail: 'Fig · curl', info: item.description, apply: item.name }))
+          .map(item => ({ label: item.name, type: 'property', detail: 'Fig · ' + command, info: item.description, apply: item.name }))
         : [];
       const options = [
         ...figOptions,
