@@ -12,8 +12,7 @@ import { shell } from '@codincod/codemirror-lang-shell';
 import { syntaxTree } from '@codemirror/language';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { contextualHintsFromActive } from '../lib/suggestions';
-import figCurl from '../lib/specs/fig-curl.json';
-import { fromFigWords } from '../lib/completion-sources';
+import { cliCompletions } from '../lib/cli-completions';
 import { activeShellCommand } from '../lib/shell-command-ast';
 import { explainKnownShellTokens, type SemanticToken } from '../lib/semantic-shell';
 import { hoverTooltip } from '@codemirror/view';
@@ -127,31 +126,56 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
     if (!node.current) return;
     const complete = async (context: CompletionContext) => {
       const before = context.matchBefore(/[\w.+-]*/);
-      if (!before || (!context.explicit && before.from === before.to)) return null;
+      if (!before) return null;
       const source = context.state.doc.toString();
-      const snippets = before.text ? SNIPPETS.filter(s => s.id.startsWith(before.text)) : [];
-      // mvdan/sh AST determines the active command and its argument boundaries.
-      // The same parsed context feeds catalog hints and Fig completions.
+      // mvdan/sh owns command/subcommand scope. Fig and the curated local specs
+      // are metadata sources only and never re-parse shell text.
       const active = await activeShellCommand(source, context.pos);
+      const cliItems = cliCompletions(active, context.pos);
       const hints = contextualHintsFromActive(active, context.pos);
-      const figOptions = active?.executable === 'curl' && before.text.startsWith('-')
-        && !active.words.includes('--')
-        ? fromFigWords(figCurl, active.words)
-          .filter(item => item.kind === 'option' && item.name.startsWith(before.text))
-          .map(item => ({ label: item.name, type: 'property', detail: 'Fig · curl', info: item.description, apply: item.name }))
+      const editingCommand = !active || context.pos <= active.executableTo;
+      const snippets = editingCommand && before.text
+        ? SNIPPETS.filter(s => s.id.startsWith(before.text))
         : [];
+
+      if (!context.explicit && before.from === before.to && !cliItems.length) return null;
+
+      const seen = new Set<string>();
       const options = [
-        ...figOptions,
+        ...cliItems.map(item => ({
+          label: item.label,
+          type: item.kind === 'subcommand' ? 'keyword' : 'property',
+          detail: item.detail,
+          info: item.description + (item.takesValue ? '\n\nEsta opção espera um valor.' : ''),
+          apply: item.label,
+          boost: item.kind === 'subcommand' ? 90 : 40,
+        })),
         ...hints.map(h => ({
           label: h.label,
           type: h.kind === 'flag' ? 'property' : 'function',
           detail: h.title,
           info: h.description + '\n\nExemplo: ' + h.example,
           apply: h.label,
+          boost: h.kind === 'command' ? 80 : 30,
         })),
-        ...snippets.map(s => ({ label: s.id, type: 'keyword', detail: s.subtitle, info: s.code, apply: s.code })),
-      ];
-      return { from: before.from, options, validFor: /^[\w.+-]*$/ };
+        ...snippets.map(s => ({
+          label: s.id,
+          type: 'keyword',
+          detail: s.subtitle,
+          info: s.code,
+          apply: s.code,
+          boost: 10,
+        })),
+      ].filter(item => {
+        const key = item.type + ':' + item.label;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      return options.length
+        ? { from: before.from, options, validFor: /^[\w.+-]*$/ }
+        : null;
     };
     const view = new EditorView({
       parent: node.current,

@@ -1,5 +1,6 @@
 import { byName, COMMANDS } from './commands';
 import { activeShellCommand, type ActiveShellCommand } from './shell-command-ast';
+import { cliCompletions } from './cli-completions';
 
 export type Hint = {
   label: string;
@@ -33,21 +34,25 @@ export function contextualHintsFromActive(active: ActiveShellCommand | null, cur
 
   const entry = byName.get(active.executable);
   const editingExecutable = cursor <= active.executableTo;
-  if (editingExecutable || !entry) return commandHints(active.executable);
+  if (editingExecutable) return commandHints(active.executable);
 
-  const lastArgument = active.arguments.at(-1);
-  const needle = lastArgument && cursor <= lastArgument.to ? lastArgument.text : '';
-
-  return (entry.flags ?? [])
-    .filter(flag => !needle || flag.flag.startsWith(needle))
-    .slice(0, 8)
-    .map(flag => ({
-      label: flag.flag,
-      title: entry.name + ' ' + flag.flag,
-      description: flag.description,
-      example: flag.example,
-      kind: 'flag' as const,
+  const completions = cliCompletions(active, cursor);
+  if (completions.length) {
+    return completions.slice(0, 8).map(item => ({
+      label: item.label,
+      title: item.kind === 'subcommand'
+        ? active.executable + ' ' + item.label
+        : active.executable + ' ' + item.label,
+      description: item.description,
+      example: item.kind === 'subcommand'
+        ? active.executable + ' ' + item.label
+        : active.executable + ' ' + item.label + (item.takesValue ? ' …' : ''),
+      kind: item.kind === 'option' ? 'flag' as const : 'command' as const,
     }));
+  }
+
+  if (!entry) return commandHints(active.executable);
+  return [];
 }
 
 /**
