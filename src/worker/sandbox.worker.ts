@@ -139,11 +139,11 @@ print -r -- '__SC_WORKSPACES_END__'
 print -r -- '__SC_BRANCHES_BEGIN__'
 for ref in .git/refs/heads/* .git/refs/heads/**/*; do
   [[ -f "$ref" ]] || continue
-  print -r -- "${ref#.git/refs/heads/}"
+  print -r -- "\${ref#.git/refs/heads/}"
 done
 if [[ -r .git/packed-refs ]]; then
   while IFS=' ' read -r hash ref; do
-    [[ "$ref" == refs/heads/* ]] && print -r -- "${ref#refs/heads/}"
+    [[ "$ref" == refs/heads/* ]] && print -r -- "\${ref#refs/heads/}"
   done < .git/packed-refs
 fi
 print -r -- '__SC_BRANCHES_END__'
