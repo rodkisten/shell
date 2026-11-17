@@ -127,7 +127,12 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       // applies to a particular subcommand until scoped specs are imported.
       // Only curl's root-level options are currently safe to offer.
       const line = source.slice(0, context.pos).split('\n').at(-1) ?? '';
-      const command = /^\s*curl(?:\s|$)/.test(line) ? 'curl' : undefined;
+      // Match the active simple command, not the first command in the document.
+      // Ignore previous pipeline/conditional segments; permit common wrappers
+      // and environment assignments without treating them as the executable.
+      const segment = line.split(/\s*(?:\|\||&&|[|;])\s*/).at(-1) ?? '';
+      const command = /^(?:\s*(?:sudo|command|env)\s+|\s*[A-Za-z_][\w]*=\S+\s+)*\s*curl(?:\s|$)/.test(segment)
+        ? 'curl' : undefined;
       const figOptions = command && before.text.startsWith('-')
         ? figCurlOptions.filter(item => item.name.startsWith(before.text))
           .map(item => ({ label: item.name, type: 'property', detail: 'Fig · curl', info: item.description, apply: item.name }))
