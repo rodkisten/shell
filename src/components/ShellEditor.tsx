@@ -13,8 +13,6 @@ import { syntaxTree } from '@codemirror/language';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { contextualHints } from '../lib/suggestions';
 import figCurl from '../lib/specs/fig-curl.json';
-import figNpm from '../lib/specs/fig-npm.json';
-import figDocker from '../lib/specs/fig-docker.json';
 import { fromFig } from '../lib/completion-sources';
 import { explainKnownShellTokens, type SemanticToken } from '../lib/semantic-shell';
 import { hoverTooltip } from '@codemirror/view';
@@ -121,11 +119,14 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       const source = context.state.doc.toString();
       const hints = contextualHints(source, context.pos);
       const snippets = before.text ? SNIPPETS.filter(s => s.id.startsWith(before.text)) : [];
-      const command = source.slice(0, context.pos).trimStart().split(/\s+/)[0];
-      const figSpec = command === 'curl' ? figCurl : command === 'npm' ? figNpm : command === 'docker' ? figDocker : undefined;
-      const figOptions = figSpec && before.text.startsWith('-')
-        ? fromFig(figSpec).filter(item => item.kind === 'option' && item.name.startsWith(before.text))
-          .map(item => ({ label: item.name, type: 'property', detail: 'Fig · ' + command, info: item.description, apply: item.name }))
+      // The vendored npm/docker snapshots are flat. Do not claim that a flag
+      // applies to a particular subcommand until scoped specs are imported.
+      // Only curl's root-level options are currently safe to offer.
+      const line = source.slice(0, context.pos).split('\n').at(-1) ?? '';
+      const command = /^\\s*curl(?:\\s|$)/.test(line) ? 'curl' : undefined;
+      const figOptions = command && before.text.startsWith('-')
+        ? fromFig(figCurl).filter(item => item.kind === 'option' && item.name.startsWith(before.text))
+          .map(item => ({ label: item.name, type: 'property', detail: 'Fig · curl', info: item.description, apply: item.name }))
         : [];
       const options = [
         ...figOptions,
