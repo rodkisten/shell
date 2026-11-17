@@ -137,7 +137,8 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
         })),
         ...snippets.map(s => ({ label: s.id, type: 'keyword', detail: s.subtitle, info: s.code, apply: s.code })),
       ];
-      return { from: before.from, options, validFor: /^[\w.+-]*$/ };
+      const unique = Array.from(new Map(options.map(option => [option.label, option])).values());
+      return { from: before.from, options: unique, validFor: /^[\w.+-]*$/ };
     };
     const view = new EditorView({
       parent: node.current,
