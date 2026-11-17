@@ -12,6 +12,8 @@ import { shell } from '@codincod/codemirror-lang-shell';
 import { syntaxTree } from '@codemirror/language';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { contextualHints } from '../lib/suggestions';
+import figCurl from '../lib/specs/fig-curl.json';
+import { fromFig } from '../lib/completion-sources';
 import { explainKnownShellTokens, prepareShellAnalysis, type SemanticToken } from '../lib/semantic-shell';
 import { hoverTooltip } from '@codemirror/view';
 import { byName, SNIPPETS } from '../lib/commands';
@@ -118,7 +120,14 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       const source = context.state.doc.toString();
       const hints = contextualHints(source, context.pos);
       const snippets = before.text ? SNIPPETS.filter(s => s.id.startsWith(before.text)) : [];
+      // Fig static metadata supplements existing hints; dynamic generators are
+      // intentionally excluded so completions stay offline and predictable.
+      const figOptions = /^\\s*curl(?:\\s|$)/.test(source.slice(0, context.pos))
+        ? fromFig(figCurl).filter(item => item.kind === 'option' && item.name.startsWith(before.text))
+          .map(item => ({ label: item.name, type: 'property', detail: 'Fig · curl', info: item.description, apply: item.name }))
+        : [];
       const options = [
+        ...figOptions,
         ...hints.map(h => ({
           label: h.label,
           type: h.kind === 'flag' ? 'property' : 'function',
