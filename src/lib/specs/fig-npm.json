@@ -1,0 +1,457 @@
+{
+  "name": "npm",
+  "description": "Static npm CLI options from Fig",
+  "options": [
+    {
+      "name": [
+        "-g",
+        "--global"
+      ],
+      "description": "Operates in 'global' mode, so that packages are installed into the prefix folder instead of the current working directory"
+    },
+    {
+      "name": "--json",
+      "description": "Show output in json format"
+    },
+    {
+      "name": "--omit",
+      "description": "Dependency types to omit from the installation tree on disk"
+    },
+    {
+      "name": [
+        "-p",
+        "--parseable"
+      ],
+      "description": "Output parseable results from commands that write to standard output"
+    },
+    {
+      "name": [
+        "-l",
+        "--long"
+      ],
+      "description": "Show extended information"
+    },
+    {
+      "name": [
+        "-w",
+        "--workspace"
+      ],
+      "description": "Enable running a command in the context of the configured workspaces of the current project"
+    },
+    {
+      "name": [
+        "-ws",
+        "--workspaces"
+      ],
+      "description": "Enable running a command in the context of all the configured workspaces"
+    },
+    {
+      "name": [
+        "-S",
+        "--save"
+      ],
+      "description": "Package will be removed from your dependencies"
+    },
+    {
+      "name": [
+        "-D",
+        "--save-dev"
+      ],
+      "description": "Package will appear in your `devDependencies`"
+    },
+    {
+      "name": [
+        "-O",
+        "--save-optional"
+      ],
+      "description": "Package will appear in your `optionalDependencies`"
+    },
+    {
+      "name": "--no-save",
+      "description": "Prevents saving to `dependencies`"
+    },
+    {
+      "name": "-g",
+      "description": "Uninstall global package"
+    },
+    {
+      "name": [
+        "-a",
+        "-all"
+      ],
+      "description": "Show all outdated or installed packages"
+    },
+    {
+      "name": "--depth",
+      "description": "The depth to go when recursing packages"
+    },
+    {
+      "name": "--link",
+      "description": "Limits output to only those packages that are linked"
+    },
+    {
+      "name": "--package-lock-only",
+      "description": "Current operation will only use the package-lock.json, ignoring node_modules"
+    },
+    {
+      "name": "--no-unicode",
+      "description": "Uses unicode characters in the tree output"
+    },
+    {
+      "name": "--registry",
+      "description": "The base URL of the npm registry"
+    },
+    {
+      "name": "--verbose",
+      "description": "Show extra information"
+    },
+    {
+      "name": "--otp",
+      "description": "One-time password from a two-factor authenticator"
+    },
+    {
+      "name": "--ignore-scripts",
+      "description": "If true, npm does not run scripts specified in package.json files"
+    },
+    {
+      "name": "--script-shell",
+      "description": "The shell to use for scripts run with the npm exec, npm run and npm init <pkg> commands"
+    },
+    {
+      "name": "--dry-run",
+      "description": "Indicates that you don't want npm to make any changes and that it should only report what it would have done"
+    },
+    {
+      "name": [
+        "-P",
+        "--save-prod"
+      ],
+      "description": "Package will appear in your `dependencies`. This is the default unless `-D` or `-O` are present"
+    },
+    {
+      "name": [
+        "-D",
+        "--save-dev"
+      ],
+      "description": "Package will appear in your `devDependencies`"
+    },
+    {
+      "name": [
+        "-O",
+        "--save-optional"
+      ],
+      "description": "Package will appear in your `optionalDependencies`"
+    },
+    {
+      "name": "--no-save",
+      "description": "Prevents saving to `dependencies`"
+    },
+    {
+      "name": [
+        "-E",
+        "--save-exact"
+      ],
+      "description": "Saved dependencies will be configured with an exact version rather than using npm's default semver range operator"
+    },
+    {
+      "name": [
+        "-B",
+        "--save-bundle"
+      ],
+      "description": "Saved dependencies will also be added to your bundleDependencies list"
+    },
+    {
+      "name": "--global-style",
+      "description": "Causes npm to install the package into your local node_modules folder with the same layout it uses with the global node_modules folder"
+    },
+    {
+      "name": "--legacy-bundling",
+      "description": "Causes npm to install the package such that versions of npm prior to 1.4, such as the one included with node 0.8, can install the package"
+    },
+    {
+      "name": "--legacy-peer-deps",
+      "description": "Bypass peerDependency auto-installation. Emulate install behavior of NPM v4 through v6"
+    },
+    {
+      "name": "--strict-peer-deps",
+      "description": "If set to true, and --legacy-peer-deps is not set, then any conflicting peerDependencies will be treated as an install failure"
+    },
+    {
+      "name": "--no-package-lock",
+      "description": "Ignores package-lock.json files when installing"
+    },
+    {
+      "name": "--no-audit",
+      "description": "Submit audit reports alongside the current npm command to the default registry and all registries configured for scopes"
+    },
+    {
+      "name": "--no-bin-links",
+      "description": "Tells npm to not create symlinks (or .cmd shims on Windows) for package executables"
+    },
+    {
+      "name": "--no-fund",
+      "description": "Hides the message at the end of each npm install acknowledging the number of dependencies looking for funding"
+    },
+    {
+      "name": "--if-present",
+      "description": "Npm will not exit with an error code when run-script is invoked for a script that isn't defined in the scripts section of package.json"
+    },
+    {
+      "name": [
+        "-y",
+        "--yes"
+      ],
+      "description": "Automatically answer 'yes' to any prompts that npm might print on the command line"
+    },
+    {
+      "name": "-w",
+      "description": "Create the folders and boilerplate expected while also adding a reference to your project workspaces property"
+    },
+    {
+      "name": "--scope",
+      "description": "Associate an operation with a scope for a scoped registry"
+    },
+    {
+      "name": [
+        "-f",
+        "--force"
+      ],
+      "description": "Removes various protections against unfortunate side effects, common mistakes, unnecessary performance degradation, and malicious input"
+    },
+    {
+      "name": "--audit-level",
+      "description": "The minimum level of vulnerability for npm audit to exit with a non-zero exit code"
+    },
+    {
+      "name": "--package-lock-only",
+      "description": "Current operation will only use the package-lock.json, ignoring node_modules"
+    },
+    {
+      "name": "--no-browser",
+      "description": "Display in command line instead of browser"
+    },
+    {
+      "name": "--browser",
+      "description": "The browser that is called by the npm bugs command to open websites"
+    },
+    {
+      "name": "--no-audit",
+      "description": "Do not submit audit reports alongside the current npm command"
+    },
+    {
+      "name": [
+        "-g",
+        "--global"
+      ],
+      "description": "Sets it globally"
+    },
+    {
+      "name": "-g",
+      "description": "Lists globally installed packages"
+    },
+    {
+      "name": "-l",
+      "description": "Also shows defaults"
+    },
+    {
+      "name": "--global",
+      "description": "Edits the global config"
+    },
+    {
+      "name": "--no-browser",
+      "description": "Display in command line instead of browser"
+    },
+    {
+      "name": "--browser",
+      "description": "The browser that is called by the npm docs command to open websites"
+    },
+    {
+      "name": "--editor",
+      "description": "The command to run for npm edit or npm config edit"
+    },
+    {
+      "name": "--viewer",
+      "description": "The program to use to view help content"
+    },
+    {
+      "name": "--scope",
+      "description": "Associate an operation with a scope for a scoped registry"
+    },
+    {
+      "name": [
+        "-a",
+        "-all"
+      ],
+      "description": "Show all outdated or installed packages"
+    },
+    {
+      "name": "-g",
+      "description": "Checks globally"
+    },
+    {
+      "name": "--pack-destination",
+      "description": "Directory in which npm pack will save tarballs"
+    },
+    {
+      "name": [
+        "-f",
+        "--force"
+      ],
+      "description": "Removes various protections against unfortunate side effects, common mistakes, unnecessary performance degradation, and malicious input. Allow clobbering existing values in npm pkg"
+    },
+    {
+      "name": [
+        "-f",
+        "--force"
+      ],
+      "description": "Removes various protections against unfortunate side effects, common mistakes, unnecessary performance degradation, and malicious input. Allow clobbering existing values in npm pkg"
+    },
+    {
+      "name": [
+        "-g",
+        "--global"
+      ],
+      "description": "Print the global prefix to standard out"
+    },
+    {
+      "name": "--production",
+      "description": "Remove the packages specified in your devDependencies"
+    },
+    {
+      "name": "--tag",
+      "description": "Registers the published package with the given tag"
+    },
+    {
+      "name": "--access",
+      "description": "Sets scoped package to be publicly viewable if set to 'public'"
+    },
+    {
+      "name": "--no-bin-links",
+      "description": "Tells npm to not create symlinks (or .cmd shims on Windows) for package executables"
+    },
+    {
+      "name": "--no-browser",
+      "description": "Display in command line instead of browser"
+    },
+    {
+      "name": "--browser",
+      "description": "The browser that is called by the npm repo command to open websites"
+    },
+    {
+      "name": [
+        "-g",
+        "--global"
+      ],
+      "description": "Print the effective global node_modules folder to standard out"
+    },
+    {
+      "name": "--color",
+      "description": "Show colors"
+    },
+    {
+      "name": "--no-color",
+      "description": "Do not show colors"
+    },
+    {
+      "name": "--no-description",
+      "description": "Do not show descriptions"
+    },
+    {
+      "name": "--searchopts",
+      "description": "Space-separated options that are always passed to search"
+    },
+    {
+      "name": "--searchexclude",
+      "description": "Space-separated options that limit the results from search"
+    },
+    {
+      "name": "--prefer-online",
+      "description": "If true, staleness checks for cached data will be forced, making the CLI look for updates immediately even for fresh package data"
+    },
+    {
+      "name": "--prefer-offline",
+      "description": "If true, staleness checks for cached data will be bypassed, but missing data will be requested from the server"
+    },
+    {
+      "name": "--offline",
+      "description": "Force offline mode: no network requests will be done during install"
+    },
+    {
+      "name": "--no-unicode",
+      "description": "Do not use unicode characters in the tree output"
+    },
+    {
+      "name": "--read-only",
+      "description": "This is used to mark a token as unable to publish when configuring limited access tokens with the npm token create command"
+    },
+    {
+      "name": "--cidr",
+      "description": "This is a list of CIDR address to be used when configuring limited access tokens with the npm token create command"
+    },
+    {
+      "name": [
+        "-f",
+        "--force"
+      ],
+      "description": "Allow unpublishing all versions of a published package. Removes various protections against unfortunate side effects, common mistakes, unnecessary performance degradation, and malicious input"
+    },
+    {
+      "name": "--no-unicode",
+      "description": "Do not use unicode characters in the tree output"
+    },
+    {
+      "name": "-g",
+      "description": "Update global package"
+    },
+    {
+      "name": "--global-style",
+      "description": "Causes npm to install the package into your local node_modules folder with the same layout it uses with the global node_modules folder"
+    },
+    {
+      "name": "--legacy-bundling",
+      "description": "Causes npm to install the package such that versions of npm prior to 1.4, such as the one included with node 0.8, can install the package"
+    },
+    {
+      "name": "--strict-peer-deps",
+      "description": "If set to true, and --legacy-peer-deps is not set, then any conflicting peerDependencies will be treated as an install failure"
+    },
+    {
+      "name": "--no-package-lock",
+      "description": "Ignores package-lock.json files when installing"
+    },
+    {
+      "name": "--no-audit",
+      "description": "Submit audit reports alongside the current npm command to the default registry and all registries configured for scopes"
+    },
+    {
+      "name": "--no-bin-links",
+      "description": "Tells npm to not create symlinks (or .cmd shims on Windows) for package executables"
+    },
+    {
+      "name": "--no-fund",
+      "description": "Hides the message at the end of each npm install acknowledging the number of dependencies looking for funding"
+    },
+    {
+      "name": "--save",
+      "description": "Update the semver values of direct dependencies in your project package.json"
+    },
+    {
+      "name": "--allow-same-version",
+      "description": "Prevents throwing an error when npm version is used to set the new version to the same value as the current version"
+    },
+    {
+      "name": "--no-commit-hooks",
+      "description": "Do not run git commit hooks when using the npm version command"
+    },
+    {
+      "name": "--no-git-tag-version",
+      "description": "Do not tag the commit when using the npm version command"
+    },
+    {
+      "name": "--sign-git-tag",
+      "description": "If set to true, then the npm version command will tag the version using -s to add a signature"
+    }
+  ],
+  "source": "https://github.com/withfig/autocomplete/blob/master/src/npm.ts",
+  "note": "Static option names and descriptions only; scope and dynamic generators are not preserved."
+}
