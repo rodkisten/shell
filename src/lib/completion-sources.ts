@@ -33,18 +33,37 @@ function entries(value: unknown): unknown[] {
  * ignores dynamic generators: running them would violate offline analysis
  * guarantees and could execute user-provided commands.
  */
-export function fromFig(spec: unknown): CompletionItem[] {
+/**
+ * Resolve only options in the active Fig command scope. Nested subcommands
+ * must never leak flags into sibling commands.
+ *
+ * commandPath contains the already-entered subcommands, excluding the root
+ * executable. Root options are inherited, while sibling options are not.
+ */
+export function fromFig(spec: unknown, commandPath: readonly string[] = []): CompletionItem[] {
+  const root = record(spec);
+  if (!root) return [];
+  const scopes: UnknownRecord[] = [root];
+  let current = root;
+  for (const segment of commandPath) {
+    const next = entries(current.subcommands)
+      .map(record)
+      .find(child => child && names(child.name).includes(segment));
+    if (!next) return [];
+    scopes.push(next);
+    current = next;
+  }
+
   const output: CompletionItem[] = [];
-  const seen = new WeakSet<object>();
-  function visit(value: unknown, kind: CompletionItem['kind'], depth: number): void {
-    if (depth > 12) return;
+  const seen = new Set<string>();
+  const add = (value: unknown, kind: CompletionItem['kind']): void => {
     const node = record(value);
-    if (!node || seen.has(node)) return;
-    seen.add(node);
-    // Fig allows aliases as arrays and nested option/subcommand groups.
-    // Do not flatten argument suggestions into executable commands.
+    if (!node) return;
     for (const name of names(node.name)) {
       if (kind === 'option' && !name.startsWith('-')) continue;
+      const key = kind + ':' + name;
+      if (seen.has(key)) continue;
+      seen.add(key);
       output.push({
         name,
         description: description(node.description),
@@ -53,12 +72,14 @@ export function fromFig(spec: unknown): CompletionItem[] {
         ...(kind === 'option' ? { takesValue: node.args !== undefined } : {}),
       });
     }
-    for (const child of entries(node.subcommands)) visit(child, 'subcommand', depth + 1);
-    for (const child of entries(node.options)) visit(child, 'option', depth + 1);
-    for (const child of entries(node.args)) visit(child, 'argument', depth + 1);
-    if (record(node.args)) visit(node.args, 'argument', depth + 1);
+  };
+  add(root, 'command');
+  for (const scope of scopes) {
+    for (const option of entries(scope.options)) add(option, 'option');
   }
-  visit(spec, 'command', 0);
+  for (const subcommand of entries(current.subcommands)) add(subcommand, 'subcommand');
+  for (const arg of entries(current.args)) add(arg, 'argument');
+  if (record(current.args)) add(current.args, 'argument');
   return output;
 }
 
