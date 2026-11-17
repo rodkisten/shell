@@ -1,12 +1,8 @@
+import { parse, LangVariant } from 'sh-syntax';
 import { byName } from './commands';
-import { cliSpecs, type CliSpec } from './cli-specs';
+import { cliSpecs } from './cli-specs';
+import { inspectShellAst } from './shell-ast';
 
-/**
- * Initial offline semantic lookup layer for CodeMirror.
- * This intentionally does not claim to understand arbitrary shell syntax:
- * the authoritative shell AST and external CLI specifications are separate
- * follow-up integrations.
- */
 export type SemanticToken = {
   from: number;
   to: number;
@@ -18,122 +14,95 @@ export type SemanticToken = {
   source: 'catalog' | 'shell' | 'cli-spec';
 };
 
-const operators: Record<string, string> = {
-  '|': 'Envia a saída padrão do comando anterior à entrada do próximo.',
-  '||': 'Executa o próximo comando se o anterior falhar.',
-  '&&': 'Executa o próximo comando somente se o anterior tiver sucesso.',
-  ';': 'Separa comandos; o próximo executa independentemente do código de saída.',
-  '>': 'Redireciona a saída para um arquivo, substituindo seu conteúdo.',
-  '>>': 'Acrescenta a saída ao final de um arquivo.',
-  '<': 'Lê a entrada padrão de um arquivo.',
-};
+type AstNode = { type?: string; start?: number; end?: number; args?: AstNode[]; parts?: AstNode[]; value?: string; cmd?: AstNode; stmts?: AstNode[] };
+export type ShellAnalysis = { source: string; tokens: SemanticToken[]; overview: ReturnType<typeof inspectShellAst> };
 
-const tokenPattern = /"(?:\\.|[^"\\])*"|'[^']*'|\|\||&&|>>|[|;&<>]|[^\s|;&<>]+/g;
-
-/** Conservative tokenization: quoted strings are kept together. */
-export function explainKnownShellTokens(code: string): SemanticToken[] {
-  const tokens: SemanticToken[] = [];
-  let expectingCommand = true;
-  let currentCommand = '';
-  let activeSpec: CliSpec | undefined;
-  let pendingValue: string | undefined;
-  let positionalIndex = 0;
-  let redirectTarget = false;
-  let lineStart = 0;
-
-  for (const line of code.split('\n')) {
-    // The current token scanner is intentionally not a shell AST.
-    // Skip compound syntax rather than incorrectly labeling control words.
-    if (/(?:^|[;\s])(?:if|then|elif|else|fi|for|while|until|do|done|case|esac|function)\b|\$\(|\$\{|\x60|<<|\(\(/.test(line)) {
-      lineStart += line.length + 1;
-      continue;
-    }
-    const comment = /^\s*#/.test(line);
-    if (comment) {
-      lineStart += line.length + 1;
-      continue;
-    }
-    for (const match of line.matchAll(tokenPattern)) {
-      const value = match[0];
-      const from = lineStart + (match.index ?? 0);
-      const to = from + value.length;
-      // Shell comments begin at a token boundary, not inside quoted strings.
-      if (value.startsWith('#')) break;
-      if (redirectTarget) {
-        tokens.push({ from, to, text: value, kind: 'option', title: 'Destino do redirecionamento', description: 'Caminho usado pelo operador de redirecionamento anterior.', source: 'shell' });
-        redirectTarget = false;
-        continue;
-      }
-      const operator = operators[value];
-      if (operator) {
-        tokens.push({ from, to, text: value, kind: 'operator', title: value, description: operator, source: 'shell' });
-        redirectTarget = value === '>' || value === '>>' || value === '<';
-        expectingCommand = !redirectTarget;
-        if (expectingCommand) { currentCommand = ''; activeSpec = undefined; pendingValue = undefined; positionalIndex = 0; }
-        continue;
-      }
-      if (value === '&') {
-        expectingCommand = true;
-        currentCommand = '';
-        activeSpec = undefined;
-        pendingValue = undefined;
-        positionalIndex = 0;
-        continue;
-      }
-      if (expectingCommand) {
-        if (/^[A-Za-z_][\w]*=/.test(value)) continue;
-        if (value === 'sudo' || value === 'command' || value === 'builtin') continue;
-        expectingCommand = false;
-        currentCommand = value;
-        activeSpec = cliSpecs[value];
-        pendingValue = undefined;
-        positionalIndex = 0;
-        const entry = byName.get(value);
-        if (entry || activeSpec) tokens.push({
-          from, to, text: value, kind: 'command', title: entry?.title ?? activeSpec?.name ?? value,
-          description: activeSpec?.description ?? entry?.description ?? '', example: entry?.example,
-          source: activeSpec ? 'cli-spec' : 'catalog',
-        });
-        continue;
-      }
-      if (pendingValue) {
-        tokens.push({ from, to, text: value, kind: 'option', title: 'Valor de ' + pendingValue, description: 'Valor fornecido para a opção ' + pendingValue + '.', source: 'cli-spec' });
-        pendingValue = undefined;
-        continue;
-      }
-      if (activeSpec?.subcommands?.[value]) {
-        activeSpec = activeSpec.subcommands[value];
-        positionalIndex = 0;
-        tokens.push({ from, to, text: value, kind: 'command', title: currentCommand + ' ' + value, description: activeSpec.description, source: 'cli-spec' });
-        continue;
-      }
-      const optionName = value.startsWith('--') ? value.split('=')[0] : value;
-      const option = activeSpec?.options?.find(item => item.names.includes(optionName));
-      if (option) {
-        tokens.push({ from, to, text: value, kind: 'option', title: currentCommand + ' ' + optionName, description: option.description, source: 'cli-spec' });
-        if (option.takesValue && !value.includes('=')) pendingValue = optionName;
-        continue;
-      }
-      if (activeSpec && !value.startsWith('-')) {
-        const label = activeSpec.positionals?.[Math.min(positionalIndex, (activeSpec.positionals?.length ?? 1) - 1)];
-        if (label) tokens.push({ from, to, text: value, kind: 'option', title: label, description: 'Argumento posicional: ' + label + '.', source: 'cli-spec' });
-        positionalIndex++;
-        continue;
-      }
-      const entry = byName.get(currentCommand);
-      const flag = entry?.flags?.find((item) => item.flag === value);
-      if (flag) tokens.push({
-        from, to, text: value, kind: 'option', title: currentCommand + ' ' + value,
-        description: flag.description, example: flag.example, source: 'catalog',
-      });
-    }
-    lineStart += line.length + 1;
-    expectingCommand = true;
-    currentCommand = '';
-    activeSpec = undefined;
-    pendingValue = undefined;
-    positionalIndex = 0;
-    redirectTarget = false;
+/** sh-syntax positions are UTF-8 bytes. CodeMirror uses UTF-16 offsets. */
+function offsets(source: string): Map<number, number> {
+  const map = new Map<number, number>();
+  let byte = 0;
+  for (let i = 0; i < source.length;) {
+    const point = source.codePointAt(i);
+    if (point === undefined) break;
+    map.set(byte, i);
+    const char = String.fromCodePoint(point);
+    byte += new TextEncoder().encode(char).length;
+    i += char.length;
   }
-  return tokens;
+  map.set(byte, source.length);
+  return map;
+}
+
+function object(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown> : null;
+}
+
+/**
+ * Build semantic selections from the parser's typed AST nodes. We only
+ * annotate static literal command names: dynamic expansions remain unknown.
+ * No regular-expression shell tokenizer is involved.
+ */
+function tokensFromAst(ast: unknown, source: string): SemanticToken[] {
+  const map = offsets(source);
+  const tokens: SemanticToken[] = [];
+  const seen = new WeakSet<object>();
+  function walk(value: unknown): void {
+    if (!value || typeof value !== 'object' || seen.has(value)) return;
+    seen.add(value);
+    if (Array.isArray(value)) { value.forEach(walk); return; }
+    const node = object(value);
+    if (!node) return;
+    if (node.type === 'CallExpr' && Array.isArray(node.args)) {
+      const first = object(node.args[0]);
+      const start = typeof first?.start === 'number' ? map.get(first.start) : undefined;
+      const end = typeof first?.end === 'number' ? map.get(first.end) : undefined;
+      if (start !== undefined && end !== undefined && start < end) {
+        const name = source.slice(start, end);
+        // Shell quoting, variable expansion and command substitution must
+        // not be mistaken for a literal executable name.
+        if (/^[a-zA-Z_][a-zA-Z_0-9.+-]*$/.test(name)) {
+          const entry = byName.get(name);
+          const spec = cliSpecs[name];
+          if (entry || spec) tokens.push({
+            from: start, to: end, text: name, kind: 'command',
+            title: entry?.title ?? spec?.name ?? name,
+            description: spec?.description ?? entry?.description ?? '',
+            example: entry?.example,
+            source: spec ? 'cli-spec' : 'catalog',
+          });
+        }
+      }
+    }
+    for (const [key, child] of Object.entries(node)) {
+      if (key !== 'position' && key !== 'opPos' && key !== 'semicolon' && child && typeof child === 'object') walk(child);
+    }
+  }
+  walk(ast);
+  return tokens.sort((a, b) => a.from - b.from);
+}
+
+/** One bounded in-flight parse per source, reused by editor and explain panel. */
+let cached: Promise<ShellAnalysis> | undefined;
+let cachedSource: string | undefined;
+export function analyzeShell(source: string): Promise<ShellAnalysis> {
+  if (cached && cachedSource === source) return cached;
+  cachedSource = source;
+  cached = parse(source, { variant: LangVariant.LangZsh, keepComments: true })
+    .then(ast => ({ source, tokens: tokensFromAst(ast, source), overview: inspectShellAst(ast, source) }));
+  cached.catch(() => { if (cachedSource === source) { cached = undefined; cachedSource = undefined; } });
+  return cached;
+}
+
+/** Synchronous accessor for CodeMirror events; never triggers a parse. */
+export function explainKnownShellTokens(source: string): SemanticToken[] {
+  return cachedSource === source && resolved?.source === source ? resolved.tokens : [];
+}
+let resolved: ShellAnalysis | undefined;
+const originalAnalyze = analyzeShell;
+/** Prepares the shared analysis and makes it available to synchronous hovers. */
+export async function prepareShellAnalysis(source: string): Promise<ShellAnalysis> {
+  const analysis = await originalAnalyze(source);
+  if (cachedSource === source) resolved = analysis;
+  return analysis;
 }
