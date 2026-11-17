@@ -99,13 +99,37 @@ export function fromFigWords(spec: unknown, words: readonly string[]): Completio
   if (!root) return [];
   const path: string[] = [];
   let current = root;
+  let awaitingValue = false;
+  let positionalOnly = false;
+
   for (const word of words) {
+    if (awaitingValue) {
+      awaitingValue = false;
+      continue;
+    }
+    if (word === '--') {
+      positionalOnly = true;
+      continue;
+    }
+    if (!positionalOnly && word.startsWith('-')) {
+      // Resolve the active option's argument requirement from Fig metadata.
+      // --option=value already contains its argument and consumes no next word.
+      const flag = word.split('=', 1)[0];
+      const activeOptions = fromFig(spec, path).filter(item => item.kind === 'option');
+      const match = activeOptions.find(item => item.name === flag);
+      awaitingValue = Boolean(match?.takesValue && !word.includes('='));
+      continue;
+    }
+    if (positionalOnly) continue;
     const next = entries(current.subcommands)
       .map(record)
       .find(child => child && names(child.name).includes(word));
-    if (!next) break;
-    path.push(word);
-    current = next;
+    if (next) {
+      path.push(word);
+      current = next;
+    }
+    // Unrecognized positional arguments may precede subcommands in some CLIs,
+    // so keep scanning rather than treating them as command names.
   }
   return fromFig(spec, path);
 }
