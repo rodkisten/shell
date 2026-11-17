@@ -24,14 +24,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Build preview assets
         run: npm run build
-      - name: Verify Wrangler supports Worker Previews
-        run: |
-          node -e "const v=require('wrangler/package.json').version.split('.').map(Number); if (v[0] !== 4 || v[1] < 135) { console.error('Worker Previews require Wrangler >=4.135.0; installed '+v.join('.')); process.exit(1); }"
       - name: Check Cloudflare credentials
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -49,7 +45,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          output="$(npx wrangler preview --name "pr-$PR_NUMBER" --json)"
+          output="$(npx --yes wrangler@^4.135.0 preview --name "pr-$PR_NUMBER" --json)"
           preview_url="$(jq -er '.preview.urls[0]' <<< "$output")"
           echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
           echo "### Cloudflare Preview" >> "$GITHUB_STEP_SUMMARY"
@@ -78,11 +74,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
       - run: npm install --no-audit --no-fund
       - name: Delete closed PR preview
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: npx wrangler preview delete --name "pr-$PR_NUMBER" --skip-confirmation
+        run: npx --yes wrangler@^4.135.0 preview delete --name "pr-$PR_NUMBER" --skip-confirmation
