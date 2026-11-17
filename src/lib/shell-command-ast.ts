@@ -110,9 +110,13 @@ export async function activeShellCommand(
           break;
         } else if (arg === '-i' || arg === '--ignore-environment' || arg === '-0' || arg === '--null') {
           commandIndex++;
-        } else if (/^--(?:unset|chdir|split-string)=.+$/.test(arg) || /^-[uCS].+$/.test(arg)) {
+        } else if (arg === '-S' || arg === '--split-string' || arg.startsWith('--split-string=') || /^-S.+/.test(arg)) {
+          // env -S re-parses a string into multiple arguments; the AST's
+          // original word boundaries are not the eventual command boundaries.
+          return null;
+        } else if (/^--(?:unset|chdir)=.+$/.test(arg) || /^-[uC].+$/.test(arg)) {
           commandIndex++;
-        } else if (arg === '-u' || arg === '--unset' || arg === '-C' || arg === '--chdir' || arg === '-S' || arg === '--split-string') {
+        } else if (arg === '-u' || arg === '--unset' || arg === '-C' || arg === '--chdir') {
           if (!words[commandIndex + 1]) return null;
           commandIndex += 2;
         } else if (arg.startsWith('-')) {
@@ -131,7 +135,7 @@ export async function activeShellCommand(
           commandIndex++;
           break;
         }
-        if (['-n', '-E', '-H', '-k', '-K', '-S', '-b', '--non-interactive', '--preserve-env'].includes(arg)) {
+        if (['-n', '-E', '-H', '-k', '-K', '-S', '-b', '--non-interactive', '--preserve-env'].includes(arg) || /^--preserve-env=.+$/.test(arg)) {
           commandIndex++;
           continue;
         }
