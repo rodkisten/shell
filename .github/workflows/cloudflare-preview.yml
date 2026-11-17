@@ -45,8 +45,24 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          output="$(npx --yes wrangler@^4.135.0 preview --name "pr-$PR_NUMBER" --json)"
-          preview_url="$(jq -er '.preview.urls[0]' <<< "$output")"
+          # Capture diagnostics separately: Wrangler's JSON output must remain
+          # parseable, but errors must never disappear inside $(...).
+          stdout="$(mktemp)"
+          stderr="$(mktemp)"
+          trap 'rm -f "$stdout" "$stderr"' EXIT
+          if ! npx --yes wrangler@^4.135.0 preview --name "pr-$PR_NUMBER" --json >"$stdout" 2>"$stderr"; then
+            echo "::error::Cloudflare Worker Preview deployment failed"
+            sed -E 's/(Bearer |token[=: ]+)[^ ]+/\1[REDACTED]/Ig' "$stderr" >&2
+            echo "### Preview deployment failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "Inspect the deploy step logs for Wrangler diagnostics." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          cat "$stderr" >&2
+          if ! preview_url="$(jq -er '.preview.urls[0]' "$stdout")"; then
+            echo "::error::Wrangler did not return preview.urls[0]"
+            jq '{preview, errors, success}' "$stdout" || true
+            exit 1
+          fi
           echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
           echo "### Cloudflare Preview" >> "$GITHUB_STEP_SUMMARY"
           echo "$preview_url" >> "$GITHUB_STEP_SUMMARY"
