@@ -87,11 +87,14 @@ export async function activeShellCommand(
       commandIndex++;
       continue;
     }
-    if (word === 'command' || word === 'builtin') {
+    if (word === 'command') {
       commandIndex++;
       if (words[commandIndex]?.startsWith('-')) return null;
       continue;
     }
+    // "builtin" only invokes shell builtins. Never suggest external Fig
+    // flags for "builtin curl" or other executables.
+    if (word === 'builtin') return null;
     if (word === 'env') {
       commandIndex++;
       while (commandIndex < words.length) {
@@ -102,6 +105,8 @@ export async function activeShellCommand(
           commandIndex++;
           break;
         } else if (arg === '-i' || arg === '--ignore-environment' || arg === '-0' || arg === '--null') {
+          commandIndex++;
+        } else if (/^--(?:unset|chdir|split-string)=.+$/.test(arg)) {
           commandIndex++;
         } else if (arg === '-u' || arg === '--unset' || arg === '-C' || arg === '--chdir' || arg === '-S' || arg === '--split-string') {
           if (!words[commandIndex + 1]) return null;
@@ -123,6 +128,10 @@ export async function activeShellCommand(
           break;
         }
         if (['-n', '-E', '-H', '-k', '-K', '-S', '-b', '--non-interactive', '--preserve-env'].includes(arg)) {
+          commandIndex++;
+          continue;
+        }
+        if (/^--(?:user|group|prompt|role|type)=.+$/.test(arg)) {
           commandIndex++;
           continue;
         }
