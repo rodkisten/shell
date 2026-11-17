@@ -66,11 +66,30 @@ jobs:
             exit 1
           fi
           cat "$stderr" >&2
-          if ! preview_url="$(jq -er '.preview.urls[0]' "$stdout")"; then
-            echo "::error::Wrangler did not return preview.urls[0]"
-            jq '{preview, errors, success}' "$stdout" || true
+          # Vite/Cloudflare may print a redirected-configuration preamble
+          # before the JSON object, even with --json.
+          preview_url="$(node - "$stdout" <<'NODE'
+          const fs = require('node:fs');
+          const output = fs.readFileSync(process.argv[2], 'utf8');
+          for (let start = output.indexOf('{'); start !== -1; start = output.indexOf('{', start + 1)) {
+            try {
+              const data = JSON.parse(output.slice(start));
+              const url = data.preview?.urls?.[0] ?? data.urls?.[0];
+              if (typeof url === 'string' && /^https:\/\//.test(url)) {
+                process.stdout.write(url);
+                process.exit(0);
+              }
+            } catch {}
+          }
+          process.exit(1);
+          NODE
+          )" || {
+            echo "::error::Wrangler output did not contain a valid preview URL"
+            echo "::group::Wrangler output (redacted)"
+            sed -E 's/(Bearer |token[=: ]+)[^ ]+/\1[REDACTED]/Ig' "$stdout" | tail -n 70
+            echo "::endgroup::"
             exit 1
-          fi
+          }
           echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
           echo "### Cloudflare Preview" >> "$GITHUB_STEP_SUMMARY"
           echo "$preview_url" >> "$GITHUB_STEP_SUMMARY"
