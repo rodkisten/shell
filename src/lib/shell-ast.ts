@@ -104,7 +104,7 @@ function kindOf(obj: Record<string, unknown>, label: string): string {
 }
 
 /** Only genuine shell constructs get semantic descriptions. */
-function explainNode(kind: string, obj: Record<string, unknown>): string {
+function explainNode(kind: string, obj: Record<string, unknown>, source: string, from?: number, to?: number): string {
   const fallback = descriptions[kind] ?? 'Estrutura sintática identificada; comportamento não inferido.';
   if (kind === 'Stmt') {
     const background = obj.Background ?? obj.background;
@@ -115,10 +115,41 @@ function explainNode(kind: string, obj: Record<string, unknown>): string {
     ].filter(Boolean);
     return flags.length ? fallback + ' ' + flags.join(' ') : fallback;
   }
+  if (kind === 'IfClause') {
+    return Array.isArray(obj.cond) && obj.cond.length === 0
+      ? 'Ramo else: executa quando as condições anteriores não tiveram sucesso.'
+      : 'Avalia a condição; executa o ramo then somente quando ela tiver sucesso. Pode conter elif ou else.';
+  }
+  if (kind === 'ForClause') {
+    return obj.select === true
+      ? 'Menu select: apresenta opções e executa o corpo para a escolha realizada.'
+      : 'Percorre os itens do laço e executa seu corpo para cada iteração.';
+  }
+  if (kind === 'CallExpr') {
+    const assigns = Array.isArray(obj.assigns) ? obj.assigns.length : 0;
+    const args = Array.isArray(obj.args) ? obj.args.length : 0;
+    return assigns > 0 && args === 0
+      ? 'Atribuição no shell, sem invocação explícita de comando.'
+      : 'Executa o comando após processar palavras, argumentos, atribuições e expansões.';
+  }
   if (kind === 'BinaryCmd') {
     const op = obj.Op ?? obj.op;
     // Some mvdan/sh wrappers encode operators as numeric enums. Never guess
     // their meaning without a verified mapping from the installed parser.
+    if (typeof op === 'number' && from !== undefined && to !== undefined) {
+      const x = record(obj.x ?? obj.X);
+      const y = record(obj.y ?? obj.Y);
+      const leftEnd = typeof x?.end === 'number' ? x.end : undefined;
+      const rightStart = typeof y?.start === 'number' ? y.start : undefined;
+      // Inspect only the operator gap. Never infer meaning from an enum value.
+      if (leftEnd !== undefined && rightStart !== undefined) {
+        const gap = source.slice(leftEnd, rightStart).trim();
+        if (gap === '|') return 'Pipeline: conecta a saída padrão do comando esquerdo à entrada do direito.';
+        if (gap === '|&') return 'Pipeline: conecta saída padrão e erros ao próximo comando.';
+        if (gap === '&&') return 'Executa o comando direito apenas se o esquerdo tiver sucesso.';
+        if (gap === '||') return 'Executa o comando direito apenas se o esquerdo falhar.';
+      }
+    }
     if (typeof op === 'string') {
       const meaning: Record<string, string> = {
         '&&': 'O comando à direita só executa se o da esquerda tiver sucesso.',
@@ -131,6 +162,17 @@ function explainNode(kind: string, obj: Record<string, unknown>): string {
   }
   if (kind === 'Redirect') {
     const op = obj.Op ?? obj.op;
+    if (typeof op === 'number' && from !== undefined && to !== undefined) {
+      const operator = source.slice(from, to).match(/^(?:\\d+)?(>>|<<-|<<<|<<|>&|<&|>|<)/)?.[1];
+      const meanings: Record<string, string> = {
+        '>': 'Redireciona a saída e substitui o conteúdo do arquivo de destino.',
+        '>>': 'Acrescenta a saída ao arquivo de destino.',
+        '<': 'Lê a entrada de um arquivo.',
+        '<<': 'Here-document: fornece um bloco de texto como entrada.',
+        '<<<': 'Here-string: fornece uma string como entrada.',
+      };
+      if (operator && meanings[operator]) return meanings[operator];
+    }
     if (typeof op === 'string') {
       const meaning: Record<string, string> = {
         '>': 'Redireciona a saída, substituindo o conteúdo do destino.',
@@ -191,7 +233,7 @@ export function inspectShellAst(ast: unknown, source = '', maxNodes = 350, maxDe
     const id = String(nodes.length);
     const node: ShellAstNode = {
       id, kind, label, depth, parentId,
-      description: explainNode(kind, obj),
+      description: explainNode(kind, obj, source, from, to),
       navigable: validRange,
       ...(validRange ? { from, to } : {}),
     };
