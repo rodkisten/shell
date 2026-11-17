@@ -4,6 +4,17 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-11-09",
   "r2_buckets": [{ "binding": "LINUX_ASSETS", "bucket_name": "shell-linux-assets" }],
+  "previews": {
+    "r2_buckets": [{ "binding": "LINUX_ASSETS", "bucket_name": "shell-linux-assets-preview" }]
+  },
+  "routes": [
+    {
+      "pattern": "preview.shell.migos.club",
+      "custom_domain": true,
+      "previews_enabled": true,
+      "enabled": false
+    }
+  ],
   "observability": {
     "enabled": true
   },

@@ -3,6 +3,9 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, useLocation } from 'react-router';
 import './styles.css';
 import './touch.css';
+import { installPageZoomGuard } from './lib/page-zoom-guard';
+
+installPageZoomGuard();
 
 const App = lazy(() => import('./App').then((module) => ({ default: module.App })));
 const TouchTerminal = lazy(() => import('./TouchTerminal').then((module) => ({ default: module.TouchTerminal })));
