@@ -93,22 +93,100 @@ jobs:
           echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
           echo "### Cloudflare Preview" >> "$GITHUB_STEP_SUMMARY"
           echo "$preview_url" >> "$GITHUB_STEP_SUMMARY"
-      - name: Smoke test preview
+      - name: Smoke test Wrangler preview
         env:
           PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
         run: |
           set -euo pipefail
           curl --fail --show-error --silent --retry 5 --retry-all-errors --retry-delay 3 --output /dev/null "$PREVIEW_URL/"
-          echo "Preview responded successfully: $PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
-      - name: Comment stable preview URL on PR
+          echo "Wrangler preview responded successfully: $PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
+
+      - id: custom_preview
+        name: Verify custom PR preview domain
         env:
-          GH_TOKEN: ${{ github.token }}
-          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          gh pr comment "$PR_NUMBER" --edit-last --create-if-none --body "☁️ **Cloudflare Preview:** $PREVIEW_URL
+          set -euo pipefail
+          custom_preview_url="https://pr-$PR_NUMBER.preview.shell.migos.club"
+          curl --fail --show-error --silent \
+            --retry 12 --retry-all-errors --retry-delay 5 \
+            --output /dev/null "$custom_preview_url/"
+          echo "url=$custom_preview_url" >> "$GITHUB_OUTPUT"
+          echo "Custom preview responded successfully: $custom_preview_url" >> "$GITHUB_STEP_SUMMARY"
 
-          Updated automatically on every PR commit. This preview does not deploy to production."
+      - name: Point shell.preview.migos.club at this successful preview
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CUSTOM_PREVIEW_URL: ${{ steps.custom_preview.outputs.url }}
+        run: |
+          set -euo pipefail
+          worker="$(mktemp)"
+          response="$(mktemp)"
+          trap 'rm -f "$worker" "$response"' EXIT
+
+          node >"$worker" <<'NODE'
+          const target = process.env.CUSTOM_PREVIEW_URL;
+          if (!/^https:\/\/pr-\d+\.preview\.shell\.migos\.club$/.test(target)) {
+            throw new Error('Refusing to publish an unexpected preview redirect target: ' + target);
+          }
+          process.stdout.write(`addEventListener("fetch", event => {
+            const incoming = new URL(event.request.url);
+            const target = new URL(${JSON.stringify(target)});
+            target.pathname = incoming.pathname;
+            target.search = incoming.search;
+            event.respondWith(new Response(null, {
+              status: 302,
+              headers: {
+                "Location": target.toString(),
+                "Cache-Control": "no-store",
+                "X-Robots-Tag": "noindex"
+              }
+            }));
+          });`);
+          NODE
+
+          curl --fail-with-body --show-error --silent \
+            --request PUT \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            --header "Content-Type: application/javascript" \
+            --data-binary "@$worker" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/shell-preview-latest" \
+            --output "$response"
+
+          node - "$response" <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (!data.success) {
+            console.error(data.errors ?? data);
+            process.exit(1);
+          }
+          NODE
+
+          expected="$CUSTOM_PREVIEW_URL/"
+          actual="$(
+            curl --show-error --silent --retry 8 --retry-all-errors --retry-delay 3 \
+              --dump-header - --output /dev/null "https://shell.preview.migos.club/" |
+              awk 'BEGIN{IGNORECASE=1} /^location:/ {$1=""; sub(/^ /,""); sub(/\r$/,""); print; exit}'
+          )"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::Latest-preview redirect mismatch. Expected $expected, got $actual"
+            exit 1
+          fi
+          echo "Latest successful preview: $CUSTOM_PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "Stable redirect: https://shell.preview.migos.club" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment stable preview URLs on PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIEW_URL: ${{ steps.custom_preview.outputs.url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "$PR_NUMBER" --edit-last --create-if-none --body "☁️ **PR Preview:** $PREVIEW_URL
+
+          🧭 **Latest successful preview:** https://shell.preview.migos.club
+
+          The fixed URL is updated only after the PR preview passes both smoke tests."
 
   cleanup:
     environment: production
@@ -121,7 +199,83 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - id: redirect_guard
+        name: Keep latest-preview redirect valid
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          closing_url="https://pr-$PR_NUMBER.preview.shell.migos.club/"
+          current="$(
+            curl --show-error --silent --retry 3 --retry-all-errors --retry-delay 2 \
+              --dump-header - --output /dev/null "https://shell.preview.migos.club/" |
+              awk 'BEGIN{IGNORECASE=1} /^location:/ {$1=""; sub(/^ /,""); sub(/\r$/,""); print; exit}'
+          )"
+
+          if [[ "$current" != "$closing_url" ]]; then
+            echo "safe_to_delete=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          fallback=""
+          while read -r number; do
+            [[ -z "$number" || "$number" == "$PR_NUMBER" ]] && continue
+            candidate="https://pr-$number.preview.shell.migos.club"
+            if curl --fail --show-error --silent --max-time 15 --output /dev/null "$candidate/"; then
+              fallback="$candidate"
+              break
+            fi
+          done < <(gh pr list --state open --limit 30 --json number,updatedAt --jq 'sort_by(.updatedAt) | reverse | .[].number')
+
+          if [[ -z "$fallback" ]]; then
+            echo "::warning::No healthy open PR preview found. Keeping pr-$PR_NUMBER alive so shell.preview.migos.club does not break."
+            echo "safe_to_delete=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          worker="$(mktemp)"
+          response="$(mktemp)"
+          trap 'rm -f "$worker" "$response"' EXIT
+          CUSTOM_PREVIEW_URL="$fallback" node >"$worker" <<'NODE'
+          const target = process.env.CUSTOM_PREVIEW_URL;
+          process.stdout.write(`addEventListener("fetch", event => {
+            const incoming = new URL(event.request.url);
+            const target = new URL(${JSON.stringify(target)});
+            target.pathname = incoming.pathname;
+            target.search = incoming.search;
+            event.respondWith(new Response(null, {
+              status: 302,
+              headers: {
+                "Location": target.toString(),
+                "Cache-Control": "no-store",
+                "X-Robots-Tag": "noindex"
+              }
+            }));
+          });`);
+          NODE
+          curl --fail-with-body --show-error --silent \
+            --request PUT \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            --header "Content-Type: application/javascript" \
+            --data-binary "@$worker" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/shell-preview-latest" \
+            --output "$response"
+          node - "$response" <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (!data.success) {
+            console.error(data.errors ?? data);
+            process.exit(1);
+          }
+          NODE
+          echo "safe_to_delete=true" >> "$GITHUB_OUTPUT"
+          echo "Latest-preview redirect moved to $fallback" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Delete closed PR preview
+        if: steps.redirect_guard.outputs.safe_to_delete == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
