@@ -70,7 +70,26 @@ export async function activeShellCommand(
     && arg.end <= cursor
   ).map(arg => source.slice(arg.start!, arg.end!));
   if (!words.length) return null;
+  // Resolve literal command wrappers from AST words, not textual shell
+  // segmentation. Avoid guessing for dynamic executables or wrapper flags.
+  let commandIndex = 0;
+  while (commandIndex < words.length) {
+    const word = words[commandIndex];
+    if (/^[A-Za-z_][A-Za-z_0-9]*=/.test(word)) {
+      commandIndex++;
+      continue;
+    }
+    if (word === 'sudo' || word === 'command' || word === 'builtin' || word === 'env') {
+      commandIndex++;
+      // Wrapper options change the meaning of subsequent arguments. Do not
+      // assume the next word is an executable when flags are present.
+      if (words[commandIndex]?.startsWith('-')) return null;
+      continue;
+    }
+    break;
+  }
+  const executable = words[commandIndex];
   // Dynamic executable names cannot be resolved safely as static Fig specs.
-  if (!/^[a-zA-Z][\w.-]*$/.test(words[0])) return null;
-  return { executable: words[0], words: words.slice(1), from: call.start!, to: call.end! };
+  if (!executable || !/^[a-zA-Z][\w.-]*$/.test(executable)) return null;
+  return { executable, words: words.slice(commandIndex + 1), from: call.start!, to: call.end! };
 }
