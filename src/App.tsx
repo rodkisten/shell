@@ -9,6 +9,7 @@ import {
 import { Button } from './components/ui/button';
 import { ManPopover } from './components/ManPopover';
 import { ShellEditor, type ShellEditorHandle } from './components/ShellEditor';
+import { CommandHelp } from './components/CommandHelp';
 import { HistoryPanel } from './components/HistoryPanel';
 import { LinuxPanel } from './components/LinuxPanel';
 import { WorkspacePanel } from './components/WorkspacePanel';
@@ -24,6 +25,7 @@ import { checkShell, applyAvailableFixes, type Finding } from './lib/shellcheck'
 import { cancelShell, executeScript, resetShell } from './lib/terminal';
 import { getDraft, saveDraft, saveEntry } from './lib/storage';
 import { cn } from './lib/utils';
+import { commandHelp, type CommandHelpModel } from './lib/command-help';
 
 const starter = `#!/usr/bin/env zsh
 # Bem-vindo ao ShellConductor 👋
@@ -60,6 +62,7 @@ export function App() {
   const [cursor, setCursor] = useState(starter.length);
   const [inspected, setInspected] = useState<string | null>(null);
   const [semanticSelection, setSemanticSelection] = useState<SemanticToken | null>(null);
+  const [quickHelp, setQuickHelp] = useState<CommandHelpModel | null>(null);
   const [busy, setBusy] = useState<'format' | 'check' | 'run' | 'explain' | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [output, setOutput] = useState<Output[]>([]);
@@ -92,6 +95,14 @@ export function App() {
     void contextualHints(script, cursor).then(next => {
       if (active) setHints(next);
     });
+    return () => { active = false; };
+  }, [script, cursor]);
+
+  useEffect(() => {
+    let active = true;
+    void commandHelp(script, cursor)
+      .then(next => { if (active) setQuickHelp(next); })
+      .catch(() => { if (active) setQuickHelp(null); });
     return () => { active = false; };
   }, [script, cursor]);
 
@@ -321,15 +332,16 @@ export function App() {
                     <div className="panel-header-actions"><label title="Tamanho da fonte do editor" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, flexShrink: 0 }}><span className="editor-font-label">Fonte</span><select aria-label="Tamanho da fonte" value={editorFontSize} onChange={event => setEditorFontSize(Number(event.target.value))} style={{ background: "#141519", color: "#eee", border: "1px solid #34363d", borderRadius: 5, padding: "4px 2px", fontSize: 16, maxWidth: 74 }}>{[9,10,11,12,13,14].map(size => <option key={size} value={size}>{size}px</option>)}</select></label><label title="Quebrar linhas longas" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}><input type="checkbox" checked={editorWordWrap} onChange={event => setEditorWordWrap(event.target.checked)} /> Wrap</label><span className="language-label">Zsh</span><button title="Colar texto" onClick={paste} aria-label="Colar"><Clipboard size={15}/></button><button title="Copiar script" onClick={() => void copy()} aria-label="Copiar"><Copy size={15}/></button><button title="Salvar script" onClick={save} aria-label="Salvar"><Bookmark size={15}/></button></div>
                   </div>
                   <div className="editor-inner" style={{ height: editorHeight }}><ShellEditor ref={editor} code={script} fontSize={editorFontSize} wordWrap={editorWordWrap} onChange={change} onCursor={setCursor} onInspect={setInspected} onSemanticInspect={setSemanticSelection} onRun={() => { void run(); }}/></div>
-                  {semanticSelection && <section aria-label="Explicação do trecho selecionado" aria-live="polite" style={{margin:'8px 12px',padding:'12px',background:'#17181c',border:'1px solid #34363e',borderRadius:12,color:'#f4f4f5',maxWidth:'100%',overflowWrap:'anywhere'}}>
-                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
-                      <strong style={{fontSize:13}}>{semanticSelection.title}</strong>
-                      <button type="button" aria-label="Fechar explicação" onClick={() => setSemanticSelection(null)} style={{minWidth:36,minHeight:36,color:'inherit'}}><X size={17}/></button>
+                  <CommandHelp help={quickHelp} onManual={setInspected}/>
+                  {semanticSelection && <section className="semantic-selection-card" aria-label="Explicação do trecho selecionado" aria-live="polite">
+                    <div className="semantic-selection-head">
+                      <strong>{semanticSelection.title}</strong>
+                      <button type="button" aria-label="Fechar explicação" onClick={() => setSemanticSelection(null)}><X size={17}/></button>
                     </div>
-                    <button type="button" onClick={() => editor.current?.reveal(semanticSelection.from, semanticSelection.to)} title="Selecionar trecho no editor" style={{display:'block',marginTop:4,fontSize:12,color:'#a5b4fc',textAlign:'left',minHeight:36,overflowWrap:'anywhere'}}><code>{semanticSelection.text}</code> <span aria-hidden="true">↗</span></button>
-                    <p style={{fontSize:13,lineHeight:1.55,margin:'8px 0 0'}}>{semanticSelection.description}</p>
-                    {semanticSelection.example && <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',fontSize:12,marginTop:8}}>{semanticSelection.example}</pre>}
-                    <small style={{display:'block',marginTop:8,color:'#a1a1aa'}}>Fonte: {semanticSelection.source === 'cli-spec' ? 'especificação CLI local' : semanticSelection.source === 'shell' ? 'operador shell' : 'catálogo local'}. Análise parcial.</small>
+                    <button className="semantic-selection-target" type="button" onClick={() => editor.current?.reveal(semanticSelection.from, semanticSelection.to)} title="Selecionar trecho no editor"><code>{semanticSelection.text}</code> <span aria-hidden="true">↗</span></button>
+                    <p>{semanticSelection.description}</p>
+                    {semanticSelection.example && <pre>{semanticSelection.example}</pre>}
+                    <small>Fonte: {semanticSelection.source === 'cli-spec' ? 'especificação CLI local' : semanticSelection.source === 'shell' ? 'operador shell' : 'catálogo local'}. Análise parcial.</small>
                   </section>}
                   <div className="pane-resizer" role="separator" aria-label="Redimensionar editor" aria-orientation="horizontal" onPointerDown={event => resize('editor', event)} />
                   <div className="editor-keyboard">{shortcuts.map((item,i) => <button key={i} onMouseDown={e => e.preventDefault()} onClick={() => insert(item.value)}>{item.label}</button>)}</div>
