@@ -16,9 +16,9 @@ import './components/workspace.css';
 import { ReferencePanel } from './components/ReferencePanel';
 import { SNIPPETS } from './lib/commands';
 import { contextualHints, type Hint } from './lib/suggestions';
-import { explainKnownShellTokensFromAst, type SemanticToken } from './lib/semantic-shell';
-import { inspectShellAst, type ShellAstNode } from './lib/shell-ast';
-import { parseShellAst } from './lib/shell-parser';
+import { explainKnownShellTokensFromSnapshot, type SemanticToken } from './lib/semantic-shell';
+import { inspectShellSnapshot, type ShellAstNode } from './lib/shell-ast';
+import { parseShellSnapshot } from './lib/shell-parser';
 import { formatShell } from './lib/format';
 import { checkShell, applyAvailableFixes, type Finding } from './lib/shellcheck';
 import { cancelShell, executeScript, resetShell } from './lib/terminal';
@@ -270,10 +270,10 @@ export function App() {
     try {
       // Validate with the already-installed shell parser. Do not send scripts
       // (which may contain credentials) to the remote documentation endpoint.
-      const ast = await parseShellAst(script);
-      const overview = inspectShellAst(ast, script);
+      const snapshot = await parseShellSnapshot(script);
+      const overview = inspectShellSnapshot(snapshot);
       setAstNodes(overview.nodes);
-      const tokens = explainKnownShellTokensFromAst(script, ast);
+      const tokens = explainKnownShellTokensFromSnapshot(snapshot);
       const steps = tokens.map((token, index) =>
         `${index + 1}. ${token.text} · ${token.title}\n   ${token.description}${token.example ? '\n   Exemplo: ' + token.example : ''}`
       );

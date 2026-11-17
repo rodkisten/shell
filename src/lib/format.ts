@@ -1,5 +1,5 @@
 import { print, LangVariant } from 'sh-syntax';
-import { parseShellAst } from './shell-parser';
+import { parseShellSnapshot } from './shell-parser';
 
 /**
  * sh-syntax exposes experimental Zsh grammar support (LangZsh).\n * It is incomplete; do not rewrite source if parsing fails.
@@ -8,7 +8,7 @@ import { parseShellAst } from './shell-parser';
 export async function formatShell(code: string, singleLine = false): Promise<string> {
   if (!code.trim()) return '';
   try {
-    await parseShellAst(code);
+    await parseShellSnapshot(code);
     const formatted = await print(code, {
       variant: LangVariant.LangZsh,
       keepComments: true,

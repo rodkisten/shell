@@ -1,4 +1,4 @@
-import { parseShellAst } from './shell-parser';
+import { parseShellSnapshot, type ShellSnapshot } from './shell-parser';
 
 type AstNode = {
   type?: string;
@@ -125,57 +125,40 @@ export function resolveShellCommandWords(words: readonly string[]): ResolvedShel
  * on pipes, semicolons or whitespace: those can occur inside quoted words.
  * Fail closed for incomplete/unsupported syntax rather than guessing.
  */
-export async function activeShellCommand(
-  source: string,
+export function activeShellCommandFromSnapshot(
+  snapshot: ShellSnapshot,
   cursor: number,
-): Promise<ActiveShellCommand | null> {
+): ActiveShellCommand | null {
+  const { source } = snapshot;
   if (cursor < 0 || cursor > source.length) return null;
-  let ast: unknown;
-  try {
-    ast = await parseShellAst(source);
-  } catch {
-    return null;
-  }
 
-  const calls: AstNode[] = [];
-  const visited = new WeakSet<object>();
-  const walk = (value: unknown): void => {
-    if (Array.isArray(value)) {
-      for (const item of value) walk(item);
-      return;
-    }
-    if (!isNode(value) || visited.has(value)) return;
-    visited.add(value);
-    if (value.type === 'CallExpr') calls.push(value);
-    for (const [key, child] of Object.entries(value)) {
-      if (key === 'parent' || key === 'comments') continue;
-      if (child && typeof child === 'object') walk(child);
-    }
-  };
-  walk(ast);
-
-  const candidates = calls.filter(call =>
-    typeof call.start === 'number' && typeof call.end === 'number'
-    && call.start <= cursor
-    && (cursor <= call.end || (
-      !/[\r\n;|&]/.test(source.slice(call.end, cursor))
-      && source.slice(call.end, cursor).trim() === ''
-    ))
-  ).sort((a, b) =>
-    (a.end! - a.start!) - (b.end! - b.start!)
-    || (b.start ?? 0) - (a.start ?? 0)
-  );
+  const candidates = (snapshot.byType.get('CallExpr') ?? [])
+    .filter(call =>
+      call.from !== undefined && call.to !== undefined
+      && call.from <= cursor
+      && (cursor <= call.to || (
+        !/[\r\n;|&]/.test(source.slice(call.to, cursor))
+        && source.slice(call.to, cursor).trim() === ''
+      ))
+    )
+    .sort((a, b) =>
+      (a.to! - a.from!) - (b.to! - b.from!)
+      || b.from! - a.from!
+    );
 
   const call = candidates[0];
-  if (!call || !Array.isArray(call.args) || !call.args.length) return null;
-  const visibleWords = call.args.filter(arg =>
-    typeof arg.start === 'number' && typeof arg.end === 'number'
-    && arg.start <= cursor
-  ).map(arg => ({
-    text: source.slice(arg.start!, Math.min(arg.end!, cursor)),
-    from: arg.start!,
-    to: Math.min(arg.end!, cursor),
-  }));
+  if (!call || !Array.isArray(call.node.args) || !call.node.args.length) return null;
+
+  const visibleWords = call.node.args
+    .map(arg => isNode(arg) ? snapshot.byObject.get(arg) : undefined)
+    .filter((arg): arg is NonNullable<typeof arg> =>
+      !!arg && arg.from !== undefined && arg.to !== undefined && arg.from <= cursor
+    )
+    .map(arg => ({
+      text: source.slice(arg.from!, Math.min(arg.to!, cursor)),
+      from: arg.from!,
+      to: Math.min(arg.to!, cursor),
+    }));
   if (!visibleWords.length) return null;
 
   const resolved = resolveShellCommandWords(visibleWords.map(word => word.text));
@@ -183,13 +166,26 @@ export async function activeShellCommand(
   const executableWord = visibleWords[resolved.commandIndex];
   if (!executableWord) return null;
   const arguments_ = visibleWords.slice(resolved.commandIndex + 1);
+
   return {
     executable: resolved.executable,
     words: resolved.words,
     executableFrom: executableWord.from,
     executableTo: executableWord.to,
     arguments: arguments_,
-    from: call.start!,
-    to: call.end!,
+    from: call.from!,
+    to: call.to!,
   };
+}
+
+export async function activeShellCommand(
+  source: string,
+  cursor: number,
+): Promise<ActiveShellCommand | null> {
+  try {
+    const snapshot = await parseShellSnapshot(source);
+    return activeShellCommandFromSnapshot(snapshot, cursor);
+  } catch {
+    return null;
+  }
 }

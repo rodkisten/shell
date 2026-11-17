@@ -1,7 +1,7 @@
 import { byName } from './commands';
 import { cliSpecs, type CliSpec } from './cli-specs';
 import { resolveShellCommandWords } from './shell-command-ast';
-import { parseShellAst } from './shell-parser';
+import { parseShellSnapshot, type IndexedShellNode, type ShellSnapshot } from './shell-parser';
 
 export type SemanticToken = {
   from: number;
@@ -48,17 +48,12 @@ function isNode(value: unknown): value is AstNode {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function rangeOf(node: AstNode, source: string): { from: number; to: number } | null {
+function indexedRange(entry: IndexedShellNode | undefined, source: string): { from: number; to: number } | null {
   if (
-    typeof node.start !== 'number' || typeof node.end !== 'number'
-    || node.start < 0 || node.end < node.start || node.end > source.length
+    !entry || entry.from === undefined || entry.to === undefined
+    || entry.from < 0 || entry.to < entry.from || entry.to > source.length
   ) return null;
-  return { from: node.start, to: node.end };
-}
-
-function sourceOf(node: AstNode, source: string): string | null {
-  const range = rangeOf(node, source);
-  return range ? source.slice(range.from, range.to) : null;
+  return { from: entry.from, to: entry.to };
 }
 
 function operatorAt(source: string, offset: number, candidates: readonly string[]): string | null {
@@ -85,15 +80,18 @@ function shellOperatorToken(source: string, from: number, operator: string): Sem
   };
 }
 
-function classifyCall(call: AstNode, source: string, tokens: SemanticToken[], seen: Set<string>): void {
-  if (!Array.isArray(call.args) || call.args.length === 0) return;
-  const args = call.args.filter(arg => rangeOf(arg, source));
-  const rawWords = args.map(arg => sourceOf(arg, source) ?? '');
+function classifyCall(call: IndexedShellNode, snapshot: ShellSnapshot, tokens: SemanticToken[], seen: Set<string>): void {
+  const { source } = snapshot;
+  if (!Array.isArray(call.node.args) || call.node.args.length === 0) return;
+  const args = call.node.args
+    .map(arg => isNode(arg) ? snapshot.byObject.get(arg) : undefined)
+    .filter((arg): arg is IndexedShellNode => !!arg && !!indexedRange(arg, source));
+  const rawWords = args.map(arg => source.slice(arg.from!, arg.to!));
   const resolved = resolveShellCommandWords(rawWords);
   if (!resolved) return;
 
   const commandNode = args[resolved.commandIndex];
-  const commandRange = commandNode && rangeOf(commandNode, source);
+  const commandRange = indexedRange(commandNode, source);
   if (!commandNode || !commandRange) return;
 
   const entry = byName.get(resolved.executable);
@@ -118,7 +116,7 @@ function classifyCall(call: AstNode, source: string, tokens: SemanticToken[], se
   for (let index = 0; index < argumentWords.length; index++) {
     const value = argumentWords[index];
     const node = argumentNodes[index];
-    const range = node && rangeOf(node, source);
+    const range = indexedRange(node, source);
     if (!range) continue;
 
     if (pendingValue) {
@@ -217,83 +215,71 @@ function classifyCall(call: AstNode, source: string, tokens: SemanticToken[], se
  * come from AST nodes/positions, so quoted pipes, comments and compound shell
  * syntax are never re-tokenized with regexes.
  */
-export function explainKnownShellTokensFromAst(code: string, ast: unknown): SemanticToken[] {
-  const tokens: SemanticToken[] = [];
-  const seenTokens = new Set<string>();
-  const visited = new WeakSet<object>();
+export function explainKnownShellTokensFromSnapshot(snapshot: ShellSnapshot): SemanticToken[] {
+  return snapshot.memo('semantic-tokens', () => {
+    const { source } = snapshot;
+    const tokens: SemanticToken[] = [];
+    const seenTokens = new Set<string>();
 
-  const walk = (value: unknown): void => {
-    if (Array.isArray(value)) {
-      for (const child of value) walk(child);
-      return;
-    }
-    if (!isNode(value) || visited.has(value)) return;
-    visited.add(value);
+    for (const entry of snapshot.nodes) {
+      if (entry.type === 'CallExpr') classifyCall(entry, snapshot, tokens, seenTokens);
 
-    if (value.type === 'CallExpr') classifyCall(value, code, tokens, seenTokens);
+      if (entry.type === 'BinaryCmd') {
+        const offset = (entry.node.opPos as AstPosition | undefined)?.offset;
+        const from = typeof offset === 'number' ? snapshot.offsetToUtf16(offset) : undefined;
+        if (from !== undefined) {
+          const operator = operatorAt(source, from, ['||', '&&', '|&', '|']);
+          if (operator && operators[operator]) {
+            pushUnique(tokens, seenTokens, shellOperatorToken(source, from, operator));
+          }
+        }
+      }
 
-    if (value.type === 'BinaryCmd') {
-      const offset = value.opPos?.offset;
-      if (typeof offset === 'number') {
-        const operator = operatorAt(code, offset, ['||', '&&', '|&', '|']);
-        if (operator && operators[operator]) {
-          pushUnique(tokens, seenTokens, shellOperatorToken(code, offset, operator));
+      if (entry.type === 'Redirect') {
+        const offset = (entry.node.opPos as AstPosition | undefined)?.offset;
+        const from = typeof offset === 'number' ? snapshot.offsetToUtf16(offset) : undefined;
+        if (from !== undefined) {
+          const operator = operatorAt(source, from, ['<<<', '>>', '<<', '<>', '>|', '>&', '<&', '>', '<']);
+          if (operator && operators[operator]) {
+            pushUnique(tokens, seenTokens, shellOperatorToken(source, from, operator));
+          }
+        }
+        if (isNode(entry.node.word)) {
+          const word = snapshot.byObject.get(entry.node.word);
+          const range = indexedRange(word, source);
+          if (range) {
+            pushUnique(tokens, seenTokens, {
+              ...range,
+              text: source.slice(range.from, range.to),
+              kind: 'option',
+              title: 'Destino do redirecionamento',
+              description: 'Caminho usado pelo operador de redirecionamento.',
+              source: 'shell',
+            });
+          }
+        }
+      }
+
+      if (entry.type === 'Stmt') {
+        const offset = (entry.node.semicolon as AstPosition | undefined)?.offset;
+        const from = typeof offset === 'number' ? snapshot.offsetToUtf16(offset) : undefined;
+        if (from !== undefined && from > 0) {
+          const operator = operatorAt(source, from, [';', '&']);
+          if (operator && operators[operator]) {
+            pushUnique(tokens, seenTokens, shellOperatorToken(source, from, operator));
+          }
         }
       }
     }
 
-    if (value.type === 'Redirect') {
-      const offset = value.opPos?.offset;
-      if (typeof offset === 'number') {
-        const operator = operatorAt(code, offset, ['<<<', '>>', '<<', '<>', '>|', '>&', '<&', '>', '<']);
-        if (operator && operators[operator]) {
-          pushUnique(tokens, seenTokens, shellOperatorToken(code, offset, operator));
-        }
-      }
-      if (isNode(value.word)) {
-        const range = rangeOf(value.word, code);
-        if (range) {
-          pushUnique(tokens, seenTokens, {
-            ...range,
-            text: code.slice(range.from, range.to),
-            kind: 'option',
-            title: 'Destino do redirecionamento',
-            description: 'Caminho usado pelo operador de redirecionamento.',
-            source: 'shell',
-          });
-        }
-      }
-    }
-
-    if (value.type === 'Stmt') {
-      const offset = value.semicolon?.offset;
-      if (typeof offset === 'number' && offset > 0) {
-        const operator = operatorAt(code, offset, [';', '&']);
-        if (operator && operators[operator]) {
-          pushUnique(tokens, seenTokens, shellOperatorToken(code, offset, operator));
-        }
-      }
-    }
-
-    for (const [key, child] of Object.entries(value)) {
-      if (key === 'parent' || key === 'comments') continue;
-      if (child && typeof child === 'object') walk(child);
-    }
-  };
-
-  walk(ast);
-  return tokens.sort((a, b) => a.from - b.from || a.to - b.to || a.kind.localeCompare(b.kind));
+    return tokens.sort((a, b) => a.from - b.from || a.to - b.to || a.kind.localeCompare(b.kind));
+  });
 }
 
-let cachedSource = '';
-let cachedSemanticTokens: Promise<SemanticToken[]> | null = null;
-
-/** Parse once per source snapshot and share the in-flight result between editor interactions. */
-export function explainKnownShellTokens(code: string): Promise<SemanticToken[]> {
-  if (cachedSemanticTokens && code === cachedSource) return cachedSemanticTokens;
-  cachedSource = code;
-  cachedSemanticTokens = parseShellAst(code)
-    .then(ast => explainKnownShellTokensFromAst(code, ast))
-    .catch(() => []);
-  return cachedSemanticTokens;
+export async function explainKnownShellTokens(code: string): Promise<SemanticToken[]> {
+  try {
+    return explainKnownShellTokensFromSnapshot(await parseShellSnapshot(code));
+  } catch {
+    return [];
+  }
 }
