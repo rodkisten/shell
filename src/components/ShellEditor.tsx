@@ -234,7 +234,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
   }, []);
 
   useEffect(() => {
-    editor.current?.dispatch({ effects: fontCompartment.current.reconfigure(EditorView.theme({ '&': { fontSize: `${fontSize}px` } })) });
+    editor.current?.dispatch({ effects: fontCompartment.current.reconfigure(editorFontTheme(fontSize)) });
   }, [fontSize]);
 
   useEffect(() => {
