@@ -83,6 +83,10 @@ const shellTheme = EditorView.theme({
   '.shell-diagnostic-error': { textDecorationColor: '#fb7185' },
 }, { dark: true });
 
+// Fig's static spec is immutable. Normalize once rather than traversing all
+// options on every keystroke, especially on mobile Safari.
+const figCurlOptions = fromFig(figCurl).filter(item => item.kind === 'option');
+
 export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEditor(
   { code, fontSize, wordWrap, onChange, onCursor, onInspect, onSemanticInspect, onRun }, ref,
 ) {
@@ -123,9 +127,9 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       // applies to a particular subcommand until scoped specs are imported.
       // Only curl's root-level options are currently safe to offer.
       const line = source.slice(0, context.pos).split('\n').at(-1) ?? '';
-      const command = /^\\s*curl(?:\\s|$)/.test(line) ? 'curl' : undefined;
+      const command = /^\s*curl(?:\s|$)/.test(line) ? 'curl' : undefined;
       const figOptions = command && before.text.startsWith('-')
-        ? fromFig(figCurl).filter(item => item.kind === 'option' && item.name.startsWith(before.text))
+        ? figCurlOptions.filter(item => item.name.startsWith(before.text))
           .map(item => ({ label: item.name, type: 'property', detail: 'Fig · curl', info: item.description, apply: item.name }))
         : [];
       const options = [
