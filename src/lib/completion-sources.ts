@@ -29,11 +29,6 @@ function entries(value: unknown): unknown[] {
 }
 
 /**
- * Fig completion specs are declarative trees. This adapter deliberately
- * ignores dynamic generators: running them would violate offline analysis
- * guarantees and could execute user-provided commands.
- */
-/**
  * Resolve only options in the active Fig command scope. Nested subcommands
  * must never leak flags into sibling commands.
  *
@@ -74,13 +69,45 @@ export function fromFig(spec: unknown, commandPath: readonly string[] = []): Com
     }
   };
   add(root, 'command');
-  for (const scope of scopes) {
-    for (const option of entries(scope.options)) add(option, 'option');
-  }
+  // Fig supports nested option groups. Walk the option collection only,
+  // never subcommands, to keep sibling command scopes isolated.
+  const addOptions = (value: unknown, depth = 0): void => {
+    if (depth > 8) return;
+    if (Array.isArray(value)) {
+      for (const child of value) addOptions(child, depth + 1);
+      return;
+    }
+    const node = record(value);
+    if (!node) return;
+    add(node, 'option');
+    if (node.options !== undefined) addOptions(node.options, depth + 1);
+  };
+  for (const scope of scopes) addOptions(scope.options);
   for (const subcommand of entries(current.subcommands)) add(subcommand, 'subcommand');
   for (const arg of entries(current.args)) add(arg, 'argument');
   if (record(current.args)) add(current.args, 'argument');
   return output;
+}
+
+/**
+ * Select Fig's active subcommand scope from already-tokenized shell words.
+ * The caller supplies words from the real shell AST, not a regex shell parser.
+ * Flags and their values must be removed by the caller using AST context.
+ */
+export function fromFigWords(spec: unknown, words: readonly string[]): CompletionItem[] {
+  const root = record(spec);
+  if (!root) return [];
+  const path: string[] = [];
+  let current = root;
+  for (const word of words) {
+    const next = entries(current.subcommands)
+      .map(record)
+      .find(child => child && names(child.name).includes(word));
+    if (!next) break;
+    path.push(word);
+    current = next;
+  }
+  return fromFig(spec, path);
 }
 
 /**
