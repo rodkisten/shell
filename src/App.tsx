@@ -16,6 +16,9 @@ import './components/workspace.css';
 import { ReferencePanel } from './components/ReferencePanel';
 import { SNIPPETS } from './lib/commands';
 import { contextualHints } from './lib/suggestions';
+import { explainKnownShellTokens, type SemanticToken } from './lib/semantic-shell';
+import { parse, LangVariant } from 'sh-syntax';
+import { inspectShellAst, type ShellAstNode } from './lib/shell-ast';
 import { formatShell } from './lib/format';
 import { checkShell, applyAvailableFixes, type Finding } from './lib/shellcheck';
 import { cancelShell, executeScript, resetShell } from './lib/terminal';
@@ -56,10 +59,12 @@ export function App() {
   const [script, setScript] = useState(starter);
   const [cursor, setCursor] = useState(starter.length);
   const [inspected, setInspected] = useState<string | null>(null);
+  const [semanticSelection, setSemanticSelection] = useState<SemanticToken | null>(null);
   const [busy, setBusy] = useState<'format' | 'check' | 'run' | 'explain' | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [output, setOutput] = useState<Output[]>([]);
   const [explanation, setExplanation] = useState<string | null>(null);
+  const [astNodes, setAstNodes] = useState<ShellAstNode[]>([]);
   const [toast, setToast] = useState('');
   const [historyRevision, setHistoryRevision] = useState(0);
   const [showSnippets, setShowSnippets] = useState(false);
@@ -103,7 +108,7 @@ export function App() {
   }, [script]);
   useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
 
-  const change = (text: string) => { setScript(text); setFindings([]); setExplanation(null); };
+  const change = (text: string) => { setScript(text); setFindings([]); setExplanation(null); setAstNodes([]); setSemanticSelection(null); };
   const insert = (text: string) => {
     navigation('/');
     // Editor may not be mounted yet when opened from the library.
@@ -256,12 +261,22 @@ export function App() {
     if (!script.trim()) return notify('Cole ou escreva um comando primeiro.');
     setBusy('explain');
     try {
-      const response = await fetch('/api/explain?q=' + encodeURIComponent(script.slice(0, 1000)));
-      if (!response.ok) throw new Error('Explicação remota indisponível.');
-      const data = await response.json() as { explanation?: string };
-      setExplanation(data.explanation || 'Não foi encontrada explicação nesta referência.');
-    } catch (error) { notify(error instanceof Error ? error.message : 'Não foi possível explicar.'); }
-    finally { setBusy(null); }
+      // Validate with the already-installed shell parser. Do not send scripts
+      // (which may contain credentials) to the remote documentation endpoint.
+      const ast = await parse(script, { variant: LangVariant.LangZsh, keepComments: true });
+      const overview = inspectShellAst(ast, script);
+      setAstNodes(overview.nodes);
+      const tokens = explainKnownShellTokens(script);
+      const steps = tokens.map((token, index) =>
+        `${index + 1}. ${token.text} · ${token.title}\n   ${token.description}${token.example ? '\n   Exemplo: ' + token.example : ''}`
+      );
+      setExplanation(steps.length
+        ? ['AST real (sh-syntax / mvdan)', `${overview.navigableCount}/${overview.count} nós com posição verificável`, ...overview.lines, overview.truncated ? '… árvore truncada para proteger o desempenho no celular.' : '', '', 'Análise semântica parcial (catálogo + operadores)', '', ...steps, '', 'A AST é estrutural; efeitos de expansões dinâmicas e comandos externos não são inferidos.'].join('\n')
+        : ['AST real (sh-syntax / mvdan)', ...overview.lines, '', 'Nenhum comando reconhecido pelo catálogo semântico local.'].join('\n'));
+    } catch (error) {
+      setAstNodes([]);
+      setExplanation('Não foi possível analisar a sintaxe Zsh: ' + (error instanceof Error ? error.message : String(error)));
+    } finally { setBusy(null); }
   };
 
   return (
@@ -298,7 +313,17 @@ export function App() {
                     <div className="panel-tabs"><span className="file-icon"><FileCode2 size={15}/></span><span>script.zsh</span><span className="unsaved-dot" aria-label="Rascunho local"/></div>
                     <div className="panel-header-actions"><label title="Tamanho da fonte do editor" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, flexShrink: 0 }}><span className="editor-font-label">Fonte</span><select aria-label="Tamanho da fonte" value={editorFontSize} onChange={event => setEditorFontSize(Number(event.target.value))} style={{ background: "#141519", color: "#eee", border: "1px solid #34363d", borderRadius: 5, padding: "4px 2px", fontSize: 16, maxWidth: 74 }}>{[9,10,11,12,13,14].map(size => <option key={size} value={size}>{size}px</option>)}</select></label><label title="Quebrar linhas longas" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}><input type="checkbox" checked={editorWordWrap} onChange={event => setEditorWordWrap(event.target.checked)} /> Wrap</label><span className="language-label">Zsh</span><button title="Colar texto" onClick={paste} aria-label="Colar"><Clipboard size={15}/></button><button title="Copiar script" onClick={() => void copy()} aria-label="Copiar"><Copy size={15}/></button><button title="Salvar script" onClick={save} aria-label="Salvar"><Bookmark size={15}/></button></div>
                   </div>
-                  <div className="editor-inner" style={{ height: editorHeight }}><ShellEditor ref={editor} code={script} fontSize={editorFontSize} wordWrap={editorWordWrap} onChange={change} onCursor={setCursor} onInspect={setInspected} onRun={() => { void run(); }}/></div>
+                  <div className="editor-inner" style={{ height: editorHeight }}><ShellEditor ref={editor} code={script} fontSize={editorFontSize} wordWrap={editorWordWrap} onChange={change} onCursor={setCursor} onInspect={setInspected} onSemanticInspect={setSemanticSelection} onRun={() => { void run(); }}/></div>
+                  {semanticSelection && <section aria-label="Explicação do trecho selecionado" aria-live="polite" style={{margin:'8px 12px',padding:'12px',background:'#17181c',border:'1px solid #34363e',borderRadius:12,color:'#f4f4f5',maxWidth:'100%',overflowWrap:'anywhere'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+                      <strong style={{fontSize:13}}>{semanticSelection.title}</strong>
+                      <button type="button" aria-label="Fechar explicação" onClick={() => setSemanticSelection(null)} style={{minWidth:36,minHeight:36,color:'inherit'}}><X size={17}/></button>
+                    </div>
+                    <button type="button" onClick={() => editor.current?.reveal(semanticSelection.from, semanticSelection.to)} title="Selecionar trecho no editor" style={{display:'block',marginTop:4,fontSize:12,color:'#a5b4fc',textAlign:'left',minHeight:36,overflowWrap:'anywhere'}}><code>{semanticSelection.text}</code> <span aria-hidden="true">↗</span></button>
+                    <p style={{fontSize:13,lineHeight:1.55,margin:'8px 0 0'}}>{semanticSelection.description}</p>
+                    {semanticSelection.example && <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',fontSize:12,marginTop:8}}>{semanticSelection.example}</pre>}
+                    <small style={{display:'block',marginTop:8,color:'#a1a1aa'}}>Fonte: {semanticSelection.source === 'cli-spec' ? 'especificação CLI local' : semanticSelection.source === 'shell' ? 'operador shell' : 'catálogo local'}. Análise parcial.</small>
+                  </section>}
                   <div className="pane-resizer" role="separator" aria-label="Redimensionar editor" aria-orientation="horizontal" onPointerDown={event => resize('editor', event)} />
                   <div className="editor-keyboard">{shortcuts.map((item,i) => <button key={i} onMouseDown={e => e.preventDefault()} onClick={() => insert(item.value)}>{item.label}</button>)}</div>
                   <div className="editor-footer"><div className="footer-meta"><span><span className="status-light"/> Pronto</span><span>{script.split('\n').length} linhas</span><span>UTF-8</span></div><span>⌘ ↵ para executar</span></div>
@@ -321,7 +346,7 @@ export function App() {
                   <div className="tool-group">
                     <button className="tool-action" onClick={() => void convert(false)} disabled={!!busy}><span className="tool-icon"><WandSparkles size={17}/></span><span><strong>Formatar script</strong><small>sh-syntax • Zsh experimental</small></span><span className="tool-kbd">⌘ ⇧ F</span></button>
                     <button className="tool-action" onClick={() => void check()} disabled={!!busy}><span className="tool-icon"><ShieldCheck size={17}/></span><span><strong>Validar e diagnosticar</strong><small>sh-syntax • análise sintática</small></span><span className="arrow-small">↗</span></button>
-                    <button className="tool-action" onClick={() => void explain()} disabled={!!busy}><span className="tool-icon"><BookOpen size={17}/></span><span><strong>Explicar comando</strong><small>Man page + opções em contexto</small></span><span className="arrow-small">↗</span></button>
+                    <button className="tool-action" onClick={() => void explain()} disabled={!!busy}><span className="tool-icon"><BookOpen size={17}/></span><span><strong>Explicar comando</strong><small>Passo a passo local · sem IA</small></span><span className="arrow-small">↗</span></button>
                   </div>
                   <div className="toolbox-divider"/>
                   <span className="eyebrow">CONVERSOR</span>
@@ -341,7 +366,15 @@ export function App() {
                 <div className="subpanel-heading"><h3><CircleAlert size={17}/> Diagnósticos <span className="count-pill">{findings.length}</span></h3><Button variant="outline" size="sm" onClick={fix}><WandSparkles size={14}/> Aplicar correções possíveis</Button></div>
                 {findings.map((finding,i) => <div className="diagnostic-item" key={i}><span className={cn('severity',finding.level)}>{finding.level}</span><div><strong>SC{finding.code} <span>L{finding.line}:{finding.column}</span></strong><p>{finding.message}</p><a href={'https://www.shellcheck.net/wiki/SC'+finding.code} target="_blank" rel="noreferrer">Entenda esse diagnóstico ↗</a></div></div>)}
               </section>}
-              {explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div><pre>{explanation}</pre><p>Fonte: ManKier. Evite enviar comandos com segredos embutidos para serviços externos.</p></section>}
+              {explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div>{astNodes.length > 0 && <div aria-label="Navegação pela AST" style={{maxHeight:260,overflowY:'auto',display:'grid',gap:4,padding:'8px 0'}}>
+                {astNodes.map(node => <button key={node.id} type="button" disabled={node.from === undefined || node.to === undefined} title={node.description}
+                  onClick={() => { if (node.from !== undefined && node.to !== undefined) editor.current?.reveal(node.from,node.to); }}
+                  style={{textAlign:'left',padding:'7px 9px',paddingLeft:Math.min(node.depth,8)*10+9,borderRadius:8,background:'transparent',color:'inherit',border:'1px solid #34363e',opacity:node.from === undefined ? .55 : 1}}>
+                  <strong>{node.kind}</strong> <small>{node.description}</small>
+                  {node.from !== undefined && <small> · {node.from}–{node.to}</small>}
+                </button>)}
+              </div>}
+              <pre>{explanation}</pre><p>Fonte: catálogo local e parser sh-syntax. Nenhum código é enviado para análise remota.</p></section>}
               <WorkspacePanel />
               <div className="footer-advice"><Info size={15}/><span>O terminal executa Zsh em WebAssembly com filesystem virtual persistente. <strong>Não executa comandos no seu iPhone, servidor ou Codespace.</strong> Requisições HTTP externas não são habilitadas no sandbox.</span></div>
             </>} />

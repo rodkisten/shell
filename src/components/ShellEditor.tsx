@@ -9,9 +9,33 @@ import { basicSetup } from 'codemirror';
 import { indentWithTab } from '@codemirror/commands';
 import { autocompletion, type CompletionContext } from '@codemirror/autocomplete';
 import { shell } from '@codincod/codemirror-lang-shell';
+import { syntaxTree } from '@codemirror/language';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { contextualHints } from '../lib/suggestions';
+import { explainKnownShellTokens, type SemanticToken } from '../lib/semantic-shell';
+import { hoverTooltip } from '@codemirror/view';
 import { byName, SNIPPETS } from '../lib/commands';
+
+/**
+ * Lezer supplies structural context for the shell editor. This is a syntax
+ * breadcrumb, not a claim that the editor grammar is a full semantic Bash AST.
+ */
+function withSyntaxContext(token: SemanticToken, state: EditorState): SemanticToken {
+  const root = syntaxTree(state);
+  if (token.from >= root.length) return token;
+  let node: ReturnType<typeof root.resolveInner> | null = root.resolveInner(token.from, 1);
+  const names: string[] = [];
+  while (node && names.length < 8) {
+    if (!node.type.isAnonymous && node.name && node.name !== '⚠') names.push(node.name);
+    node = node.parent;
+  }
+  const path = names.reverse().join(' › ');
+  if (!path) return token;
+  return {
+    ...token,
+    description: token.description + '\\n\\nEstrutura sintática (CodeMirror): ' + path,
+  };
+}
 
 const setDiagnostics = StateEffect.define<DecorationSet>();
 const diagnosticsField = StateField.define<DecorationSet>({
@@ -24,7 +48,7 @@ const diagnosticsField = StateField.define<DecorationSet>({
   provide: field => EditorView.decorations.from(field),
 });
 
-export type ShellEditorHandle = { insert(text: string): void; focus(): void };
+export type ShellEditorHandle = { insert(text: string): void; focus(): void; reveal(from: number, to: number): void };
 type Props = {
   code: string;
   fontSize: number;
@@ -32,6 +56,7 @@ type Props = {
   onChange(value: string): void;
   onCursor(value: number): void;
   onInspect(command: string): void;
+  onSemanticInspect(token: SemanticToken): void;
   onRun(): void;
 };
 
@@ -57,14 +82,14 @@ const shellTheme = EditorView.theme({
 }, { dark: true });
 
 export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEditor(
-  { code, fontSize, wordWrap, onChange, onCursor, onInspect, onRun }, ref,
+  { code, fontSize, wordWrap, onChange, onCursor, onInspect, onSemanticInspect, onRun }, ref,
 ) {
   const node = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
   const fontCompartment = useRef(new Compartment());
   const wrapCompartment = useRef(new Compartment());
-  const callbacks = useRef({ onChange, onCursor, onInspect, onRun });
-  callbacks.current = { onChange, onCursor, onInspect, onRun };
+  const callbacks = useRef({ onChange, onCursor, onInspect, onSemanticInspect, onRun });
+  callbacks.current = { onChange, onCursor, onInspect, onSemanticInspect, onRun };
 
   useImperativeHandle(ref, () => ({
     insert(text) {
@@ -75,6 +100,13 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       view.focus();
     },
     focus() { editor.current?.focus(); },
+    reveal(from, to) {
+      const view = editor.current;
+      if (!view) return;
+      if (from < 0 || to < from || to > view.state.doc.length) return;
+      view.dispatch({ selection: { anchor: from, head: to }, scrollIntoView: true });
+      view.focus();
+    },
   }), []);
 
   useEffect(() => {
@@ -106,6 +138,34 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           oneDark,
           shell(),
           embeddedShellHighlight,
+          hoverTooltip((view, pos) => {
+            const match = explainKnownShellTokens(view.state.doc.toString())
+              .find((item) => item.from <= pos && pos < item.to);
+            if (!match) return null;
+            const token = withSyntaxContext(match, view.state);
+            return {
+              pos: token.from,
+              end: token.to,
+              above: true,
+              create() {
+                const dom = document.createElement('div');
+                dom.className = 'shell-semantic-tooltip';
+                dom.style.cssText = 'max-width:min(85vw,360px);padding:10px 12px;white-space:normal;background:#17181c;color:#f5f5f5;border:1px solid #34363e;border-radius:10px;line-height:1.5';
+                const title = document.createElement('strong');
+                title.textContent = token.title;
+                const detail = document.createElement('div');
+                detail.textContent = token.description;
+                dom.append(title, detail);
+                if (token.example) {
+                  const example = document.createElement('code');
+                  example.textContent = token.example;
+                  example.style.cssText = 'display:block;margin-top:6px;white-space:pre-wrap;color:#a5b4fc';
+                  dom.append(example);
+                }
+                return { dom };
+              },
+            };
+          }, { hoverTime: 250 }),
           diagnosticsField,
           shellTheme,
           fontCompartment.current.of(EditorView.theme({ '&': { fontSize: `${fontSize}px` } })),
@@ -116,20 +176,26 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           placeholder('Cole um script do ChatGPT ou comece a escrever…'),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) callbacks.current.onChange(update.state.doc.toString());
-            if (update.docChanged || update.selectionSet) callbacks.current.onCursor(update.state.selection.main.head);
+            if (update.docChanged || update.selectionSet) {
+              const pos = update.state.selection.main.head;
+              callbacks.current.onCursor(pos);
+              // Keyboard navigation and iOS caret movement use the same
+              // semantic selection as pointer interaction.
+              const token = explainKnownShellTokens(update.state.doc.toString())
+                .find((item) => item.from <= pos && pos < item.to);
+              if (token) callbacks.current.onSemanticInspect(withSyntaxContext(token, update.state));
+            }
           }),
           EditorView.domEventHandlers({
             pointerup(event, instance) {
               const pos = instance.posAtCoords({ x: event.clientX, y: event.clientY });
               if (pos == null) return false;
-              const line = instance.state.doc.lineAt(pos);
-              const at = pos - line.from;
-              const matcher = /(?:^|[|;&]\s*)(?:sudo\s+)?([\w.+-]+)/g;
-              for (const match of line.text.matchAll(matcher)) {
-                const index = (match.index ?? 0) + match[0].lastIndexOf(match[1]);
-                if (at >= index && at <= index + match[1].length && byName.has(match[1])) {
-                  callbacks.current.onInspect(match[1]);
-                  break;
+              const token = explainKnownShellTokens(instance.state.doc.toString())
+                .find((item) => item.from <= pos && pos < item.to);
+              if (token) {
+                callbacks.current.onSemanticInspect(withSyntaxContext(token, instance.state));
+                if (token.kind === 'command' && byName.has(token.text)) {
+                  callbacks.current.onInspect(token.text);
                 }
               }
               return false;

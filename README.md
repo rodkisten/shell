@@ -8,6 +8,22 @@ A mobile-first shell workbench for learning and daily use. Designed for the iPho
 
 Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa somente após a implementação; commits não substituem validação de build ou teste no Safari.
 
+### Explicação semântica local (PR #4)
+- [x] Hover contextual de comandos, opções conhecidas e operadores no CodeMirror 6.
+- [x] Botão **Explicar comando** usa validação Zsh do sh-syntax e catálogo local; não envia o script à API remota.
+- [x] Identificar explicitamente a cobertura parcial, sem apresentar tokenização como AST semântica completa.
+- [x] Exibir a AST estrutural real retornada por `sh-syntax`, com travessia limitada para desempenho no Safari.
+- [x] Criar modelo de nós AST com descrição, hierarquia, limites de percurso e ranges quando expostos pelo parser.
+- [x] Exibir lista de nós selecionáveis no painel, com navegação para o CodeMirror 6 quando há range válido.
+- [ ] Validar os formatos concretos de posições/tipos do sh-syntax e completar interpretação semântica de `Stmt`, `CallExpr`, `IfClause`, `ForClause`, `CmdSubst`, `Redirect`.
+- [x] Criar formato interno de especificações CLI e suporte inicial a subcomandos, flags com valores e argumentos posicionais (Git, Docker, curl, npm).
+- [ ] Importar e normalizar specs de subcomandos e flags do Fig/Carapace, preservando procedência.
+- [x] Evitar explicações enganosas em linhas com estruturas de controle, substituições e expansões dinâmicas (cobertura conservadora).
+- [ ] Completar flags agrupadas, valores inline, comandos aninhados, comentários inline, redirecionamentos e variações por versão da CLI.
+- [x] Painel inicial de explicação acionado por toque no CodeMirror, com descrição, exemplo e fonte.
+- [ ] Navegação bidirecional por nós da AST e validação touch no Safari.
+- [ ] Validar typecheck, lint, build e comportamento em Safari iPhone.
+
 ### Editor e diagnósticos
 - [x] Editor CodeMirror 6 com syntax highlighting, autocomplete e atalhos.
 - [x] Parser experimental Zsh com marcações sublinhadas no editor (debounce de 450 ms; **não** equivale a ShellCheck completo).

@@ -5,14 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc --noEmit && vite build",
+    "build": "npm run ast:inspect && tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "deploy": "npm run build && wrangler deploy",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "linux:assets": "bash scripts/prepare-linux-assets.sh"
+    "linux:assets": "bash scripts/prepare-linux-assets.sh",
+    "ast:inspect": "node scripts/inspect-shell-ast.mjs"
   },
   "dependencies": {
     "@brandon.zylstra/zsh-wasm": "^0.6.0",
