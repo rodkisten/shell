@@ -114,9 +114,9 @@ export async function activeShellCommand(
           // env -S re-parses a string into multiple arguments; the AST's
           // original word boundaries are not the eventual command boundaries.
           return null;
-        } else if (/^--(?:unset|chdir)=.+$/.test(arg) || /^-[uC].+$/.test(arg)) {
+        } else if (/^--(?:unset|chdir|argv0)=.+$/.test(arg) || /^-[uCa].+$/.test(arg)) {
           commandIndex++;
-        } else if (arg === '-u' || arg === '--unset' || arg === '-C' || arg === '--chdir') {
+        } else if (arg === '-u' || arg === '--unset' || arg === '-C' || arg === '--chdir' || arg === '-a' || arg === '--argv0') {
           if (!words[commandIndex + 1]) return null;
           commandIndex += 2;
         } else if (arg.startsWith('-')) {
