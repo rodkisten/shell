@@ -9,6 +9,10 @@ A mobile-first shell workbench for learning and daily use. Designed for the iPho
 Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa somente após a implementação; commits não substituem validação de build ou teste no Safari.
 
 ### Explicação semântica local (PR #4)
+- [x] Substituir scanner regex de comandos por tokens derivados de nós `CallExpr`/`Word` da AST real.
+- [x] Compartilhar análise assíncrona em cache entre CodeMirror e botão Explicar.
+- [ ] Adicionar tokens de opções/subcomandos via especificações externas, sem recriar um parser shell.
+- [ ] Verificar navegação touch e invalidação de cache no Safari iPhone.
 - [x] Hover contextual de comandos, opções conhecidas e operadores no CodeMirror 6.
 - [x] Botão **Explicar comando** usa validação Zsh do sh-syntax e catálogo local; não envia o script à API remota.
 - [x] Identificar explicitamente a cobertura parcial, sem apresentar tokenização como AST semântica completa.
