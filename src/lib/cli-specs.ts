@@ -1,11 +1,24 @@
 /** Curated CLI metadata until Fig/Carapace specifications are imported. */
-export type CliOption = { names: string[]; description: string; takesValue?: boolean; effect?: 'delete' | 'write' | 'network' | 'execute' };
+export type CliValueSource = 'npm-script' | 'npm-workspace' | 'git-branch';
+export type CliValueSpec = {
+  name: string;
+  values?: string[];
+  valueSource?: CliValueSource;
+};
+export type CliOption = {
+  names: string[];
+  description: string;
+  takesValue?: boolean;
+  values?: string[];
+  valueSource?: CliValueSource;
+  effect?: 'delete' | 'write' | 'network' | 'execute';
+};
 export type CliSpec = {
   name: string;
   description: string;
   options?: CliOption[];
   subcommands?: Record<string, CliSpec>;
-  positionals?: string[];
+  positionals?: Array<string | CliValueSpec>;
 };
 
 export const cliSpecs: Record<string, CliSpec> = {
@@ -79,8 +92,8 @@ export const cliSpecs: Record<string, CliSpec> = {
         { names: ['-D'], description: 'Força a remoção de uma branch.', takesValue: true, effect: 'delete' },
         { names: ['-a', '--all'], description: 'Lista branches locais e remotas.' },
       ] },
-      checkout: { name: 'checkout', description: 'Alterna referências ou restaura arquivos.', positionals: ['Referência ou caminho'], options: [{ names: ['-b'], description: 'Cria uma branch e muda para ela.', takesValue: true }] },
-      switch: { name: 'switch', description: 'Muda a branch ativa.', positionals: ['Branch'], options: [{ names: ['-c', '--create'], description: 'Cria uma nova branch.', takesValue: true }] },
+      checkout: { name: 'checkout', description: 'Alterna referências ou restaura arquivos.', positionals: [{ name: 'Referência ou caminho', valueSource: 'git-branch' }], options: [{ names: ['-b'], description: 'Cria uma branch e muda para ela.', takesValue: true }] },
+      switch: { name: 'switch', description: 'Muda a branch ativa.', positionals: [{ name: 'Branch', valueSource: 'git-branch' }], options: [{ names: ['-c', '--create'], description: 'Cria uma nova branch.', takesValue: true }] },
       restore: { name: 'restore', description: 'Restaura arquivos da árvore de trabalho.', positionals: ['Caminho'], options: [
         { names: ['--staged'], description: 'Restaura o índice.' },
         { names: ['-s', '--source'], description: 'Usa uma árvore como origem.', takesValue: true },
@@ -102,16 +115,16 @@ export const cliSpecs: Record<string, CliSpec> = {
         { names: ['--all'], description: 'Busca todos os remotos.' },
         { names: ['--prune'], description: 'Remove referências remotas obsoletas.' },
       ] },
-      merge: { name: 'merge', description: 'Integra outra linha de desenvolvimento.', positionals: ['Commit ou branch'], options: [
+      merge: { name: 'merge', description: 'Integra outra linha de desenvolvimento.', positionals: [{ name: 'Commit ou branch', valueSource: 'git-branch' }], options: [
         { names: ['--no-ff'], description: 'Cria commit de merge mesmo quando fast-forward seria possível.' },
         { names: ['--abort'], description: 'Aborta um merge em andamento.' },
       ] },
-      rebase: { name: 'rebase', description: 'Reaplica commits sobre uma nova base.', positionals: ['Base'], options: [
+      rebase: { name: 'rebase', description: 'Reaplica commits sobre uma nova base.', positionals: [{ name: 'Base', valueSource: 'git-branch' }], options: [
         { names: ['-i', '--interactive'], description: 'Rebase interativo.' },
         { names: ['--continue'], description: 'Continua após resolver conflitos.' },
         { names: ['--abort'], description: 'Aborta o rebase.' },
       ] },
-      push: { name: 'push', description: 'Envia commits para um repositório remoto.', positionals: ['Remoto', 'Refspec'], options: [
+      push: { name: 'push', description: 'Envia commits para um repositório remoto.', positionals: ['Remoto', { name: 'Refspec', valueSource: 'git-branch' }], options: [
         { names: ['-f', '--force'], description: 'Sobrescreve histórico remoto. Operação potencialmente destrutiva.', effect: 'write' },
         { names: ['--force-with-lease'], description: 'Força com proteção contra alterações remotas inesperadas.', effect: 'write' },
         { names: ['-u', '--set-upstream'], description: 'Define upstream para a branch.', takesValue: true },
@@ -122,7 +135,7 @@ export const cliSpecs: Record<string, CliSpec> = {
     name: 'curl', description: 'Transfere dados entre cliente e servidor.',
     positionals: ['URL'],
     options: [
-      { names: ['-X', '--request'], description: 'Define o método HTTP.', takesValue: true, effect: 'network' },
+      { names: ['-X', '--request'], description: 'Define o método HTTP.', takesValue: true, values: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], effect: 'network' },
       { names: ['-H', '--header'], description: 'Adiciona um cabeçalho HTTP.', takesValue: true },
       { names: ['-d', '--data'], description: 'Envia dados no corpo da requisição.', takesValue: true, effect: 'network' },
       { names: ['-o', '--output'], description: 'Salva a resposta em um arquivo.', takesValue: true, effect: 'write' },
@@ -132,6 +145,10 @@ export const cliSpecs: Record<string, CliSpec> = {
   },
   npm: {
     name: 'npm', description: 'Gerencia pacotes e scripts Node.js.',
+    options: [
+      { names: ['-w', '--workspace'], description: 'Executa no workspace informado.', takesValue: true, valueSource: 'npm-workspace' },
+      { names: ['--workspaces'], description: 'Executa em todos os workspaces.' },
+    ],
     subcommands: {
       install: { name: 'install', description: 'Instala dependências.', positionals: ['Pacote'], options: [
         { names: ['-D', '--save-dev'], description: 'Adiciona dependência de desenvolvimento.' },
@@ -140,10 +157,10 @@ export const cliSpecs: Record<string, CliSpec> = {
       ] },
       ci: { name: 'ci', description: 'Instala exatamente a partir do lockfile.', options: [
         { names: ['--ignore-scripts'], description: 'Não executa scripts de lifecycle.' },
-        { names: ['--omit'], description: 'Omite tipos de dependência.', takesValue: true },
+        { names: ['--omit'], description: 'Omite tipos de dependência.', takesValue: true, values: ['dev', 'optional', 'peer'] },
       ] },
-      run: { name: 'run', description: 'Executa um script definido em package.json.', positionals: ['Nome do script'], options: [
-        { names: ['--workspace'], description: 'Executa em um workspace.', takesValue: true },
+      run: { name: 'run', description: 'Executa um script definido em package.json.', positionals: [{ name: 'Nome do script', valueSource: 'npm-script' }], options: [
+        { names: ['--workspace'], description: 'Executa em um workspace.', takesValue: true, valueSource: 'npm-workspace' },
         { names: ['--workspaces'], description: 'Executa em todos os workspaces.' },
       ] },
       exec: { name: 'exec', description: 'Executa um comando de um pacote.', positionals: ['Comando'], options: [

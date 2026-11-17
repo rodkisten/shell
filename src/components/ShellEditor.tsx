@@ -12,7 +12,8 @@ import { shell } from '@codincod/codemirror-lang-shell';
 import { syntaxTree } from '@codemirror/language';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { contextualHintsFromActive } from '../lib/suggestions';
-import { cliCompletions } from '../lib/cli-completions';
+import { cliCompletions, cliValueRequest } from '../lib/cli-completions';
+import { valueCompletions } from '../lib/completion-values';
 import { activeShellCommand } from '../lib/shell-command-ast';
 import { explainKnownShellTokens, type SemanticToken } from '../lib/semantic-shell';
 import { hoverTooltip } from '@codemirror/view';
@@ -132,6 +133,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       // are metadata sources only and never re-parse shell text.
       const active = await activeShellCommand(source, context.pos);
       const cliItems = cliCompletions(active, context.pos);
+      const valueItems = await valueCompletions(cliValueRequest(active, context.pos));
       const hints = active && context.pos > active.executableTo
         ? []
         : contextualHintsFromActive(active, context.pos);
@@ -140,10 +142,18 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
         ? SNIPPETS.filter(s => s.id.startsWith(before.text))
         : [];
 
-      if (!context.explicit && before.from === before.to && !cliItems.length) return null;
+      if (!context.explicit && before.from === before.to && !cliItems.length && !valueItems.length) return null;
 
       const seen = new Set<string>();
       const options = [
+        ...valueItems.map(item => ({
+          label: item.label,
+          type: 'variable',
+          detail: item.detail,
+          info: item.info,
+          apply: item.label,
+          boost: 120,
+        })),
         ...cliItems.map(item => ({
           label: item.label,
           type: item.kind === 'subcommand' ? 'keyword' : 'property',

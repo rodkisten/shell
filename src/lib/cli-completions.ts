@@ -1,5 +1,5 @@
 import type { ActiveShellCommand } from './shell-command-ast';
-import { cliSpecs, type CliOption, type CliSpec } from './cli-specs';
+import { cliSpecs, type CliOption, type CliSpec, type CliValueSource, type CliValueSpec } from './cli-specs';
 import { fromFigWordsContext, type CompletionItem } from './completion-sources';
 import figCurl from './specs/fig-curl.json';
 import figDocker from './specs/fig-docker.json';
@@ -46,11 +46,14 @@ function resolveSpec(root: CliSpec, words: readonly string[]) {
   const scopes: CliSpec[] = [root];
   let current = root;
   let awaitingValue = false;
+  let awaitingOption: CliOption | undefined;
   let positionalOnly = false;
+  let positionalIndex = 0;
 
   for (const word of words) {
     if (awaitingValue) {
       awaitingValue = false;
+      awaitingOption = undefined;
       continue;
     }
     if (word === '--') {
@@ -63,6 +66,7 @@ function resolveSpec(root: CliSpec, words: readonly string[]) {
         .map(scope => optionByName(scope, name))
         .find(Boolean);
       awaitingValue = Boolean(option?.takesValue && !word.includes('='));
+      awaitingOption = awaitingValue ? option : undefined;
       continue;
     }
     if (positionalOnly) continue;
@@ -70,10 +74,13 @@ function resolveSpec(root: CliSpec, words: readonly string[]) {
     if (next) {
       current = next;
       scopes.push(next);
+      positionalIndex = 0;
+      continue;
     }
+    positionalIndex++;
   }
 
-  return { current, scopes, awaitingValue, positionalOnly };
+  return { current, scopes, awaitingValue, awaitingOption, positionalOnly, positionalIndex };
 }
 
 function fromCliSpec(executable: string, words: readonly string[]): CliCompletion[] {
@@ -179,4 +186,50 @@ export function cliCompletions(
     const exact = Number(b.label === needle) - Number(a.label === needle);
     return exact || a.label.localeCompare(b.label);
   });
+}
+
+
+export type CliValueRequest = {
+  label: string;
+  needle: string;
+  values?: string[];
+  valueSource?: CliValueSource;
+};
+
+function positionalSpec(spec: CliSpec, index: number): CliValueSpec | undefined {
+  const values = spec.positionals ?? [];
+  if (!values.length) return undefined;
+  const raw = values[Math.min(index, values.length - 1)];
+  return typeof raw === 'string' ? { name: raw } : raw;
+}
+
+export function cliValueRequest(
+  active: ActiveShellCommand | null,
+  cursor: number,
+): CliValueRequest | null {
+  if (!active || cursor <= active.executableTo) return null;
+  const root = cliSpecs[active.executable];
+  if (!root) return null;
+
+  const { completedWords, needle, positionalOnly } = completionCursor(active, cursor);
+  if (positionalOnly) return null;
+  const state = resolveSpec(root, completedWords);
+
+  if (state.awaitingOption) {
+    return {
+      label: state.awaitingOption.names.at(-1) ?? state.awaitingOption.names[0] ?? 'Valor',
+      needle,
+      values: state.awaitingOption.values,
+      valueSource: state.awaitingOption.valueSource,
+    };
+  }
+
+  const positional = positionalSpec(state.current, state.positionalIndex);
+  if (!positional || (!positional.values?.length && !positional.valueSource)) return null;
+  return {
+    label: positional.name,
+    needle,
+    values: positional.values,
+    valueSource: positional.valueSource,
+  };
 }

@@ -178,9 +178,10 @@ function classifyCall(call: IndexedShellNode, snapshot: ShellSnapshot, tokens: S
 
     if (activeSpec && !value.startsWith('-')) {
       const positionals = activeSpec.positionals ?? [];
-      const label = positionals.length
+      const positional = positionals.length
         ? positionals[Math.min(positionalIndex, positionals.length - 1)]
         : undefined;
+      const label = typeof positional === 'string' ? positional : positional?.name;
       if (label) {
         pushUnique(tokens, seen, {
           ...range,
