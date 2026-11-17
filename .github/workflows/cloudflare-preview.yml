@@ -37,6 +37,23 @@ jobs:
             echo "::error::Configure CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as GitHub Actions repository secrets."
             exit 1
           fi
+      - name: Enable workers.dev preview URLs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          response="$(mktemp)"
+          trap 'rm -f "$response"' EXIT
+          curl --fail-with-body --show-error --silent \
+            --request POST \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data '{"enabled":false,"previews_enabled":true}' \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/shell/subdomain" \
+            --output "$response"
+          jq -e '.success == true and .result.enabled == false and .result.previews_enabled == true' "$response" >/dev/null
+
       - id: deploy
         name: Create or update Cloudflare Worker Preview
         env:
@@ -114,11 +131,37 @@ jobs:
           echo "url=$custom_preview_url" >> "$GITHUB_OUTPUT"
           echo "Custom preview responded successfully: $custom_preview_url" >> "$GITHUB_STEP_SUMMARY"
 
+      - id: native_preview
+        name: Verify workers.dev PR preview URL
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          response="$(mktemp)"
+          trap 'rm -f "$response"' EXIT
+          curl --fail-with-body --show-error --silent \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/workers/shell/previews/pr-$PR_NUMBER" \
+            --output "$response"
+          native_preview_url="$(jq -r '.result.urls[]? | select(endswith(".workers.dev"))' "$response" | head -n 1)"
+          if [[ -z "$native_preview_url" || "$native_preview_url" == "null" ]]; then
+            echo "::error::Cloudflare preview did not expose a workers.dev URL"
+            cat "$response" | jq '{success, errors, messages, result: {slug: .result.slug, urls: .result.urls}}' >&2
+            exit 1
+          fi
+          curl --fail --show-error --silent --retry 8 --retry-all-errors --retry-delay 3 \
+            --output /dev/null "$native_preview_url/"
+          echo "url=$native_preview_url" >> "$GITHUB_OUTPUT"
+          echo "Native preview responded successfully: $native_preview_url" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Point shell.preview.migos.club at this successful preview
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CUSTOM_PREVIEW_URL: ${{ steps.custom_preview.outputs.url }}
+          NATIVE_PREVIEW_URL: ${{ steps.native_preview.outputs.url }}
         run: |
           set -euo pipefail
           worker="$(mktemp)"
@@ -126,27 +169,28 @@ jobs:
           trap 'rm -f "$worker" "$response"' EXIT
 
           node >"$worker" <<'NODE'
-          const target = process.env.CUSTOM_PREVIEW_URL;
-          if (!/^https:\/\/pr-\d+\.preview\.shell\.migos\.club$/.test(target)) {
-            throw new Error('Refusing to publish an unexpected preview redirect target: ' + target);
+          const custom = process.env.CUSTOM_PREVIEW_URL;
+          const native = process.env.NATIVE_PREVIEW_URL;
+          if (!/^https:\/\/pr-\d+\.preview\.shell\.migos\.club$/.test(custom)) {
+            throw new Error('Refusing unexpected custom preview URL: ' + custom);
+          }
+          if (!/^https:\/\/pr-\d+-shell\.[a-z0-9-]+\.workers\.dev$/.test(native)) {
+            throw new Error('Refusing unexpected workers.dev preview URL: ' + native);
           }
           process.stdout.write(`addEventListener("fetch", event => {
             const incoming = new URL(event.request.url);
-            const target = new URL(${JSON.stringify(target)});
+            const target = new URL(${JSON.stringify(native)});
             target.pathname = incoming.pathname;
             target.search = incoming.search;
-            event.respondWith((async () => {
-              const response = await fetch(new Request(target.toString(), event.request));
-              const headers = new Headers(response.headers);
-              headers.set("Cache-Control", "no-store");
-              headers.set("X-Robots-Tag", "noindex");
-              headers.set("X-Shell-Preview-Target", ${JSON.stringify(target.origin)});
-              return new Response(response.body, {
-                status: response.status,
-                statusText: response.statusText,
-                headers
-              });
-            })());
+            event.respondWith(new Response(null, {
+              status: 302,
+              headers: {
+                "Location": target.toString(),
+                "Cache-Control": "no-store",
+                "X-Robots-Tag": "noindex",
+                "X-Shell-Preview-Target": ${JSON.stringify(custom)}
+              }
+            }));
           });`);
           NODE
 
@@ -158,28 +202,27 @@ jobs:
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/shell-preview-latest" \
             --output "$response"
 
-          node - "$response" <<'NODE'
-          const fs = require('node:fs');
-          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-          if (!data.success) {
-            console.error(data.errors ?? data);
-            process.exit(1);
-          }
-          NODE
+          jq -e '.success == true' "$response" >/dev/null
 
-          actual_target="$(
-            curl --fail --show-error --silent --retry 8 --retry-all-errors --retry-delay 3 \
-              --dump-header - --output /dev/null "https://shell.preview.migos.club/" |
-              awk 'BEGIN{IGNORECASE=1} /^x-shell-preview-target:/ {$1=""; sub(/^ /,""); sub(/\r$/,""); print; exit}'
-          )"
+          headers="$(mktemp)"
+          trap 'rm -f "$worker" "$response" "$headers"' EXIT
+          curl --show-error --silent --retry 8 --retry-all-errors --retry-delay 3 \
+            --dump-header "$headers" --output /dev/null "https://shell.preview.migos.club/"
+          actual_target="$(awk 'BEGIN{IGNORECASE=1} /^x-shell-preview-target:/ {$1=""; sub(/^ /,""); sub(/\r$/,""); print; exit}' "$headers")"
+          actual_location="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {$1=""; sub(/^ /,""); sub(/\r$/,""); print; exit}' "$headers")"
           if [[ "$actual_target" != "$CUSTOM_PREVIEW_URL" ]]; then
-            echo "::error::Latest-preview proxy mismatch. Expected $CUSTOM_PREVIEW_URL, got $actual_target"
+            echo "::error::Stable preview identity mismatch. Expected $CUSTOM_PREVIEW_URL, got $actual_target"
             exit 1
           fi
-          curl --fail --show-error --silent --retry 8 --retry-all-errors --retry-delay 3 \
+          if [[ "$actual_location" != "$NATIVE_PREVIEW_URL/" ]]; then
+            echo "::error::Stable preview destination mismatch. Expected $NATIVE_PREVIEW_URL/, got $actual_location"
+            exit 1
+          fi
+          curl --location --fail --show-error --silent --retry 8 --retry-all-errors --retry-delay 3 \
             --output /dev/null "https://shell.preview.migos.club/"
           echo "Latest successful preview: $CUSTOM_PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
-          echo "Stable proxy: https://shell.preview.migos.club" >> "$GITHUB_STEP_SUMMARY"
+          echo "Native fallback: $NATIVE_PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "Stable preview: https://shell.preview.migos.club" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment stable preview URLs on PR
         env:
@@ -241,28 +284,39 @@ jobs:
             exit 0
           fi
 
+          native_response="$(mktemp)"
           worker="$(mktemp)"
           response="$(mktemp)"
-          trap 'rm -f "$worker" "$response"' EXIT
-          CUSTOM_PREVIEW_URL="$fallback" node >"$worker" <<'NODE'
-          const target = process.env.CUSTOM_PREVIEW_URL;
+          trap 'rm -f "$native_response" "$worker" "$response"' EXIT
+          fallback_number="${fallback#https://pr-}"
+          fallback_number="${fallback_number%%.*}"
+          curl --fail-with-body --show-error --silent \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/workers/shell/previews/pr-$fallback_number" \
+            --output "$native_response"
+          native_fallback="$(jq -r '.result.urls[]? | select(endswith(".workers.dev"))' "$native_response" | head -n 1)"
+          if [[ -z "$native_fallback" || "$native_fallback" == "null" ]]; then
+            echo "::warning::Fallback preview has no workers.dev URL. Keeping closing preview alive."
+            echo "safe_to_delete=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CUSTOM_PREVIEW_URL="$fallback" NATIVE_PREVIEW_URL="$native_fallback" node >"$worker" <<'NODE'
+          const custom = process.env.CUSTOM_PREVIEW_URL;
+          const native = process.env.NATIVE_PREVIEW_URL;
           process.stdout.write(`addEventListener("fetch", event => {
             const incoming = new URL(event.request.url);
-            const target = new URL(${JSON.stringify(target)});
+            const target = new URL(${JSON.stringify(native)});
             target.pathname = incoming.pathname;
             target.search = incoming.search;
-            event.respondWith((async () => {
-              const response = await fetch(new Request(target.toString(), event.request));
-              const headers = new Headers(response.headers);
-              headers.set("Cache-Control", "no-store");
-              headers.set("X-Robots-Tag", "noindex");
-              headers.set("X-Shell-Preview-Target", ${JSON.stringify(target.origin)});
-              return new Response(response.body, {
-                status: response.status,
-                statusText: response.statusText,
-                headers
-              });
-            })());
+            event.respondWith(new Response(null, {
+              status: 302,
+              headers: {
+                "Location": target.toString(),
+                "Cache-Control": "no-store",
+                "X-Robots-Tag": "noindex",
+                "X-Shell-Preview-Target": ${JSON.stringify(custom)}
+              }
+            }));
           });`);
           NODE
           curl --fail-with-body --show-error --silent \
@@ -272,16 +326,9 @@ jobs:
             --data-binary "@$worker" \
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/shell-preview-latest" \
             --output "$response"
-          node - "$response" <<'NODE'
-          const fs = require('node:fs');
-          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-          if (!data.success) {
-            console.error(data.errors ?? data);
-            process.exit(1);
-          }
-          NODE
+          jq -e '.success == true' "$response" >/dev/null
           echo "safe_to_delete=true" >> "$GITHUB_OUTPUT"
-          echo "Latest-preview proxy moved to $fallback" >> "$GITHUB_STEP_SUMMARY"
+          echo "Latest-preview redirect moved to $fallback" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Delete closed PR preview
         if: steps.redirect_guard.outputs.safe_to_delete == 'true'
