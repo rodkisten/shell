@@ -1,4 +1,4 @@
-import { LangVariant, parse } from 'sh-syntax';
+import { parseShellAst } from './shell-parser';
 
 type AstNode = {
   type?: string;
@@ -132,7 +132,7 @@ export async function activeShellCommand(
   if (cursor < 0 || cursor > source.length) return null;
   let ast: unknown;
   try {
-    ast = await parse(source, { variant: LangVariant.LangZsh, keepComments: true });
+    ast = await parseShellAst(source);
   } catch {
     return null;
   }

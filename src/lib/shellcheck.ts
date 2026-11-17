@@ -1,4 +1,4 @@
-import { parse, LangVariant } from 'sh-syntax';
+import { parseShellAst } from './shell-parser';
 export type Finding = {
   line: number;
   endLine?: number;
@@ -17,7 +17,7 @@ export type Finding = {
 export async function checkShell(script: string, signal?: AbortSignal): Promise<Finding[]> {
   if (!script.trim() || signal?.aborted) return [];
   try {
-    await parse(script, { variant: LangVariant.LangZsh, keepComments: true });
+    await parseShellAst(script);
     return [];
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

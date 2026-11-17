@@ -1,7 +1,7 @@
-import { LangVariant, parse } from 'sh-syntax';
 import { byName } from './commands';
 import { cliSpecs, type CliSpec } from './cli-specs';
 import { resolveShellCommandWords } from './shell-command-ast';
+import { parseShellAst } from './shell-parser';
 
 export type SemanticToken = {
   from: number;
@@ -292,7 +292,7 @@ let cachedSemanticTokens: Promise<SemanticToken[]> | null = null;
 export function explainKnownShellTokens(code: string): Promise<SemanticToken[]> {
   if (cachedSemanticTokens && code === cachedSource) return cachedSemanticTokens;
   cachedSource = code;
-  cachedSemanticTokens = parse(code, { variant: LangVariant.LangZsh, keepComments: true })
+  cachedSemanticTokens = parseShellAst(code)
     .then(ast => explainKnownShellTokensFromAst(code, ast))
     .catch(() => []);
   return cachedSemanticTokens;

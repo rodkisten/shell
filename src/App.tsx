@@ -17,8 +17,8 @@ import { ReferencePanel } from './components/ReferencePanel';
 import { SNIPPETS } from './lib/commands';
 import { contextualHints, type Hint } from './lib/suggestions';
 import { explainKnownShellTokensFromAst, type SemanticToken } from './lib/semantic-shell';
-import { parse, LangVariant } from 'sh-syntax';
 import { inspectShellAst, type ShellAstNode } from './lib/shell-ast';
+import { parseShellAst } from './lib/shell-parser';
 import { formatShell } from './lib/format';
 import { checkShell, applyAvailableFixes, type Finding } from './lib/shellcheck';
 import { cancelShell, executeScript, resetShell } from './lib/terminal';
@@ -270,7 +270,7 @@ export function App() {
     try {
       // Validate with the already-installed shell parser. Do not send scripts
       // (which may contain credentials) to the remote documentation endpoint.
-      const ast = await parse(script, { variant: LangVariant.LangZsh, keepComments: true });
+      const ast = await parseShellAst(script);
       const overview = inspectShellAst(ast, script);
       setAstNodes(overview.nodes);
       const tokens = explainKnownShellTokensFromAst(script, ast);
