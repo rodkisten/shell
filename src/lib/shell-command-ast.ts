@@ -59,16 +59,24 @@ export async function activeShellCommand(
   // A newline or shell separator ends its completion context.
   const candidates = calls.filter(call =>
     typeof call.start === 'number' && typeof call.end === 'number'
-    && call.start <= cursor && call.end <= cursor
-    && !/[\r\n;|&]/.test(source.slice(call.end, cursor))
-    && source.slice(call.end, cursor).trim() === '',
-  ).sort((a, b) => (b.start ?? 0) - (a.start ?? 0));
+    && call.start <= cursor
+    // The cursor may be inside the last word while it is being typed.
+    // It may also follow the completed AST command by horizontal spaces.
+    && (cursor <= call.end || (
+      !/[\r\n;|&]/.test(source.slice(call.end, cursor))
+      && source.slice(call.end, cursor).trim() === ''
+    ))
+  ).sort((a, b) =>
+    // Prefer the innermost AST command for nested command substitutions.
+    (a.end! - a.start!) - (b.end! - b.start!)
+    || (b.start ?? 0) - (a.start ?? 0)
+  );
   const call = candidates[0];
   if (!call || !Array.isArray(call.args) || !call.args.length) return null;
   const words = call.args.filter(arg =>
     typeof arg.start === 'number' && typeof arg.end === 'number'
-    && arg.end <= cursor
-  ).map(arg => source.slice(arg.start!, arg.end!));
+    && arg.start <= cursor
+  ).map(arg => source.slice(arg.start!, Math.min(arg.end!, cursor)));
   if (!words.length) return null;
   // Resolve literal wrappers from AST word boundaries. Only skip options
   // whose arity is known; unknown flags fail closed instead of guessing.
