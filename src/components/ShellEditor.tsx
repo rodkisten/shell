@@ -63,6 +63,17 @@ type Props = {
   onRun(): void;
 };
 
+// iOS Safari checks the editable element's computed font size on focus.
+ // Keep it at 16px and scale the editor visually with CSS zoom instead of
+ // transforming CodeMirror's content (which breaks caret coordinates).
+function editorFontTheme(fontSize: number) {
+  const size = Math.max(8, Math.min(32, fontSize));
+  return EditorView.theme({
+    '&': { fontSize: '16px', zoom: String(size / 16) },
+    '.cm-content': { fontSize: '16px' },
+  });
+}
+
 const shellTheme = EditorView.theme({
   '&': { height: '100%', background: '#090b0f' },
   '.cm-scroller': { fontFamily: "'SFMono-Regular', 'SF Mono', Menlo, Consolas, monospace", overflow: 'auto' },
@@ -151,9 +162,11 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           oneDark,
           shell(),
           embeddedShellHighlight,
-          hoverTooltip((view, pos) => {
-            const match = explainKnownShellTokens(view.state.doc.toString())
+          hoverTooltip(async (view, pos) => {
+            const source = view.state.doc.toString();
+            const match = (await explainKnownShellTokens(source))
               .find((item) => item.from <= pos && pos < item.to);
+            if (view.state.doc.toString() !== source) return null;
             if (!match) return null;
             const token = withSyntaxContext(match, view.state);
             return {
@@ -181,7 +194,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           }, { hoverTime: 250 }),
           diagnosticsField,
           shellTheme,
-          fontCompartment.current.of(EditorView.theme({ '&': { fontSize: `${fontSize}px` } })),
+          fontCompartment.current.of(editorFontTheme(fontSize)),
           wrapCompartment.current.of(wordWrap ? EditorView.lineWrapping : []),
           EditorState.tabSize.of(2),
           keymap.of([indentWithTab, { key: 'Mod-Enter', run() { callbacks.current.onRun(); return true; } }]),
@@ -194,23 +207,28 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
               callbacks.current.onCursor(pos);
               // Keyboard navigation and iOS caret movement use the same
               // semantic selection as pointer interaction.
-              const token = explainKnownShellTokens(update.state.doc.toString())
-                .find((item) => item.from <= pos && pos < item.to);
-              if (token) callbacks.current.onSemanticInspect(withSyntaxContext(token, update.state));
+              const source = update.state.doc.toString();
+              void explainKnownShellTokens(source).then(tokens => {
+                const current = editor.current;
+                if (!current || current.state.doc.toString() !== source || current.state.selection.main.head !== pos) return;
+                const token = tokens.find(item => item.from <= pos && pos < item.to);
+                if (token) callbacks.current.onSemanticInspect(withSyntaxContext(token, current.state));
+              });
             }
           }),
           EditorView.domEventHandlers({
             pointerup(event, instance) {
               const pos = instance.posAtCoords({ x: event.clientX, y: event.clientY });
               if (pos == null) return false;
-              const token = explainKnownShellTokens(instance.state.doc.toString())
-                .find((item) => item.from <= pos && pos < item.to);
-              if (token) {
-                callbacks.current.onSemanticInspect(withSyntaxContext(token, instance.state));
-                if (token.kind === 'command' && byName.has(token.text)) {
-                  callbacks.current.onInspect(token.text);
-                }
-              }
+              const source = instance.state.doc.toString();
+              void explainKnownShellTokens(source).then(tokens => {
+                const current = editor.current;
+                if (!current || current.state.doc.toString() !== source) return;
+                const token = tokens.find(item => item.from <= pos && pos < item.to);
+                if (!token) return;
+                callbacks.current.onSemanticInspect(withSyntaxContext(token, current.state));
+                if (token.kind === 'command' && byName.has(token.text)) callbacks.current.onInspect(token.text);
+              });
               return false;
             },
           }),
@@ -223,7 +241,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
   }, []);
 
   useEffect(() => {
-    editor.current?.dispatch({ effects: fontCompartment.current.reconfigure(EditorView.theme({ '&': { fontSize: `${fontSize}px` } })) });
+    editor.current?.dispatch({ effects: fontCompartment.current.reconfigure(editorFontTheme(fontSize)) });
   }, [fontSize]);
 
   useEffect(() => {

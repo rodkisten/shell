@@ -16,7 +16,7 @@ import './components/workspace.css';
 import { ReferencePanel } from './components/ReferencePanel';
 import { SNIPPETS } from './lib/commands';
 import { contextualHints } from './lib/suggestions';
-import { explainKnownShellTokens, type SemanticToken } from './lib/semantic-shell';
+import { explainKnownShellTokensFromAst, type SemanticToken } from './lib/semantic-shell';
 import { parse, LangVariant } from 'sh-syntax';
 import { inspectShellAst, type ShellAstNode } from './lib/shell-ast';
 import { formatShell } from './lib/format';
@@ -266,7 +266,7 @@ export function App() {
       const ast = await parse(script, { variant: LangVariant.LangZsh, keepComments: true });
       const overview = inspectShellAst(ast, script);
       setAstNodes(overview.nodes);
-      const tokens = explainKnownShellTokens(script);
+      const tokens = explainKnownShellTokensFromAst(script, ast);
       const steps = tokens.map((token, index) =>
         `${index + 1}. ${token.text} · ${token.title}\n   ${token.description}${token.example ? '\n   Exemplo: ' + token.example : ''}`
       );
