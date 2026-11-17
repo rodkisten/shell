@@ -122,7 +122,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       const snippets = before.text ? SNIPPETS.filter(s => s.id.startsWith(before.text)) : [];
       // mvdan/sh AST determines the active command and its argument boundaries.
       // No regex pipeline splitting, quote guessing or shell token scanner.
-      const active = await activeShellCommand(source, before.from);
+      const active = await activeShellCommand(source, context.pos);
       const figOptions = active?.executable === 'curl' && before.text.startsWith('-')
         && !active.words.includes('--')
         ? fromFigWords(figCurl, active.words)
