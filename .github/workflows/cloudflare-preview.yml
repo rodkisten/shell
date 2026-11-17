@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   preview:
+    environment: production
     if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
@@ -67,6 +68,7 @@ jobs:
           Updated automatically on every PR commit. This preview does not deploy to production."
 
   cleanup:
+    environment: production
     if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
