@@ -11,7 +11,7 @@ import { autocompletion, type CompletionContext } from '@codemirror/autocomplete
 import { shell } from '@codincod/codemirror-lang-shell';
 import { syntaxTree } from '@codemirror/language';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { contextualHints } from '../lib/suggestions';
+import { contextualHintsFromActive } from '../lib/suggestions';
 import figCurl from '../lib/specs/fig-curl.json';
 import { fromFigWords } from '../lib/completion-sources';
 import { activeShellCommand } from '../lib/shell-command-ast';
@@ -129,11 +129,11 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       const before = context.matchBefore(/[\w.+-]*/);
       if (!before || (!context.explicit && before.from === before.to)) return null;
       const source = context.state.doc.toString();
-      const hints = contextualHints(source, context.pos);
       const snippets = before.text ? SNIPPETS.filter(s => s.id.startsWith(before.text)) : [];
       // mvdan/sh AST determines the active command and its argument boundaries.
-      // No regex pipeline splitting, quote guessing or shell token scanner.
+      // The same parsed context feeds catalog hints and Fig completions.
       const active = await activeShellCommand(source, context.pos);
+      const hints = contextualHintsFromActive(active, context.pos);
       const figOptions = active?.executable === 'curl' && before.text.startsWith('-')
         && !active.words.includes('--')
         ? fromFigWords(figCurl, active.words)

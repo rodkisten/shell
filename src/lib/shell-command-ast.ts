@@ -8,9 +8,18 @@ type AstNode = {
   [key: string]: unknown;
 };
 
+export type ShellCommandWord = {
+  text: string;
+  from: number;
+  to: number;
+};
+
 export type ActiveShellCommand = {
   executable: string;
   words: string[];
+  executableFrom: number;
+  executableTo: number;
+  arguments: ShellCommandWord[];
   from: number;
   to: number;
 };
@@ -159,17 +168,27 @@ export async function activeShellCommand(
 
   const call = candidates[0];
   if (!call || !Array.isArray(call.args) || !call.args.length) return null;
-  const words = call.args.filter(arg =>
+  const visibleWords = call.args.filter(arg =>
     typeof arg.start === 'number' && typeof arg.end === 'number'
     && arg.start <= cursor
-  ).map(arg => source.slice(arg.start!, Math.min(arg.end!, cursor)));
-  if (!words.length) return null;
+  ).map(arg => ({
+    text: source.slice(arg.start!, Math.min(arg.end!, cursor)),
+    from: arg.start!,
+    to: Math.min(arg.end!, cursor),
+  }));
+  if (!visibleWords.length) return null;
 
-  const resolved = resolveShellCommandWords(words);
+  const resolved = resolveShellCommandWords(visibleWords.map(word => word.text));
   if (!resolved) return null;
+  const executableWord = visibleWords[resolved.commandIndex];
+  if (!executableWord) return null;
+  const arguments_ = visibleWords.slice(resolved.commandIndex + 1);
   return {
     executable: resolved.executable,
     words: resolved.words,
+    executableFrom: executableWord.from,
+    executableTo: executableWord.to,
+    arguments: arguments_,
     from: call.start!,
     to: call.end!,
   };

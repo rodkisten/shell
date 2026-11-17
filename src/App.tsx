@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router';
 import {
   Activity, ArrowDownToLine, ArrowLeftRight, BookOpen, Bookmark, ChevronDown, CircleAlert,
@@ -15,7 +15,7 @@ import { WorkspacePanel } from './components/WorkspacePanel';
 import './components/workspace.css';
 import { ReferencePanel } from './components/ReferencePanel';
 import { SNIPPETS } from './lib/commands';
-import { contextualHints } from './lib/suggestions';
+import { contextualHints, type Hint } from './lib/suggestions';
 import { explainKnownShellTokensFromAst, type SemanticToken } from './lib/semantic-shell';
 import { parse, LangVariant } from 'sh-syntax';
 import { inspectShellAst, type ShellAstNode } from './lib/shell-ast';
@@ -86,7 +86,14 @@ export function App() {
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigation = useNavigate();
   const location = useLocation();
-  const hints = useMemo(() => contextualHints(script, cursor), [script, cursor]);
+  const [hints, setHints] = useState<Hint[]>([]);
+  useEffect(() => {
+    let active = true;
+    void contextualHints(script, cursor).then(next => {
+      if (active) setHints(next);
+    });
+    return () => { active = false; };
+  }, [script, cursor]);
 
   const notify = useCallback((message: string) => {
     setToast(message);
