@@ -316,3 +316,24 @@ a{color:inherit;text-decoration:none}
   .command-help-manual{font-size:0;width:36px;padding:0;justify-content:center}
   .command-help-manual svg{width:15px;height:15px}
 }
+
+
+/* Inline shell autosuggestions: distinct from the completion dropdown. */
+.cm-autosuggestion{
+  color:#666b78;
+  opacity:.72;
+  white-space:pre;
+  pointer-events:auto;
+  cursor:pointer;
+  user-select:none;
+  -webkit-user-select:none;
+}
+.cm-autosuggestion-history{color:#737784}
+.cm-autosuggestion-value{color:#6f7f7a}
+.cm-autosuggestion-subcommand{color:#746f86}
+.cm-autosuggestion-option{color:#6f7481}
+.cm-autosuggestion-command{color:#747985}
+.cm-focused .cm-autosuggestion{opacity:.78}
+@media(max-width:640px){
+  .cm-autosuggestion{opacity:.68}
+}

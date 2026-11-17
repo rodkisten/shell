@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Compartment, EditorState, StateEffect, StateField } from '@codemirror/state';
-import { Decoration, type DecorationSet } from '@codemirror/view';
+import { Decoration, WidgetType, type DecorationSet } from '@codemirror/view';
 import { checkShell } from '../lib/shellcheck';
 import { embeddedShellHighlight } from '../lib/highlight';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
@@ -18,6 +18,7 @@ import { activeShellCommand } from '../lib/shell-command-ast';
 import { explainKnownShellTokens, type SemanticToken } from '../lib/semantic-shell';
 import { hoverTooltip } from '@codemirror/view';
 import { byName, SNIPPETS } from '../lib/commands';
+import { shellAutosuggestion, type Autosuggestion } from '../lib/autosuggest';
 
 /**
  * Lezer supplies structural context for the shell editor. This is a syntax
@@ -50,6 +51,82 @@ const diagnosticsField = StateField.define<DecorationSet>({
   },
   provide: field => EditorView.decorations.from(field),
 });
+
+const setAutosuggestion = StateEffect.define<Autosuggestion | null>();
+
+function applyAutosuggestion(view: EditorView, mode: 'all' | 'word'): boolean {
+  const suggestion = view.state.field(autosuggestionField, false);
+  const selection = view.state.selection.main;
+  if (!suggestion || !selection.empty || selection.head !== suggestion.from) return false;
+
+  let insert = suggestion.insert;
+  if (mode === 'word') {
+    let end = 0;
+    while (end < insert.length && /\s/.test(insert[end])) end++;
+    while (end < insert.length && !/\s/.test(insert[end])) end++;
+    insert = insert.slice(0, Math.max(1, end));
+  }
+  if (!insert) return false;
+
+  view.dispatch({
+    changes: { from: suggestion.from, insert },
+    selection: { anchor: suggestion.from + insert.length },
+    effects: setAutosuggestion.of(null),
+    userEvent: 'input.complete',
+  });
+  return true;
+}
+
+class AutosuggestionWidget extends WidgetType {
+  constructor(readonly suggestion: Autosuggestion) { super(); }
+
+  eq(other: AutosuggestionWidget) {
+    return other.suggestion.insert === this.suggestion.insert
+      && other.suggestion.source === this.suggestion.source;
+  }
+
+  toDOM(view: EditorView) {
+    const dom = document.createElement('span');
+    dom.className = 'cm-autosuggestion cm-autosuggestion-' + this.suggestion.source;
+    dom.textContent = this.suggestion.insert;
+    dom.title = 'Autosuggestion · toque para aceitar · Tab aceita tudo';
+    dom.setAttribute('aria-label', 'Sugestão: ' + this.suggestion.insert);
+    dom.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      applyAutosuggestion(view, 'all');
+      view.focus();
+    });
+    return dom;
+  }
+
+  ignoreEvent() { return false; }
+}
+
+const autosuggestionField = StateField.define<Autosuggestion | null>({
+  create: () => null,
+  update(value, transaction) {
+    if (transaction.docChanged || transaction.selection) value = null;
+    for (const effect of transaction.effects) {
+      if (effect.is(setAutosuggestion)) value = effect.value;
+    }
+    return value;
+  },
+});
+
+const autosuggestionDecorations = EditorView.decorations.compute(
+  [autosuggestionField],
+  state => {
+    const suggestion = state.field(autosuggestionField);
+    if (!suggestion || suggestion.from < 0 || suggestion.from > state.doc.length) return Decoration.none;
+    return Decoration.set([
+      Decoration.widget({
+        widget: new AutosuggestionWidget(suggestion),
+        side: 1,
+      }).range(suggestion.from),
+    ]);
+  },
+);
 
 export type ShellEditorHandle = { insert(text: string): void; focus(): void; reveal(from: number, to: number): void };
 type Props = {
@@ -125,6 +202,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
 
   useEffect(() => {
     if (!node.current) return;
+    let autosuggestRequest = 0;
     const complete = async (context: CompletionContext) => {
       const before = context.matchBefore(/[\w.+-]*/);
       if (!before) return null;
@@ -229,11 +307,18 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
             };
           }, { hoverTime: 250 }),
           diagnosticsField,
+          autosuggestionField,
+          autosuggestionDecorations,
           shellTheme,
           fontCompartment.current.of(editorFontTheme(fontSize)),
           wrapCompartment.current.of(wordWrap ? EditorView.lineWrapping : []),
           EditorState.tabSize.of(2),
-          keymap.of([indentWithTab, { key: 'Mod-Enter', run() { callbacks.current.onRun(); return true; } }]),
+          keymap.of([
+            { key: 'Tab', run: view => applyAutosuggestion(view, 'all') },
+            { key: 'ArrowRight', run: view => applyAutosuggestion(view, 'word') },
+            indentWithTab,
+            { key: 'Mod-Enter', run() { callbacks.current.onRun(); return true; } },
+          ]),
           autocompletion({ override: [complete], activateOnTyping: true, maxRenderedOptions: 8, closeOnBlur: false }),
           placeholder('Cole um script do ChatGPT ou comece a escrever…'),
           EditorView.updateListener.of((update) => {
@@ -241,9 +326,27 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
             if (update.docChanged || update.selectionSet) {
               const pos = update.state.selection.main.head;
               callbacks.current.onCursor(pos);
+
+              const selection = update.state.selection.main;
+              const source = update.state.doc.toString();
+              const request = ++autosuggestRequest;
+              if (selection.empty) {
+                void shellAutosuggestion(source, pos).then(suggestion => {
+                  const current = editor.current;
+                  if (
+                    request !== autosuggestRequest
+                    || !current
+                    || current.state.doc.toString() !== source
+                    || !current.state.selection.main.empty
+                    || current.state.selection.main.head !== pos
+                  ) return;
+                  current.dispatch({ effects: setAutosuggestion.of(suggestion) });
+                });
+              }
+
               // Keyboard navigation and iOS caret movement use the same
               // semantic selection as pointer interaction.
-              const source = update.state.doc.toString();
+
               void explainKnownShellTokens(source).then(tokens => {
                 const current = editor.current;
                 if (!current || current.state.doc.toString() !== source || current.state.selection.main.head !== pos) return;
