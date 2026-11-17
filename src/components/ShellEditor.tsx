@@ -133,7 +133,19 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       const segment = line.split(/\s*(?:\|\||&&|[|;])\s*/).at(-1) ?? '';
       const command = /^(?:\s*(?:sudo|command|env)\s+|\s*[A-Za-z_][\w]*=\S+\s+)*\s*curl(?:\s|$)/.test(segment)
         ? 'curl' : undefined;
-      const figOptions = command && before.text.startsWith('-')
+      // Lezer's editor syntax tree is authoritative for excluding comments
+      // and quoted literals. Do not offer CLI flags inside those nodes.
+      const tree = syntaxTree(context.state);
+      let syntaxNode: ReturnType<typeof tree.resolveInner> | null = tree.resolveInner(context.pos, -1);
+      let isLiteralOrComment = false;
+      while (syntaxNode) {
+        if (/comment|string|quoted|heredoc/i.test(syntaxNode.name)) {
+          isLiteralOrComment = true;
+          break;
+        }
+        syntaxNode = syntaxNode.parent;
+      }
+      const figOptions = !isLiteralOrComment && command && before.text.startsWith('-')
         ? figCurlOptions.filter(item => item.name.startsWith(before.text))
           .map(item => ({ label: item.name, type: 'property', detail: 'Fig · curl', info: item.description, apply: item.name }))
         : [];
