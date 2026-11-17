@@ -89,6 +89,10 @@ export async function activeShellCommand(
     }
     if (word === 'command') {
       commandIndex++;
+      // The command builtin accepts -p and -- before the executable.
+      while (words[commandIndex] === '-p' || words[commandIndex] === '--') {
+        commandIndex++;
+      }
       if (words[commandIndex]?.startsWith('-')) return null;
       continue;
     }
@@ -106,7 +110,7 @@ export async function activeShellCommand(
           break;
         } else if (arg === '-i' || arg === '--ignore-environment' || arg === '-0' || arg === '--null') {
           commandIndex++;
-        } else if (/^--(?:unset|chdir|split-string)=.+$/.test(arg)) {
+        } else if (/^--(?:unset|chdir|split-string)=.+$/.test(arg) || /^-[uCS].+$/.test(arg)) {
           commandIndex++;
         } else if (arg === '-u' || arg === '--unset' || arg === '-C' || arg === '--chdir' || arg === '-S' || arg === '--split-string') {
           if (!words[commandIndex + 1]) return null;
@@ -131,7 +135,7 @@ export async function activeShellCommand(
           commandIndex++;
           continue;
         }
-        if (/^--(?:user|group|prompt|role|type)=.+$/.test(arg)) {
+        if (/^--(?:user|group|prompt|role|type)=.+$/.test(arg) || /^-[ughpCrt].+$/.test(arg)) {
           commandIndex++;
           continue;
         }
