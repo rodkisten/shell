@@ -121,7 +121,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       const source = context.state.doc.toString();
       const hints = contextualHints(source, context.pos);
       const snippets = before.text ? SNIPPETS.filter(s => s.id.startsWith(before.text)) : [];
-      const command = source.slice(0, context.pos).trimStart().split(/\\s+/)[0];
+      const command = source.slice(0, context.pos).trimStart().split(/\s+/)[0];
       const figSpec = command === 'curl' ? figCurl : command === 'npm' ? figNpm : command === 'docker' ? figDocker : undefined;
       const figOptions = figSpec && before.text.startsWith('-')
         ? fromFig(figSpec).filter(item => item.kind === 'option' && item.name.startsWith(before.text))
