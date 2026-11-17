@@ -13,7 +13,8 @@ import { syntaxTree } from '@codemirror/language';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { contextualHints } from '../lib/suggestions';
 import figCurl from '../lib/specs/fig-curl.json';
-import { fromFig } from '../lib/completion-sources';
+import { fromFigWords } from '../lib/completion-sources';
+import { activeShellCommand } from '../lib/shell-command-ast';
 import { explainKnownShellTokens, type SemanticToken } from '../lib/semantic-shell';
 import { hoverTooltip } from '@codemirror/view';
 import { byName, SNIPPETS } from '../lib/commands';
@@ -83,10 +84,6 @@ const shellTheme = EditorView.theme({
   '.shell-diagnostic-error': { textDecorationColor: '#fb7185' },
 }, { dark: true });
 
-// Fig's static spec is immutable. Normalize once rather than traversing all
-// options on every keystroke, especially on mobile Safari.
-const figCurlOptions = fromFig(figCurl).filter(item => item.kind === 'option');
-
 export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEditor(
   { code, fontSize, wordWrap, onChange, onCursor, onInspect, onSemanticInspect, onRun }, ref,
 ) {
@@ -117,24 +114,19 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
 
   useEffect(() => {
     if (!node.current) return;
-    const complete = (context: CompletionContext) => {
+    const complete = async (context: CompletionContext) => {
       const before = context.matchBefore(/[\w.+-]*/);
       if (!before || (!context.explicit && before.from === before.to)) return null;
       const source = context.state.doc.toString();
       const hints = contextualHints(source, context.pos);
       const snippets = before.text ? SNIPPETS.filter(s => s.id.startsWith(before.text)) : [];
-      // The vendored npm/docker snapshots are flat. Do not claim that a flag
-      // applies to a particular subcommand until scoped specs are imported.
-      // Only curl's root-level options are currently safe to offer.
-      const line = source.slice(0, context.pos).split('\n').at(-1) ?? '';
-      // Match the active simple command, not the first command in the document.
-      // Ignore previous pipeline/conditional segments; permit common wrappers
-      // and environment assignments without treating them as the executable.
-      const segment = line.split(/\s*(?:\|\||&&|[|;])\s*/).at(-1) ?? '';
-      const command = /^(?:\s*(?:sudo|command|env)\s+|\s*[A-Za-z_][\w]*=\S+\s+)*\s*curl(?:\s|$)/.test(segment)
-        ? 'curl' : undefined;
-      const figOptions = command && before.text.startsWith('-')
-        ? figCurlOptions.filter(item => item.name.startsWith(before.text))
+      // mvdan/sh AST determines the active command and its argument boundaries.
+      // No regex pipeline splitting, quote guessing or shell token scanner.
+      const active = await activeShellCommand(source, context.pos);
+      const figOptions = active?.executable === 'curl' && before.text.startsWith('-')
+        && !active.words.includes('--')
+        ? fromFigWords(figCurl, active.words)
+          .filter(item => item.kind === 'option' && item.name.startsWith(before.text))
           .map(item => ({ label: item.name, type: 'property', detail: 'Fig · curl', info: item.description, apply: item.name }))
         : [];
       const options = [
