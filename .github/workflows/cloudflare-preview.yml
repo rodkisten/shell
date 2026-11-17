@@ -135,14 +135,18 @@ jobs:
             const target = new URL(${JSON.stringify(target)});
             target.pathname = incoming.pathname;
             target.search = incoming.search;
-            event.respondWith(new Response(null, {
-              status: 302,
-              headers: {
-                "Location": target.toString(),
-                "Cache-Control": "no-store",
-                "X-Robots-Tag": "noindex"
-              }
-            }));
+            event.respondWith((async () => {
+              const response = await fetch(new Request(target.toString(), event.request));
+              const headers = new Headers(response.headers);
+              headers.set("Cache-Control", "no-store");
+              headers.set("X-Robots-Tag", "noindex");
+              headers.set("X-Shell-Preview-Target", ${JSON.stringify(target.origin)});
+              return new Response(response.body, {
+                status: response.status,
+                statusText: response.statusText,
+                headers
+              });
+            })());
           });`);
           NODE
 
@@ -163,18 +167,19 @@ jobs:
           }
           NODE
 
-          expected="$CUSTOM_PREVIEW_URL/"
-          actual="$(
-            curl --show-error --silent --retry 8 --retry-all-errors --retry-delay 3 \
+          actual_target="$(
+            curl --fail --show-error --silent --retry 8 --retry-all-errors --retry-delay 3 \
               --dump-header - --output /dev/null "https://shell.preview.migos.club/" |
-              awk 'BEGIN{IGNORECASE=1} /^location:/ {$1=""; sub(/^ /,""); sub(/\r$/,""); print; exit}'
+              awk 'BEGIN{IGNORECASE=1} /^x-shell-preview-target:/ {$1=""; sub(/^ /,""); sub(/\r$/,""); print; exit}'
           )"
-          if [[ "$actual" != "$expected" ]]; then
-            echo "::error::Latest-preview redirect mismatch. Expected $expected, got $actual"
+          if [[ "$actual_target" != "$CUSTOM_PREVIEW_URL" ]]; then
+            echo "::error::Latest-preview proxy mismatch. Expected $CUSTOM_PREVIEW_URL, got $actual_target"
             exit 1
           fi
+          curl --fail --show-error --silent --retry 8 --retry-all-errors --retry-delay 3 \
+            --output /dev/null "https://shell.preview.migos.club/"
           echo "Latest successful preview: $CUSTOM_PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
-          echo "Stable redirect: https://shell.preview.migos.club" >> "$GITHUB_STEP_SUMMARY"
+          echo "Stable proxy: https://shell.preview.migos.club" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment stable preview URLs on PR
         env:
@@ -208,11 +213,11 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          closing_url="https://pr-$PR_NUMBER.preview.shell.migos.club/"
+          closing_url="https://pr-$PR_NUMBER.preview.shell.migos.club"
           current="$(
             curl --show-error --silent --retry 3 --retry-all-errors --retry-delay 2 \
               --dump-header - --output /dev/null "https://shell.preview.migos.club/" |
-              awk 'BEGIN{IGNORECASE=1} /^location:/ {$1=""; sub(/^ /,""); sub(/\r$/,""); print; exit}'
+              awk 'BEGIN{IGNORECASE=1} /^x-shell-preview-target:/ {$1=""; sub(/^ /,""); sub(/\r$/,""); print; exit}'
           )"
 
           if [[ "$current" != "$closing_url" ]]; then
@@ -246,14 +251,18 @@ jobs:
             const target = new URL(${JSON.stringify(target)});
             target.pathname = incoming.pathname;
             target.search = incoming.search;
-            event.respondWith(new Response(null, {
-              status: 302,
-              headers: {
-                "Location": target.toString(),
-                "Cache-Control": "no-store",
-                "X-Robots-Tag": "noindex"
-              }
-            }));
+            event.respondWith((async () => {
+              const response = await fetch(new Request(target.toString(), event.request));
+              const headers = new Headers(response.headers);
+              headers.set("Cache-Control", "no-store");
+              headers.set("X-Robots-Tag", "noindex");
+              headers.set("X-Shell-Preview-Target", ${JSON.stringify(target.origin)});
+              return new Response(response.body, {
+                status: response.status,
+                statusText: response.statusText,
+                headers
+              });
+            })());
           });`);
           NODE
           curl --fail-with-body --show-error --silent \
@@ -272,7 +281,7 @@ jobs:
           }
           NODE
           echo "safe_to_delete=true" >> "$GITHUB_OUTPUT"
-          echo "Latest-preview redirect moved to $fallback" >> "$GITHUB_STEP_SUMMARY"
+          echo "Latest-preview proxy moved to $fallback" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Delete closed PR preview
         if: steps.redirect_guard.outputs.safe_to_delete == 'true'
