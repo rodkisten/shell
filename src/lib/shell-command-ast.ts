@@ -70,8 +70,8 @@ export async function activeShellCommand(
     && arg.end <= cursor
   ).map(arg => source.slice(arg.start!, arg.end!));
   if (!words.length) return null;
-  // Resolve literal command wrappers from AST words, not textual shell
-  // segmentation. Avoid guessing for dynamic executables or wrapper flags.
+  // Resolve literal wrappers from AST word boundaries. Only skip options
+  // whose arity is known; unknown flags fail closed instead of guessing.
   let commandIndex = 0;
   while (commandIndex < words.length) {
     const word = words[commandIndex];
@@ -79,11 +79,53 @@ export async function activeShellCommand(
       commandIndex++;
       continue;
     }
-    if (word === 'sudo' || word === 'command' || word === 'builtin' || word === 'env') {
+    if (word === 'command' || word === 'builtin') {
       commandIndex++;
-      // Wrapper options change the meaning of subsequent arguments. Do not
-      // assume the next word is an executable when flags are present.
       if (words[commandIndex]?.startsWith('-')) return null;
+      continue;
+    }
+    if (word === 'env') {
+      commandIndex++;
+      while (commandIndex < words.length) {
+        const arg = words[commandIndex];
+        if (/^[A-Za-z_][A-Za-z_0-9]*=/.test(arg)) {
+          commandIndex++;
+        } else if (arg === '--') {
+          commandIndex++;
+          break;
+        } else if (arg === '-i' || arg === '--ignore-environment' || arg === '-0' || arg === '--null') {
+          commandIndex++;
+        } else if (arg === '-u' || arg === '--unset' || arg === '-C' || arg === '--chdir' || arg === '-S' || arg === '--split-string') {
+          if (!words[commandIndex + 1]) return null;
+          commandIndex += 2;
+        } else if (arg.startsWith('-')) {
+          return null;
+        } else {
+          break;
+        }
+      }
+      continue;
+    }
+    if (word === 'sudo') {
+      commandIndex++;
+      while (commandIndex < words.length) {
+        const arg = words[commandIndex];
+        if (arg === '--') {
+          commandIndex++;
+          break;
+        }
+        if (['-n', '-E', '-H', '-k', '-K', '-S', '-b', '--non-interactive', '--preserve-env'].includes(arg)) {
+          commandIndex++;
+          continue;
+        }
+        if (['-u', '-g', '-h', '-p', '-C', '-r', '-t', '--user', '--group', '--prompt', '--role', '--type'].includes(arg)) {
+          if (!words[commandIndex + 1]) return null;
+          commandIndex += 2;
+          continue;
+        }
+        if (arg.startsWith('-')) return null;
+        break;
+      }
       continue;
     }
     break;
