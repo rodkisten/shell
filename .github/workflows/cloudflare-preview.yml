@@ -53,6 +53,14 @@ jobs:
           if ! npx --yes wrangler@^4.135.0 preview --name "pr-$PR_NUMBER" --json >"$stdout" 2>"$stderr"; then
             echo "::error::Cloudflare Worker Preview deployment failed"
             sed -E 's/(Bearer |token[=: ]+)[^ ]+/\1[REDACTED]/Ig' "$stderr" >&2
+            # Wrangler can emit API errors on stdout even when stderr is empty.
+            # Print structured errors only, never arbitrary raw output.
+            if jq -e . "$stdout" >/dev/null 2>&1; then
+              jq '{success, errors, messages}' "$stdout" >&2
+            else
+              echo "::warning::Wrangler stdout was not JSON; inspect Wrangler debug logs in the runner." >&2
+              sed -E 's/(Bearer |token[=: ]+)[^ ]+/\1[REDACTED]/Ig' "$stdout" | tail -n 50 >&2
+            fi
             echo "### Preview deployment failed" >> "$GITHUB_STEP_SUMMARY"
             echo "Inspect the deploy step logs for Wrangler diagnostics." >> "$GITHUB_STEP_SUMMARY"
             exit 1
