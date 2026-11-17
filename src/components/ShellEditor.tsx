@@ -12,6 +12,10 @@ import { shell } from '@codincod/codemirror-lang-shell';
 import { syntaxTree } from '@codemirror/language';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { contextualHints } from '../lib/suggestions';
+import figCurl from '../lib/specs/fig-curl.json';
+import figNpm from '../lib/specs/fig-npm.json';
+import figDocker from '../lib/specs/fig-docker.json';
+import { fromFig } from '../lib/completion-sources';
 import { explainKnownShellTokens, type SemanticToken } from '../lib/semantic-shell';
 import { hoverTooltip } from '@codemirror/view';
 import { byName, SNIPPETS } from '../lib/commands';
@@ -117,7 +121,14 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       const source = context.state.doc.toString();
       const hints = contextualHints(source, context.pos);
       const snippets = before.text ? SNIPPETS.filter(s => s.id.startsWith(before.text)) : [];
+      const command = source.slice(0, context.pos).trimStart().split(/\\s+/)[0];
+      const figSpec = command === 'curl' ? figCurl : command === 'npm' ? figNpm : command === 'docker' ? figDocker : undefined;
+      const figOptions = figSpec && before.text.startsWith('-')
+        ? fromFig(figSpec).filter(item => item.kind === 'option' && item.name.startsWith(before.text))
+          .map(item => ({ label: item.name, type: 'property', detail: 'Fig · ' + command, info: item.description, apply: item.name }))
+        : [];
       const options = [
+        ...figOptions,
         ...hints.map(h => ({
           label: h.label,
           type: h.kind === 'flag' ? 'property' : 'function',
