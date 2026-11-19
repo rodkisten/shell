@@ -337,3 +337,12 @@ A action compartilhada está referenciada em `@main` para usar a versão atual; 
 - [ ] Após a geração, trocar o fallback por `npm ci` obrigatório em todas as pipelines.
 
 Não confundir `npm install --no-package-lock` (fallback temporário do CI) com a geração oficial `npm install --package-lock-only` do workflow de sincronização.
+
+### Correção do deploy WASM: run 44555230627
+
+O build de produção falhou em `main.go:11:2` com `missing go.sum entry for module providing package mvdan.cc/sh/v3/syntax`. A causa imediata é a ausência de `tools/shell-flow/go.sum` no repositório. O script `scripts/build-shell-flow-wasm.sh` agora executa `go mod download` antes de `go build`, inclusive quando chamado pelo `npm run build` no deploy.
+
+- [x] Diagnosticar a falha pelo log real do GitHub Actions.
+- [x] Adicionar resolução de módulos no script compartilhado de build.
+- [ ] Gerar e versionar `tools/shell-flow/go.sum` para build totalmente reproduzível, então validar com `go mod verify`.
+- [ ] Confirmar a execução da pipeline de deploy após o merge deste PR.
