@@ -7,6 +7,12 @@ on:
       - 'scripts/build-shell-flow-wasm.sh'
       - 'scripts/test-shell-flow-wasm.mjs'
       - 'src/lib/shell-flow-wasm.ts'
+      - 'src/App.tsx'
+      - 'src/components/ExecutionExplorer.tsx'
+      - 'public/wasm/flow-worker.js'
+      - 'vite.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/shell-flow-wasm.yml'
   workflow_dispatch:
 
@@ -45,6 +51,22 @@ jobs:
           node-version: '22'
       - name: Execute WASM smoke tests
         run: node scripts/test-shell-flow-wasm.mjs
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Typecheck and bundle app with WASM
+        run: npm run build
+      - name: Verify deployable WASM assets
+        run: |
+          test -s dist/wasm/shell-flow.wasm
+          test -s dist/wasm/wasm_exec.js
+          test -s dist/wasm/flow-worker.js
+          node --input-type=module -e "import { readFileSync } from 'node:fs'; const b=readFileSync('dist/wasm/shell-flow.wasm'); if (b.subarray(0,4).toString('hex')!=='0061736d') process.exit(1)"
+      - name: Upload deployable frontend
+        uses: actions/upload-artifact@v4
+        with:
+          name: shell-flow-preview-dist
+          path: dist/
+          retention-days: 7
       - name: Upload compiled artifact
         uses: actions/upload-artifact@v4
         with:
