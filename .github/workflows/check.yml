@@ -35,5 +35,3 @@ jobs:
       run-tests: true
       run-build: true
       run-lint: true
-      build-command: 'npm run build'
-      lint-command: 'npm run lint'
