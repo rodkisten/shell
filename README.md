@@ -297,3 +297,13 @@ O CFG ainda é uma aproximação estática Bash. O novo painel exibe nós e ares
 O workflow `.github/workflows/shell-flow-wasm.yml` compila o Go/WASM, executa os smoke tests, instala dependências com `npm ci`, executa `npm run build` e verifica a presença de `dist/wasm/shell-flow.wasm`, `dist/wasm/wasm_exec.js` e `dist/wasm/flow-worker.js`. Publica os artefatos `shell-flow-wasm` e `shell-flow-preview-dist` para inspeção.
 
 **Importante:** o workflow agora prepara um `dist/` verificável, mas não implanta automaticamente em produção. Qualquer pipeline externa de Cloudflare que rode `npm run build` sem executar antes `bash scripts/build-shell-flow-wasm.sh` ainda produzirá um site sem os binários. O próximo passo é integrar essa etapa ao deploy existente, evitando compilações duplicadas. Testes e checks continuam aguardando confirmação no GitHub Actions.
+
+### Build e deploy automáticos do Shell Flow WASM (PR #11)
+
+- [x] Adicionar `prebuild` ao `package.json`: `npm run build` agora executa `bash scripts/build-shell-flow-wasm.sh` automaticamente antes de TypeScript/Vite.
+- [x] Como `npm run deploy` chama `npm run build`, o deploy Wrangler também compila os binários Go e os inclui no `dist/wasm/`.
+- [x] Evitar compilação duplicada no CI de validação: o workflow compila uma vez para smoke tests e depois executa `npm run ast:inspect && npm run typecheck && npx vite build`.
+- [ ] Garantir Go disponível no ambiente de build Cloudflare (ou publicar artefato previamente compilado): sem Go e acesso ao módulo `mvdan.cc/sh/v3`, o `prebuild` falha de forma explícita.
+- [ ] Validar o build do preview, o workflow e a disponibilidade real de `/wasm/shell-flow.wasm`, `/wasm/wasm_exec.js` e `/wasm/flow-worker.js` no domínio.
+
+**Atenção:** `prebuild` requer Go instalado no ambiente de build. Não há fallback silencioso para artefatos antigos. O indicador da UI só mostra pronto após o runtime efetivamente inicializar no Web Worker.
