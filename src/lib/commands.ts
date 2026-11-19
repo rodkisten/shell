@@ -103,10 +103,3 @@ export const SNIPPETS = [
 
 export const byName = new Map(COMMANDS.map((command) => [command.name, command]));
 
-export function commandAt(line: string, offset: number): string | null {
-  // Split simple pipelines/separators; not a full parser. Syntax-aware editor handles full scripts.
-  const prefix = line.slice(0, offset);
-  const segment = prefix.split(/(?:\|\||&&|[|;&])/).pop() || '';
-  const match = segment.trimStart().match(/^(?:(?:sudo|command|env|time|nohup)\s+)*([\w.+-]+)/);
-  return match?.[1] || null;
-}

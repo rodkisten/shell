@@ -94,9 +94,15 @@ export function fromFig(spec: unknown, commandPath: readonly string[] = []): Com
  * The caller supplies words from the real shell AST, not a regex shell parser.
  * Flags and their values must be removed by the caller using AST context.
  */
-export function fromFigWords(spec: unknown, words: readonly string[]): CompletionItem[] {
+export type FigWordContext = {
+  items: CompletionItem[];
+  awaitingValue: boolean;
+  positionalOnly: boolean;
+};
+
+export function fromFigWordsContext(spec: unknown, words: readonly string[]): FigWordContext {
   const root = record(spec);
-  if (!root) return [];
+  if (!root) return { items: [], awaitingValue: false, positionalOnly: false };
   const path: string[] = [];
   let current = root;
   let awaitingValue = false;
@@ -131,7 +137,11 @@ export function fromFigWords(spec: unknown, words: readonly string[]): Completio
     // Unrecognized positional arguments may precede subcommands in some CLIs,
     // so keep scanning rather than treating them as command names.
   }
-  return fromFig(spec, path);
+  return { items: fromFig(spec, path), awaitingValue, positionalOnly };
+}
+
+export function fromFigWords(spec: unknown, words: readonly string[]): CompletionItem[] {
+  return fromFigWordsContext(spec, words).items;
 }
 
 /**

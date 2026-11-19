@@ -268,3 +268,72 @@ a{color:inherit;text-decoration:none}
 .linux-progress{padding:14px 18px;border-bottom:1px solid #292b30;display:grid;gap:7px}.linux-progress>div{display:flex;justify-content:space-between;font-size:12px;color:#c6c7d0}.linux-progress progress{width:100%;height:7px;accent-color:#9ca3af}.linux-progress small{color:#858792;font-size:10px}.linux-diagnostics{padding:13px 18px;border-top:1px solid #292b30;background:#0b0c0f;color:#b6b8c1}.linux-diagnostics summary{cursor:pointer;font-size:12px;font-weight:600}.linux-diagnostics pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto;font:11px/1.6 ui-monospace,monospace;color:#b6d3c8;background:#070809;padding:12px;border-radius:6px;margin:10px 0}.linux-diagnostics strong{font-size:11px}
 
 .linux-serial-terminal{padding:14px 16px;background:#07090b;border-top:1px solid #292b30;color:#c9d5d0}.linux-serial-terminal strong{font-size:12px}.linux-serial-terminal pre{min-height:140px;max-height:380px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 ui-monospace,monospace;color:#d3e4da}
+
+
+/* Cursor-driven command help: persistent, touch-first, and intentionally separate from autocomplete. */
+.command-help{border-top:1px solid #24262c;background:linear-gradient(180deg,#111318,#0d0f13);color:#e7e7eb}
+.command-help-empty{min-height:42px;display:flex;align-items:center;gap:8px;padding:0 13px;color:#737681;font-size:10px}
+.command-help-head{min-height:46px;display:flex;align-items:stretch;border-bottom:1px solid #202228}
+.command-help-collapse{flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:8px 12px;background:transparent;border:0;color:inherit;text-align:left}
+.command-help-icon{width:25px;height:25px;display:grid;place-items:center;border:1px solid #30333a;border-radius:7px;background:#181a20;color:#bfaeff;flex:none}
+.command-help-heading{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.command-help-heading strong{font:600 12px ui-monospace,SFMono-Regular,Menlo,monospace;color:#f1f1f4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.command-help-eyebrow{font-size:8px;letter-spacing:1.1px;font-weight:750;color:#777a86}
+.command-help-manual{display:flex;align-items:center;gap:6px;margin:7px 8px 7px 0;padding:0 10px;border:1px solid #343741;border-radius:7px;background:#171920;color:#c9cbd3;font-size:10px;white-space:nowrap;touch-action:manipulation}
+.command-help-manual:active{background:#292c35}
+.command-help-body{padding:11px 12px 13px;display:grid;gap:10px}
+.command-help-description{margin:0;color:#b8bac3;font-size:11px;line-height:1.55}
+.command-help-signature{display:flex;align-items:flex-start;gap:9px;min-width:0;padding:8px 9px;border:1px solid #292c34;border-radius:8px;background:#0a0c10}
+.command-help-signature>span,.command-help-group>span,.command-help-current>div>span{font-size:8px;letter-spacing:1px;font-weight:750;color:#6f7280;text-transform:uppercase;flex:none}
+.command-help-signature code{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:#d8cffb;white-space:pre-wrap;overflow-wrap:anywhere}
+.command-help-current{display:grid;gap:5px;padding:9px 10px;border-left:2px solid #8b7cff;background:#14151b;border-radius:0 8px 8px 0}
+.command-help-current>div{display:flex;align-items:center;gap:8px;min-width:0}
+.command-help-current code{font:600 11px ui-monospace,SFMono-Regular,Menlo,monospace;color:#f0edff;overflow-wrap:anywhere}
+.command-help-current p{margin:0;color:#afb1bc;font-size:10px;line-height:1.5}
+.command-help-risk{display:inline-flex;align-items:center;gap:5px;width:max-content;color:#e6b487;font-size:9px}
+.command-help-group{display:grid;gap:6px;min-width:0}
+.command-help-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.command-help-chips::-webkit-scrollbar{display:none}
+.command-help-chip{display:flex;flex-direction:column;gap:3px;min-width:118px;max-width:190px;padding:7px 8px;border:1px solid #2c2f37;border-radius:7px;background:#13151a;flex:none}
+.command-help-chip.is-command{border-color:#353046;background:#16141d}
+.command-help-chip code{font:600 10px ui-monospace,SFMono-Regular,Menlo,monospace;color:#d9d8fb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.command-help-chip small{font-size:9px;line-height:1.35;color:#858894;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.command-help-source{font-size:8px;color:#5f626d}
+.semantic-selection-card{margin:8px 12px;padding:12px;background:#17181c;border:1px solid #34363e;border-radius:12px;color:#f4f4f5;max-width:100%;overflow-wrap:anywhere}
+.semantic-selection-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.semantic-selection-head strong{font-size:13px}
+.semantic-selection-head button{min-width:36px;min-height:36px;color:inherit}
+.semantic-selection-target{display:block;margin-top:4px;font-size:12px;color:#a5b4fc;text-align:left;min-height:36px;overflow-wrap:anywhere}
+.semantic-selection-card p{font-size:13px;line-height:1.55;margin:8px 0 0}
+.semantic-selection-card pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;margin-top:8px}
+.semantic-selection-card small{display:block;margin-top:8px;color:#a1a1aa}
+@media(max-width:640px){
+  .command-help-head{min-height:44px}
+  .command-help-body{padding:9px 10px 11px;gap:8px}
+  .command-help-description{font-size:10px}
+  .command-help-signature{flex-direction:column;gap:4px}
+  .command-help-chip{min-width:108px;max-width:156px}
+  .command-help-manual{font-size:0;width:36px;padding:0;justify-content:center}
+  .command-help-manual svg{width:15px;height:15px}
+}
+
+
+/* Inline shell autosuggestions: distinct from the completion dropdown. */
+.cm-autosuggestion{
+  color:#666b78;
+  opacity:.72;
+  white-space:pre;
+  pointer-events:auto;
+  cursor:pointer;
+  user-select:none;
+  -webkit-user-select:none;
+}
+.cm-autosuggestion-history{color:#737784}
+.cm-autosuggestion-value{color:#6f7f7a}
+.cm-autosuggestion-subcommand{color:#746f86}
+.cm-autosuggestion-option{color:#6f7481}
+.cm-autosuggestion-command{color:#747985}
+.cm-focused .cm-autosuggestion{opacity:.78}
+@media(max-width:640px){
+  .cm-autosuggestion{opacity:.68}
+}
