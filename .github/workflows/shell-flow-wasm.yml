@@ -45,17 +45,12 @@ jobs:
           PY
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
+          cache: npm
       - name: Execute WASM smoke tests
         run: node scripts/test-shell-flow-wasm.mjs
-      - name: Install frontend dependencies
-        run: |
-          if test -f package-lock.json; then
-            npm ci --no-audit --no-fund
-          else
-            echo '::warning::package-lock.json not bootstrapped yet; run 🔒 Sync npm lockfile manually.'
-            npm install --no-package-lock --no-audit --no-fund
-          fi
+      - name: Install locked frontend dependencies
+        run: npm ci --no-audit --no-fund
       - name: Typecheck and bundle app with previously compiled WASM
         run: npm run ast:inspect && npm run typecheck && npx vite build
       - name: Verify deployable WASM assets
