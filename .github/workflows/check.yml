@@ -18,13 +18,13 @@ permissions:
 jobs:
   validate:
     name: 🧬 Shared affected-area CI
-    uses: rodkisten/github/.github/workflows/filtered-ci.yml@64017fa4ac2e68cdbbb850faea7ca4ee7d627969
+    uses: rodkisten/github/.github/workflows/filtered-ci.yml@462242b5ab16599991bc3a81e0f9179c36b47c5f
     permissions:
       contents: read
       pull-requests: read
     with:
       repository-key: shell
-      config-ref: 64017fa4ac2e68cdbbb850faea7ca4ee7d627969
+      config-ref: 462242b5ab16599991bc3a81e0f9179c36b47c5f
       node-version: '22'
       working-directory: .
       test-command: npm test
