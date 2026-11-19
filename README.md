@@ -307,3 +307,11 @@ O workflow `.github/workflows/shell-flow-wasm.yml` compila o Go/WASM, executa os
 - [ ] Validar o build do preview, o workflow e a disponibilidade real de `/wasm/shell-flow.wasm`, `/wasm/wasm_exec.js` e `/wasm/flow-worker.js` no domínio.
 
 **Atenção:** `prebuild` requer Go instalado no ambiente de build. Não há fallback silencioso para artefatos antigos. O indicador da UI só mostra pronto após o runtime efetivamente inicializar no Web Worker.
+
+### CI real: diagnóstico do PR #11
+
+- [x] GitHub Actions run `44544714725`: Go dependencies, `go mod verify`, build WASM, magic header e smoke tests passaram.
+- [x] Identificar falha de `npm ci`: o repositório não possui `package-lock.json` versionado; erro `EUSAGE` confirmado nos logs.
+- [x] Corrigir a instalação no workflow: usar `npm ci` quando existir lockfile; caso contrário, `npm install --no-package-lock --no-audit --no-fund`.
+- [ ] Validar o workflow atualizado e a compilação Vite/TypeScript na nova execução.
+- [ ] Planejar lockfile reproduzível e revisão das dependências em PR separado.
