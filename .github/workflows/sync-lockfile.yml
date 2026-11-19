@@ -1,6 +1,9 @@
 name: 🔒 Sync npm lockfile
 run-name: "🔒 Lockfile · ${{ github.event.pull_request.number && format('PR #{0}', github.event.pull_request.number) || github.ref_name }}"
 
+env:
+  production
+  
 on:
   push:
     paths:
