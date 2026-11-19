@@ -291,3 +291,9 @@ A validação do PR #11 foi **implementada, não confirmada como aprovada**. O r
 - [ ] Implementar visualização React Flow + ELK, cancelamento/restart de worker e limites de memória.
 
 O CFG ainda é uma aproximação estática Bash. O novo painel exibe nós e arestas textualmente, **não** é ainda um diagrama React Flow. Os WASMs existentes de Zsh/ShellCheck têm carregamento próprio e não são representados por esse indicador.
+
+### Pipeline de validação e publicação do CFG WASM
+
+O workflow `.github/workflows/shell-flow-wasm.yml` compila o Go/WASM, executa os smoke tests, instala dependências com `npm ci`, executa `npm run build` e verifica a presença de `dist/wasm/shell-flow.wasm`, `dist/wasm/wasm_exec.js` e `dist/wasm/flow-worker.js`. Publica os artefatos `shell-flow-wasm` e `shell-flow-preview-dist` para inspeção.
+
+**Importante:** o workflow agora prepara um `dist/` verificável, mas não implanta automaticamente em produção. Qualquer pipeline externa de Cloudflare que rode `npm run build` sem executar antes `bash scripts/build-shell-flow-wasm.sh` ainda produzirá um site sem os binários. O próximo passo é integrar essa etapa ao deploy existente, evitando compilações duplicadas. Testes e checks continuam aguardando confirmação no GitHub Actions.
