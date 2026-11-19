@@ -1,5 +1,7 @@
 module github.com/rodkisten/shell/tools/shell-flow
 
-go 1.23
+go 1.23.0
+
+toolchain go1.23.12
 
 require mvdan.cc/sh/v3 v3.12.0
