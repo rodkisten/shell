@@ -5,6 +5,7 @@ on:
     paths:
       - 'tools/shell-flow/**'
       - 'scripts/build-shell-flow-wasm.sh'
+      - 'scripts/test-shell-flow-wasm.mjs'
       - 'src/lib/shell-flow-wasm.ts'
       - '.github/workflows/shell-flow-wasm.yml'
   workflow_dispatch:
@@ -39,6 +40,11 @@ jobs:
           assert Path('public/wasm/shell-flow.wasm').read_bytes()[:4] == bytes([0, 97, 115, 109])
           print('WASM header valid')
           PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Execute WASM smoke tests
+        run: node scripts/test-shell-flow-wasm.mjs
       - name: Upload compiled artifact
         uses: actions/upload-artifact@v4
         with:
