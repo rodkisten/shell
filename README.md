@@ -315,3 +315,15 @@ O workflow `.github/workflows/shell-flow-wasm.yml` compila o Go/WASM, executa os
 - [x] Corrigir a instalação no workflow: usar `npm ci` quando existir lockfile; caso contrário, `npm install --no-package-lock --no-audit --no-fund`.
 - [ ] Validar o workflow atualizado e a compilação Vite/TypeScript na nova execução.
 - [ ] Planejar lockfile reproduzível e revisão das dependências em PR separado.
+
+### Sincronização automática de package-lock.json
+
+O workflow `.github/workflows/sync-lockfile.yml` é acionado quando `package.json` muda em **qualquer branch** (`push`), em PRs internos (`pull_request`) e manualmente (`workflow_dispatch`). Usa Node 24 e `npm install --package-lock-only --ignore-scripts --no-audit --no-fund`, verifica as dependências do manifesto e escreve `package-lock.json` na **branch de origem** por GitHub API, autenticado pela action compartilhada `rodkisten/github/actions/app-token@main` e secrets `BOT_APP_ID`/`BOT_PRIVATE_KEY`.
+
+- [x] Cobrir `main`, branches e PRs internos; PRs de forks não recebem segredos.
+- [x] Evitar commits vazios e loops (gatilho apenas em `package.json`, commit com `[skip ci]`).
+- [x] Utilizar a action compartilhada de autenticação do bot.
+- [ ] Confirmar os secrets no repositório chamador e validar a primeira execução.
+- [ ] Depois que o lockfile for versionado, tornar `npm ci` obrigatório nos builds e eliminar fallback sem lockfile.
+
+A action compartilhada está referenciada em `@main` para usar a versão atual; piná-la em uma tag/SHA estável quando a release estiver disponível.
