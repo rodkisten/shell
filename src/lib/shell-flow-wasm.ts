@@ -1,46 +1,64 @@
 export type WasmFlowNode = { id: string; kind: string; start: number; end: number };
 export type WasmFlowEdge = { from: string; to: string; kind: string };
 export type WasmFlowResult = { nodes: WasmFlowNode[]; edges: WasmFlowEdge[]; warnings: string[] };
-type WasmResponse = WasmFlowResult | { error: string };
-declare global {
-  interface Window {
-    Go?: new () => { importObject: WebAssembly.Imports; run(instance: WebAssembly.Instance): Promise<void> };
-    shellFlowAnalyze?: (source: string) => string;
+export type FlowWasmStatus = { state: 'idle' | 'loading' | 'ready' | 'error'; message?: string };
+type Pending = { resolve: (value: WasmFlowResult) => void; reject: (error: Error) => void };
+let worker: Worker | undefined;
+let nextId = 0;
+const pending = new Map<number, Pending>();
+let status: FlowWasmStatus = { state: 'idle' };
+const listeners = new Set<(status: FlowWasmStatus) => void>();
+function publish(next: FlowWasmStatus) {
+  status = next;
+  for (const listener of listeners) listener(status);
+}
+export function getShellFlowStatus(): FlowWasmStatus { return status; }
+export function subscribeShellFlowStatus(listener: (status: FlowWasmStatus) => void): () => void {
+  listeners.add(listener);
+  listener(status);
+  return () => { listeners.delete(listener); };
+}
+function fail(error: Error) {
+  publish({ state: 'error', message: error.message });
+  for (const item of pending.values()) item.reject(error);
+  pending.clear();
+  worker?.terminate();
+  worker = undefined;
+}
+function getWorker(): Worker {
+  if (worker) return worker;
+  publish({ state: 'loading' });
+  try {
+    const created = new Worker('/wasm/flow-worker.js');
+    created.onmessage = (event: MessageEvent) => {
+      const message = event.data as { type: string; id?: number; state?: FlowWasmStatus['state']; message?: string; result?: WasmFlowResult };
+      if (message.type === 'status') {
+        if (message.state === 'error') fail(new Error(message.message ?? 'Falha ao iniciar Go WASM'));
+        else if (message.state === 'ready') publish({ state: 'ready' });
+        return;
+      }
+      if (message.id === undefined) return;
+      const request = pending.get(message.id);
+      if (!request) return;
+      pending.delete(message.id);
+      if (message.type === 'result' && message.result) request.resolve(message.result);
+      else request.reject(new Error(message.message ?? 'Falha na análise WASM'));
+    };
+    created.onerror = () => fail(new Error('Falha no Web Worker do Shell Flow'));
+    worker = created;
+    created.postMessage({ type: 'init' });
+    return created;
+  } catch (error) {
+    fail(error instanceof Error ? error : new Error(String(error)));
+    throw error;
   }
 }
-let loading: Promise<void> | undefined;
-function loadRuntime(): Promise<void> {
-  return loading ??= (async () => {
-    if (!window.Go) {
-      await new Promise<void>((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = '/wasm/wasm_exec.js';
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error('Could not load Go WASM runtime'));
-        document.head.append(script);
-      });
-    }
-    if (!window.Go) throw new Error('Go WASM runtime unavailable');
-    const go = new window.Go();
-    const response = await fetch('/wasm/shell-flow.wasm');
-    if (!response.ok) throw new Error('Shell flow WASM not built');
-    const bytes = await response.arrayBuffer();
-    const { instance } = await WebAssembly.instantiate(bytes, go.importObject);
-    const runtime = go.run(instance);
-    void runtime.catch(error => {
-      console.error('Shell Flow WASM runtime stopped unexpectedly', error);
-    });
-    for (let attempt = 0; attempt < 50 && !window.shellFlowAnalyze; attempt++) {
-      await new Promise(resolve => setTimeout(resolve, 10));
-    }
-    if (!window.shellFlowAnalyze) throw new Error('Shell flow WASM did not register its API');
-  })().catch(error => { loading = undefined; throw error; });
-}
-export async function analyzeShellWasm(source: string): Promise<WasmFlowResult> {
-  await loadRuntime();
-  const raw = window.shellFlowAnalyze?.(source);
-  if (!raw) throw new Error('WASM analyzer unavailable');
-  const result = JSON.parse(raw) as WasmResponse;
-  if ('error' in result) throw new Error(result.error);
-  return result;
+export function initializeShellFlowWasm(): void { getWorker(); }
+export function analyzeShellWasm(source: string): Promise<WasmFlowResult> {
+  const current = getWorker();
+  const id = ++nextId;
+  return new Promise((resolve, reject) => {
+    pending.set(id, { resolve, reject });
+    current.postMessage({ type: 'analyze', id, source });
+  });
 }
