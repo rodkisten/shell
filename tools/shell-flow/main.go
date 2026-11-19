@@ -32,20 +32,29 @@ func analyze(source string) (result, error) {
  connect := func(from, to, kind string) {
   if from != "" && to != "" { out.Edges = append(out.Edges, edge{From:from, To:to, Kind:kind}) }
  }
- // Return entry and all possible exits. An exit's label indicates the
- // condition required before the next statement can execute.
+ // Exit labels represent the condition on the edge to the next node.
  type exit struct { id, kind string }
  var walkStmt func(*syntax.Stmt) (string, []exit)
+ var walkList func([]*syntax.Stmt) (string, []exit)
+ walkList = func(stmts []*syntax.Stmt) (string, []exit) {
+  var first string
+  var previous []exit
+  for _, stmt := range stmts {
+   entry, exits := walkStmt(stmt)
+   if first == "" { first = entry }
+   for _, e := range previous { connect(e.id, entry, e.kind) }
+   previous = exits
+  }
+  return first, previous
+ }
  walkStmt = func(stmt *syntax.Stmt) (string, []exit) {
   if binary, ok := stmt.Cmd.(*syntax.BinaryCmd); ok {
    left, leftExits := walkStmt(binary.X)
    right, rightExits := walkStmt(binary.Y)
-   op := binary.Op.String()
-   switch op {
+   switch binary.Op.String() {
    case "&&", "||":
-    condition := "true"
-    bypass := "false"
-    if op == "||" { condition, bypass = bypass, condition }
+    condition, bypass := "true", "false"
+    if binary.Op.String() == "||" { condition, bypass = bypass, condition }
     for _, e := range leftExits { connect(e.id, right, condition) }
     exits := append([]exit{}, rightExits...)
     for _, e := range leftExits { exits = append(exits, exit{e.id, bypass}) }
@@ -55,15 +64,29 @@ func analyze(source string) (result, error) {
     return left, rightExits
    }
   }
+  if clause, ok := stmt.Cmd.(*syntax.IfClause); ok {
+   condEntry, condExits := walkList(clause.Cond)
+   thenEntry, thenExits := walkList(clause.Then)
+   if condEntry == "" { return add("IfClause", stmt.Pos(), stmt.End()), []exit{} }
+   if thenEntry != "" {
+    for _, e := range condExits { connect(e.id, thenEntry, "true") }
+   }
+   exits := append([]exit{}, thenExits...)
+   if clause.Else != nil {
+    // Else may itself contain an elif condition. Its nested statements are
+    // visited independently, preserving source ranges and branch semantics.
+    elseEntry, elseExits := walkIfClause(clause.Else, add, connect, walkList)
+    for _, e := range condExits { connect(e.id, elseEntry, "false") }
+    exits = append(exits, elseExits...)
+   } else {
+    for _, e := range condExits { exits = append(exits, exit{e.id, "false"}) }
+   }
+   return condEntry, exits
+  }
   id := add("Stmt", stmt.Pos(), stmt.End())
   return id, []exit{{id, "next"}}
  }
- var previous []exit
- for _, stmt := range file.Stmts {
-  entry, exits := walkStmt(stmt)
-  for _, e := range previous { connect(e.id, entry, e.kind) }
-  previous = exits
- }
+ _, _ = walkList(file.Stmts)
  return out, nil
 }
 
