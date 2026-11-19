@@ -1,23 +1,35 @@
-name: Build
-run-name: Build ShellConductor · ${{ github.ref_name }} · ${{ github.sha }}
+name: 🧬 Filtered ShellConductor CI
+run-name: ShellConductor CI · ${{ github.ref_name }} · ${{ github.sha }}
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
 concurrency:
   group: shell-validation-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions: { contents: read }
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - run: npm install --no-audit --no-fund
-      - run: npm run build
-      - run: npm run lint
+  validate:
+    name: 🧬 Shared affected-area CI
+    uses: rodkisten/github/.github/workflows/filtered-ci.yml@1dc6fb2cd6ea38f6c3abb45e7741f7bcd71c8fda
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      repository-key: shell
+      config-ref: 1dc6fb2cd6ea38f6c3abb45e7741f7bcd71c8fda
+      node-version: '22'
+      working-directory: .
+      test-command: npm test
+      build-command: npm run build
+      lint-command: npm run lint
+      run-tests: false
+      run-build: true
+      run-lint: true
