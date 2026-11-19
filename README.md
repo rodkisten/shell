@@ -340,9 +340,15 @@ Não confundir `npm install --no-package-lock` (fallback temporário do CI) com 
 
 ### Correção do deploy WASM: run 44555230627
 
-O build de produção falhou em `main.go:11:2` com `missing go.sum entry for module providing package mvdan.cc/sh/v3/syntax`. A causa imediata é a ausência de `tools/shell-flow/go.sum` no repositório. O script `scripts/build-shell-flow-wasm.sh` agora executa `go mod download` antes de `go build`, inclusive quando chamado pelo `npm run build` no deploy.
+O build de produção falhou em `main.go:11:2` com `missing go.sum entry for module providing package mvdan.cc/sh/v3/syntax`. A causa imediata é a ausência de `tools/shell-flow/go.sum` no repositório. O script `scripts/build-shell-flow-wasm.sh` agora executa `go mod tidy && go mod verify` antes de `go build`, inclusive quando chamado pelo `npm run build` no deploy.
 
 - [x] Diagnosticar a falha pelo log real do GitHub Actions.
 - [x] Adicionar resolução de módulos no script compartilhado de build.
 - [ ] Gerar e versionar `tools/shell-flow/go.sum` para build totalmente reproduzível, então validar com `go mod verify`.
 - [ ] Confirmar a execução da pipeline de deploy após o merge deste PR.
+
+### Ajuste aplicado diretamente na main
+
+- [x] Confirmar que a `main` já continha o trabalho do PR #13 antes de editar.
+- [x] Substituir `go mod download` por `go mod tidy && go mod verify` no build Go/WASM, porque `download` isolado pode não gerar o checksum completo do pacote importado.
+- [ ] Versionar `tools/shell-flow/go.sum` a partir de um ambiente com acesso ao proxy Go e executar CI/deploy novamente.
