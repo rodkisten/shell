@@ -257,7 +257,9 @@ A versão inicial usa **modo Bash**, não Zsh. Não use seus resultados como con
 
 - [x] Criar módulo Go/WASM e contrato JSON
 - [x] Criar script de compilação e loader sob demanda
-- [ ] Executar compilação Go, validação TypeScript e testes no CI
-- [ ] Construir CFG real a partir da AST Go
+- [ ] Confirmar compilação Go, validação TypeScript e testes no CI (workflow WASM criado, execução ainda não verificada)
+- [ ] Construir CFG completo a partir da AST Go (arestas conservadoras de `&&`, `||` e pipelines já implementadas)
 - [ ] Adicionar worker, limites de tamanho e cancelamento
 - [ ] Integrar visualização React Flow/ELK após validar a semântica
+
+O workflow `.github/workflows/shell-flow-wasm.yml` compila o módulo em PRs que alterem o analisador e publica o artefato temporário. A lógica inicial reconhece `&&`, `||` e pipelines no nível de `BinaryCmd`, mas ainda não modela todas as saídas de comandos compostos, condições e loops. Não confundir esse grafo conservador com um CFG completo.
