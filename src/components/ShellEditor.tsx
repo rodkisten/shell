@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Compartment, EditorState, StateEffect, StateField } from '@codemirror/state';
-import { Decoration, type DecorationSet } from '@codemirror/view';
+import { Decoration, WidgetType, type DecorationSet } from '@codemirror/view';
 import { checkShell } from '../lib/shellcheck';
 import { embeddedShellHighlight } from '../lib/highlight';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
@@ -11,13 +11,14 @@ import { autocompletion, type CompletionContext } from '@codemirror/autocomplete
 import { shell } from '@codincod/codemirror-lang-shell';
 import { syntaxTree } from '@codemirror/language';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { contextualHints } from '../lib/suggestions';
-import figCurl from '../lib/specs/fig-curl.json';
-import { fromFigWords } from '../lib/completion-sources';
+import { contextualHintsFromActive } from '../lib/suggestions';
+import { cliCompletions, cliValueRequest } from '../lib/cli-completions';
+import { valueCompletions } from '../lib/completion-values';
 import { activeShellCommand } from '../lib/shell-command-ast';
 import { explainKnownShellTokens, type SemanticToken } from '../lib/semantic-shell';
 import { hoverTooltip } from '@codemirror/view';
 import { byName, SNIPPETS } from '../lib/commands';
+import { shellAutosuggestion, type Autosuggestion } from '../lib/autosuggest';
 
 /**
  * Lezer supplies structural context for the shell editor. This is a syntax
@@ -50,6 +51,82 @@ const diagnosticsField = StateField.define<DecorationSet>({
   },
   provide: field => EditorView.decorations.from(field),
 });
+
+const setAutosuggestion = StateEffect.define<Autosuggestion | null>();
+
+function applyAutosuggestion(view: EditorView, mode: 'all' | 'word'): boolean {
+  const suggestion = view.state.field(autosuggestionField, false);
+  const selection = view.state.selection.main;
+  if (!suggestion || !selection.empty || selection.head !== suggestion.from) return false;
+
+  let insert = suggestion.insert;
+  if (mode === 'word') {
+    let end = 0;
+    while (end < insert.length && /\s/.test(insert[end])) end++;
+    while (end < insert.length && !/\s/.test(insert[end])) end++;
+    insert = insert.slice(0, Math.max(1, end));
+  }
+  if (!insert) return false;
+
+  view.dispatch({
+    changes: { from: suggestion.from, insert },
+    selection: { anchor: suggestion.from + insert.length },
+    effects: setAutosuggestion.of(null),
+    userEvent: 'input.complete',
+  });
+  return true;
+}
+
+class AutosuggestionWidget extends WidgetType {
+  constructor(readonly suggestion: Autosuggestion) { super(); }
+
+  eq(other: AutosuggestionWidget) {
+    return other.suggestion.insert === this.suggestion.insert
+      && other.suggestion.source === this.suggestion.source;
+  }
+
+  toDOM(view: EditorView) {
+    const dom = document.createElement('span');
+    dom.className = 'cm-autosuggestion cm-autosuggestion-' + this.suggestion.source;
+    dom.textContent = this.suggestion.insert;
+    dom.title = 'Autosuggestion · toque para aceitar · Tab aceita tudo';
+    dom.setAttribute('aria-label', 'Sugestão: ' + this.suggestion.insert);
+    dom.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      applyAutosuggestion(view, 'all');
+      view.focus();
+    });
+    return dom;
+  }
+
+  ignoreEvent() { return false; }
+}
+
+const autosuggestionField = StateField.define<Autosuggestion | null>({
+  create: () => null,
+  update(value, transaction) {
+    if (transaction.docChanged || transaction.selection) value = null;
+    for (const effect of transaction.effects) {
+      if (effect.is(setAutosuggestion)) value = effect.value;
+    }
+    return value;
+  },
+});
+
+const autosuggestionDecorations = EditorView.decorations.compute(
+  [autosuggestionField],
+  state => {
+    const suggestion = state.field(autosuggestionField);
+    if (!suggestion || suggestion.from < 0 || suggestion.from > state.doc.length) return Decoration.none;
+    return Decoration.set([
+      Decoration.widget({
+        widget: new AutosuggestionWidget(suggestion),
+        side: 1,
+      }).range(suggestion.from),
+    ]);
+  },
+);
 
 export type ShellEditorHandle = { insert(text: string): void; focus(): void; reveal(from: number, to: number): void };
 type Props = {
@@ -125,33 +202,70 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
 
   useEffect(() => {
     if (!node.current) return;
+    let autosuggestRequest = 0;
     const complete = async (context: CompletionContext) => {
       const before = context.matchBefore(/[\w.+-]*/);
-      if (!before || (!context.explicit && before.from === before.to)) return null;
+      if (!before) return null;
       const source = context.state.doc.toString();
-      const hints = contextualHints(source, context.pos);
-      const snippets = before.text ? SNIPPETS.filter(s => s.id.startsWith(before.text)) : [];
-      // mvdan/sh AST determines the active command and its argument boundaries.
-      // No regex pipeline splitting, quote guessing or shell token scanner.
+      // mvdan/sh owns command/subcommand scope. Fig and the curated local specs
+      // are metadata sources only and never re-parse shell text.
       const active = await activeShellCommand(source, context.pos);
-      const figOptions = active?.executable === 'curl' && before.text.startsWith('-')
-        && !active.words.includes('--')
-        ? fromFigWords(figCurl, active.words)
-          .filter(item => item.kind === 'option' && item.name.startsWith(before.text))
-          .map(item => ({ label: item.name, type: 'property', detail: 'Fig · curl', info: item.description, apply: item.name }))
+      const cliItems = cliCompletions(active, context.pos);
+      const valueItems = await valueCompletions(cliValueRequest(active, context.pos));
+      const hints = active && context.pos > active.executableTo
+        ? []
+        : contextualHintsFromActive(active, context.pos);
+      const editingCommand = !active || context.pos <= active.executableTo;
+      const snippets = editingCommand && before.text
+        ? SNIPPETS.filter(s => s.id.startsWith(before.text))
         : [];
+
+      if (!context.explicit && before.from === before.to && !cliItems.length && !valueItems.length) return null;
+
+      const seen = new Set<string>();
       const options = [
-        ...figOptions,
+        ...valueItems.map(item => ({
+          label: item.label,
+          type: 'variable',
+          detail: item.detail,
+          info: item.info,
+          apply: item.label,
+          boost: 120,
+        })),
+        ...cliItems.map(item => ({
+          label: item.label,
+          type: item.kind === 'subcommand' ? 'keyword' : 'property',
+          detail: item.detail,
+          info: item.description + (item.takesValue ? '\n\nEsta opção espera um valor.' : ''),
+          apply: item.label,
+          boost: item.kind === 'subcommand' ? 90 : 40,
+        })),
         ...hints.map(h => ({
           label: h.label,
           type: h.kind === 'flag' ? 'property' : 'function',
           detail: h.title,
           info: h.description + '\n\nExemplo: ' + h.example,
           apply: h.label,
+          boost: h.kind === 'command' ? 80 : 30,
         })),
-        ...snippets.map(s => ({ label: s.id, type: 'keyword', detail: s.subtitle, info: s.code, apply: s.code })),
-      ];
-      return { from: before.from, options, validFor: /^[\w.+-]*$/ };
+        ...snippets.map(s => ({
+          label: s.id,
+          type: 'keyword',
+          detail: s.subtitle,
+          info: s.code,
+          apply: s.code,
+          boost: 10,
+        })),
+      ].filter(item => {
+        const key = item.label;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      return options.length
+        ? { from: before.from, options, validFor: /^[\w.+-]*$/ }
+        : null;
     };
     const view = new EditorView({
       parent: node.current,
@@ -162,9 +276,11 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           oneDark,
           shell(),
           embeddedShellHighlight,
-          hoverTooltip((view, pos) => {
-            const match = explainKnownShellTokens(view.state.doc.toString())
+          hoverTooltip(async (view, pos) => {
+            const source = view.state.doc.toString();
+            const match = (await explainKnownShellTokens(source))
               .find((item) => item.from <= pos && pos < item.to);
+            if (view.state.doc.toString() !== source) return null;
             if (!match) return null;
             const token = withSyntaxContext(match, view.state);
             return {
@@ -191,11 +307,18 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
             };
           }, { hoverTime: 250 }),
           diagnosticsField,
+          autosuggestionField,
+          autosuggestionDecorations,
           shellTheme,
           fontCompartment.current.of(editorFontTheme(fontSize)),
           wrapCompartment.current.of(wordWrap ? EditorView.lineWrapping : []),
           EditorState.tabSize.of(2),
-          keymap.of([indentWithTab, { key: 'Mod-Enter', run() { callbacks.current.onRun(); return true; } }]),
+          keymap.of([
+            { key: 'Tab', run: view => applyAutosuggestion(view, 'all') },
+            { key: 'ArrowRight', run: view => applyAutosuggestion(view, 'word') },
+            indentWithTab,
+            { key: 'Mod-Enter', run() { callbacks.current.onRun(); return true; } },
+          ]),
           autocompletion({ override: [complete], activateOnTyping: true, maxRenderedOptions: 8, closeOnBlur: false }),
           placeholder('Cole um script do ChatGPT ou comece a escrever…'),
           EditorView.updateListener.of((update) => {
@@ -203,25 +326,48 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
             if (update.docChanged || update.selectionSet) {
               const pos = update.state.selection.main.head;
               callbacks.current.onCursor(pos);
+
+              const selection = update.state.selection.main;
+              const source = update.state.doc.toString();
+              const request = ++autosuggestRequest;
+              if (selection.empty) {
+                void shellAutosuggestion(source, pos).then(suggestion => {
+                  const current = editor.current;
+                  if (
+                    request !== autosuggestRequest
+                    || !current
+                    || current.state.doc.toString() !== source
+                    || !current.state.selection.main.empty
+                    || current.state.selection.main.head !== pos
+                  ) return;
+                  current.dispatch({ effects: setAutosuggestion.of(suggestion) });
+                });
+              }
+
               // Keyboard navigation and iOS caret movement use the same
               // semantic selection as pointer interaction.
-              const token = explainKnownShellTokens(update.state.doc.toString())
-                .find((item) => item.from <= pos && pos < item.to);
-              if (token) callbacks.current.onSemanticInspect(withSyntaxContext(token, update.state));
+
+              void explainKnownShellTokens(source).then(tokens => {
+                const current = editor.current;
+                if (!current || current.state.doc.toString() !== source || current.state.selection.main.head !== pos) return;
+                const token = tokens.find(item => item.from <= pos && pos < item.to);
+                if (token) callbacks.current.onSemanticInspect(withSyntaxContext(token, current.state));
+              });
             }
           }),
           EditorView.domEventHandlers({
             pointerup(event, instance) {
               const pos = instance.posAtCoords({ x: event.clientX, y: event.clientY });
               if (pos == null) return false;
-              const token = explainKnownShellTokens(instance.state.doc.toString())
-                .find((item) => item.from <= pos && pos < item.to);
-              if (token) {
-                callbacks.current.onSemanticInspect(withSyntaxContext(token, instance.state));
-                if (token.kind === 'command' && byName.has(token.text)) {
-                  callbacks.current.onInspect(token.text);
-                }
-              }
+              const source = instance.state.doc.toString();
+              void explainKnownShellTokens(source).then(tokens => {
+                const current = editor.current;
+                if (!current || current.state.doc.toString() !== source) return;
+                const token = tokens.find(item => item.from <= pos && pos < item.to);
+                if (!token) return;
+                callbacks.current.onSemanticInspect(withSyntaxContext(token, current.state));
+                if (token.kind === 'command' && byName.has(token.text)) callbacks.current.onInspect(token.text);
+              });
               return false;
             },
           }),

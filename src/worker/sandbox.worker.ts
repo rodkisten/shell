@@ -1,6 +1,6 @@
 import { runZshScript } from '@brandon.zylstra/zsh-wasm';
 
-type Request = { id: number; action: 'execute' | 'reset'; script?: string };
+type Request = { id: number; action: 'execute' | 'reset' | 'completion-context'; script?: string };
 type CommandResult = { ok: boolean; stdout: string; stderr: string; exitCode: number };
 
 // BusyBox is a separate POSIX ash runtime, not an alias for Zsh.
@@ -115,11 +115,99 @@ async function curlFetch(args: string[]): Promise<CommandResult> {
   }
 }
 
+async function completionContext(): Promise<CommandResult> {
+  // Only inspect local IDBFS state. No network calls and no external binaries.
+  // Zsh builtins read package.json and Git refs, keeping autocomplete private.
+  const probe = String.raw`
+emulate -L zsh
+setopt null_glob extended_glob
+print -r -- '__SC_PACKAGE_BEGIN__'
+if [[ -r package.json ]]; then
+  print -r -- "$(<package.json)"
+fi
+print -r -- '__SC_PACKAGE_END__'
+print -r -- '__SC_WORKSPACES_BEGIN__'
+integer count=0
+for file in */package.json */*/package.json; do
+  [[ "$file" == node_modules/* || "$file" == */node_modules/* ]] && continue
+  [[ -r "$file" ]] || continue
+  print -r -- "__SC_FILE__$file"
+  print -r -- "$(<"$file")"
+  (( ++count >= 60 )) && break
+done
+print -r -- '__SC_WORKSPACES_END__'
+print -r -- '__SC_BRANCHES_BEGIN__'
+for ref in .git/refs/heads/* .git/refs/heads/**/*; do
+  [[ -f "$ref" ]] || continue
+  print -r -- "\${ref#.git/refs/heads/}"
+done
+if [[ -r .git/packed-refs ]]; then
+  while IFS=' ' read -r hash ref; do
+    [[ "$ref" == refs/heads/* ]] && print -r -- "\${ref#refs/heads/}"
+  done < .git/packed-refs
+fi
+print -r -- '__SC_BRANCHES_END__'
+`;
+  const result = await runZshScript(probe, { fs: 'idbfs' });
+  const stdout = result.stdout ?? '';
+  const between = (start: string, end: string) => {
+    const from = stdout.indexOf(start);
+    const to = stdout.indexOf(end);
+    if (from < 0 || to < 0 || to < from) return '';
+    return stdout.slice(from + start.length, to).replace(/^\r?\n/, '').replace(/\r?\n$/, '');
+  };
+
+  const npmScripts: string[] = [];
+  const npmWorkspaces: string[] = [];
+  const gitBranches = between('__SC_BRANCHES_BEGIN__', '__SC_BRANCHES_END__')
+    .split(/\r?\n/)
+    .map(value => value.trim())
+    .filter(Boolean);
+
+  const rootText = between('__SC_PACKAGE_BEGIN__', '__SC_PACKAGE_END__');
+  if (rootText) {
+    try {
+      const pkg = JSON.parse(rootText) as { scripts?: Record<string, unknown>; workspaces?: unknown };
+      if (pkg.scripts && typeof pkg.scripts === 'object')
+        npmScripts.push(...Object.keys(pkg.scripts));
+      if (Array.isArray(pkg.workspaces))
+        npmWorkspaces.push(...pkg.workspaces.filter((value): value is string => typeof value === 'string'));
+      else if (pkg.workspaces && typeof pkg.workspaces === 'object') {
+        const packages = (pkg.workspaces as { packages?: unknown }).packages;
+        if (Array.isArray(packages))
+          npmWorkspaces.push(...packages.filter((value): value is string => typeof value === 'string'));
+      }
+    } catch { /* malformed package.json should not break autocomplete */ }
+  }
+
+  const workspaceText = between('__SC_WORKSPACES_BEGIN__', '__SC_WORKSPACES_END__');
+  for (const block of workspaceText.split('__SC_FILE__').slice(1)) {
+    const newline = block.indexOf('\n');
+    if (newline < 0) continue;
+    const json = block.slice(newline + 1).trim();
+    try {
+      const pkg = JSON.parse(json) as { name?: unknown };
+      if (typeof pkg.name === 'string' && pkg.name) npmWorkspaces.push(pkg.name);
+    } catch { /* ignore malformed nested manifests */ }
+  }
+
+  const context = {
+    npmScripts: [...new Set(npmScripts)].sort(),
+    npmWorkspaces: [...new Set(npmWorkspaces)].sort(),
+    gitBranches: [...new Set(gitBranches)].sort(),
+  };
+  return { ok: true, stdout: JSON.stringify(context), stderr: '', exitCode: 0 };
+}
+
 self.onmessage = async (event: MessageEvent<Request>) => {
   const { id, action, script } = event.data;
   try {
     if (action === 'reset') {
       self.postMessage({ id, ok: true, stdout: 'Ambiente reiniciado.\n', stderr: '', exitCode: 0 });
+      return;
+    }
+    if (action === 'completion-context') {
+      self.postMessage({ id, ...await completionContext() });
       return;
     }
     if (!script?.trim() || script.length > 50_000) {
