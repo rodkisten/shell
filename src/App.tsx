@@ -10,6 +10,8 @@ import { Button } from './components/ui/button';
 import { ManPopover } from './components/ManPopover';
 import { ShellEditor, type ShellEditorHandle } from './components/ShellEditor';
 import { CommandHelp } from './components/CommandHelp';
+import { ExecutionExplorer } from './components/ExecutionExplorer';
+import { analyzeShell } from './lib/shell-analysis';
 import { HistoryPanel } from './components/HistoryPanel';
 import { LinuxPanel } from './components/LinuxPanel';
 import { WorkspacePanel } from './components/WorkspacePanel';
@@ -385,7 +387,8 @@ export function App() {
                 <div className="subpanel-heading"><h3><CircleAlert size={17}/> Diagnósticos <span className="count-pill">{findings.length}</span></h3><Button variant="outline" size="sm" onClick={fix}><WandSparkles size={14}/> Aplicar correções possíveis</Button></div>
                 {findings.map((finding,i) => <div className="diagnostic-item" key={i}><span className={cn('severity',finding.level)}>{finding.level}</span><div><strong>SC{finding.code} <span>L{finding.line}:{finding.column}</span></strong><p>{finding.message}</p><a href={'https://www.shellcheck.net/wiki/SC'+finding.code} target="_blank" rel="noreferrer">Entenda esse diagnóstico ↗</a></div></div>)}
               </section>}
-              {explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div>{astNodes.length > 0 && <div aria-label="Navegação pela AST" style={{maxHeight:260,overflowY:'auto',display:'grid',gap:4,padding:'8px 0'}}>
+              {explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div>{astNodes.length > 0 && <ExecutionExplorer analysis={analyzeShell(script, astNodes)} onReveal={(from, to) => editor.current?.reveal(from, to)} />}
+              {astNodes.length > 0 && <div aria-label="Navegação pela AST" style={{maxHeight:260,overflowY:'auto',display:'grid',gap:4,padding:'8px 0'}}>
                 {astNodes.map(node => <button key={node.id} type="button" disabled={node.from === undefined || node.to === undefined} title={node.description}
                   onClick={() => { if (node.from !== undefined && node.to !== undefined) editor.current?.reveal(node.from,node.to); }}
                   style={{textAlign:'left',padding:'7px 9px',paddingLeft:Math.min(node.depth,8)*10+9,borderRadius:8,background:'transparent',color:'inherit',border:'1px solid #34363e',opacity:node.from === undefined ? .55 : 1}}>
