@@ -34,3 +34,22 @@
 .editor-command-toolbar .editor-command-primary{border-color:#8064b5;background:#35264b;color:#f3e8ff}
 .editor-command-toolbar button:disabled{opacity:.5}
 @media(max-width:640px){.editor-command-toolbar{padding:7px 9px}.flow-visual-scroll{max-height:54dvh}}
+
+/* Editor tools share the same compact chrome as the file header. */
+.editor-command-toolbar{gap:4px;padding:5px 8px;background:#141519;border-color:#34363d}
+.editor-command-toolbar button{min-height:34px;padding:0 9px;border:1px solid #34363d;border-radius:7px;background:#141519;color:#ddd;font-size:12px;font-weight:500;white-space:nowrap}
+.editor-command-toolbar .editor-command-primary{background:#1e1f26;color:#e5e5e7;border-color:#454650}
+.explorer-dock{position:fixed;z-index:80;top:clamp(80px,13vh,130px);right:12px;bottom:80px;width:min(46vw,700px);display:flex;flex-direction:column;overflow:hidden;background:#101115;border:1px solid #383943;border-radius:14px;box-shadow:0 12px 60px #000a}
+.explorer-dock .subpanel-heading{flex-shrink:0;padding:10px 14px;border-bottom:1px solid #303139}
+.explorer-dock .explorer-tabs{flex-shrink:0;padding:7px 12px}
+.explorer-dock .execution-explorer{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain}
+.explorer-dock .explorer-explanation-text{overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px 16px;flex:1;font-size:12px;line-height:1.55}
+.explorer-dock > p{font-size:10px;margin:6px 12px}
+@media(max-width:700px){
+  .editor-command-toolbar{padding:4px 6px}
+  .editor-command-toolbar button{min-height:32px;padding:0 8px;font-size:11px}
+  .editor-command-toolbar button svg{width:14px;height:14px}
+  .explorer-dock{top:auto;right:0;left:0;bottom:calc(64px + env(safe-area-inset-bottom,0px));width:100%;height:min(47dvh,440px);border-radius:14px 14px 0 0;border-left:0;border-right:0}
+  .explorer-dock .flow-visual-scroll{max-height:24dvh}
+  .explorer-dock .explorer-tabs button{min-height:34px}
+}
