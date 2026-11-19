@@ -26,7 +26,13 @@ function loadRuntime(): Promise<void> {
     if (!response.ok) throw new Error('Shell flow WASM not built');
     const bytes = await response.arrayBuffer();
     const { instance } = await WebAssembly.instantiate(bytes, go.importObject);
-    void go.run(instance);
+    const runtime = go.run(instance);
+    void runtime.catch(error => {
+      console.error('Shell Flow WASM runtime stopped unexpectedly', error);
+    });
+    for (let attempt = 0; attempt < 50 && !window.shellFlowAnalyze; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
     if (!window.shellFlowAnalyze) throw new Error('Shell flow WASM did not register its API');
   })().catch(error => { loading = undefined; throw error; });
 }
