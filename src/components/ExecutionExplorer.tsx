@@ -1,14 +1,19 @@
 import './execution-explorer.css';
 import { useMemo, useState } from 'react';
 import type { ShellAnalysis } from '../lib/shell-analysis';
+import type { FlowWasmStatus, WasmFlowResult } from '../lib/shell-flow-wasm';
 
 type Props = {
   analysis: ShellAnalysis;
+  flow?: WasmFlowResult | null;
+  flowStatus?: FlowWasmStatus;
+  flowError?: string | null;
+  source?: string;
   onReveal?: (from: number, to: number) => void;
 };
 
 /** Read-only AST navigator. No command execution is performed here. */
-export function ExecutionExplorer({ analysis, onReveal }: Props) {
+export function ExecutionExplorer({ analysis, flow, flowStatus, flowError, source = '', onReveal }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const children = useMemo(() => {
@@ -40,6 +45,30 @@ export function ExecutionExplorer({ analysis, onReveal }: Props) {
         <span>{analysis.astNodes.length} nodes</span>
       </header>
       <p className="execution-explorer-note">Static syntax view. No commands executed.</p>
+      <div role="status" aria-live="polite" className="execution-explorer-note">
+        Go CFG WASM: {flowStatus?.state === 'ready' ? '✓ carregado no Web Worker' : flowStatus?.state === 'loading' ? '⏳ carregando…' : flowStatus?.state === 'error' ? '✕ indisponível' : 'não iniciado'}
+        {flowStatus?.message && <small> · {flowStatus.message}</small>}
+      </div>
+      {flowError && <p role="alert" className="execution-explorer-note">CFG: {flowError}</p>}
+      {flow && <details className="execution-explorer-details">
+        <summary>Grafo de fluxo · {flow.nodes.length} nós / {flow.edges.length} conexões</summary>
+        <ol>
+          {flow.nodes.map(node => {
+            // Go syntax offsets are UTF-8 bytes; decode before displaying and
+            // converting to CodeMirror's UTF-16 positions.
+            const bytes = new TextEncoder().encode(source);
+            const from = new TextDecoder().decode(bytes.slice(0, node.start)).length;
+            const to = new TextDecoder().decode(bytes.slice(0, node.end)).length;
+            return <li key={node.id}>
+              <button type="button" onClick={() => onReveal?.(from, to)}>
+                {node.kind}: {source.slice(from, to).trim().slice(0, 90) || node.id}
+              </button>
+              <small> → {flow.edges.filter(edge => edge.from === node.id).map(edge => `${edge.kind}: ${edge.to}`).join(' · ') || 'fim'}</small>
+            </li>;
+          })}
+        </ol>
+        {flow.warnings.map(warning => <p key={warning} className="execution-explorer-note">{warning}</p>)}
+      </details>}
       <div role="tree" aria-label="Shell AST" className="execution-explorer-tree">
         {visible.map(node => {
           const hasChildren = (children.get(node.id)?.length ?? 0) > 0;
