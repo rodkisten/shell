@@ -267,3 +267,14 @@ O workflow `.github/workflows/shell-flow-wasm.yml` compila o módulo em PRs que 
 **Atualização do protótipo:** o visitante Go agora percorre listas de instruções e reconhece ramos `if/else` básicos, além de `&&`, `||` e pipelines. `elif`, comandos compostos e semântica completa de saída ainda precisam de testes e refinamento. A verificação dos quatro bytes mágicos do WASM no CI foi corrigida. A compilação local não pôde ser concluída porque o proxy de módulos Go estava inacessível neste ambiente.
 
 **Validação WASM:** `scripts/test-shell-flow-wasm.mjs` instancia o módulo compilado no Node 22 e verifica caminhos sequenciais, `&&`, `||`, pipelines, `if/else`, `elif` e erros de sintaxe. O workflow roda esses smoke tests após a compilação. O visitante condicional recursivo foi corrigido para evitar referência a uma função inexistente. Os testes foram adicionados, mas o resultado do CI ainda não foi confirmado.
+
+### Continuação: PR #11, robustez do Shell Flow WASM
+
+- [x] Testar integridade referencial de arestas (nenhuma conexão para nós inexistentes).
+- [x] Testar limites e ordenação dos offsets UTF-8 retornados pelo Go.
+- [x] Aguardar registro assíncrono de `shellFlowAnalyze` no smoke test e no loader web.
+- [x] Tratar rejeição da execução Go/WASM no loader sem bloquear a inicialização.
+- [ ] Confirmar build Go e smoke tests aprovados no GitHub Actions.
+- [ ] Migrar execução WASM para Web Worker, evitando bloqueio da thread principal no Safari.
+
+A validação do PR #11 foi **implementada, não confirmada como aprovada**. O runtime ainda é carregado na thread principal e não oferece cancelamento.
