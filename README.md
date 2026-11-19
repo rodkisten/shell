@@ -263,3 +263,5 @@ A versão inicial usa **modo Bash**, não Zsh. Não use seus resultados como con
 - [ ] Integrar visualização React Flow/ELK após validar a semântica
 
 O workflow `.github/workflows/shell-flow-wasm.yml` compila o módulo em PRs que alterem o analisador e publica o artefato temporário. A lógica inicial reconhece `&&`, `||` e pipelines no nível de `BinaryCmd`, mas ainda não modela todas as saídas de comandos compostos, condições e loops. Não confundir esse grafo conservador com um CFG completo.
+
+**Atualização do protótipo:** o visitante Go agora percorre listas de instruções e reconhece ramos `if/else` básicos, além de `&&`, `||` e pipelines. `elif`, comandos compostos e semântica completa de saída ainda precisam de testes e refinamento. A verificação dos quatro bytes mágicos do WASM no CI foi corrigida. A compilação local não pôde ser concluída porque o proxy de módulos Go estava inacessível neste ambiente.
