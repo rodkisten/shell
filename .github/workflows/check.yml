@@ -18,13 +18,13 @@ permissions:
 jobs:
   validate:
     name: 🧬 Shared affected-area CI
-    uses: rodkisten/github/.github/workflows/filtered-ci.yml@feat/typescript-reusable-workflows
+    uses: rodkisten/github/.github/workflows/filtered-ci.yml@64017fa4ac2e68cdbbb850faea7ca4ee7d627969
     permissions:
       contents: read
       pull-requests: read
     with:
       repository-key: shell
-      config-ref: feat/typescript-reusable-workflows
+      config-ref: 64017fa4ac2e68cdbbb850faea7ca4ee7d627969
       node-version: '22'
       working-directory: .
       test-command: npm test
