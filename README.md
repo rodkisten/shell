@@ -43,7 +43,8 @@ Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa soment
 - [x] Workflow de build dos assets validado em execução confirmada pelo usuário.
 - [x] Bucket R2 `shell-linux-assets` criado na Cloudflare (2026-11-15).
 - [x] Endpoint Worker `/v86/*` integrado ao binding R2 e workflow com publicação opt-in.
-- [ ] Publicar cinco objetos em R2 e confirmar respostas HTTP 200/206/HEAD; bucket inicialmente vazio.
+- [x] Confirmar publicação e acesso HTTP 200/206/HEAD da ISO Alpine em produção (workflow 2026-11-19).
+- [ ] Validar os cinco objetos v86 em produção com smoke test automatizado (PR em andamento; aguardar execução pós-merge).
 - [ ] Validar boot do Alpine no Safari iPhone e no desktop.
 - [ ] Configurar networking de convidado e testar apk/curl no Linux.
 - [ ] Implementar persistência automática de disco/snapshot no IndexedDB.
@@ -375,3 +376,6 @@ O build e o CI de WASM não executam mais `go mod tidy`; `GOFLAGS=-mod=readonly`
 ### Explorer visual e toolbar mobile (em validação)
 
 O editor apresenta uma segunda linha horizontal de ações rápidas: **Executar**, **Formatar**, **Validar**, **Explicar** e **Fluxo**. Em telas pequenas, a linha rola horizontalmente e preserva alvos de toque de 42 px. O painel de explicação contém abas **Fluxo**, **AST** e **Explicação**. A aba Fluxo apresenta nós e conexões do Go WASM; tocar num nó revela o trecho correspondente no CodeMirror 6. O fluxo é estático, não um rastreamento da execução. Validar build, lint e comportamento real no Safari antes de marcar como concluído.
+### Smoke test de assets Linux em produção
+
+O workflow `.github/workflows/deploy-shell.yml` verifica os cinco assets do v86 (`libv86.js`, `v86.wasm`, `seabios.bin`, `vgabios.bin`, `alpine.iso`) após o deploy. Cada arquivo precisa responder a `HEAD` com HTTP 200, `Content-Type` esperado e tamanho positivo, além de `Range: bytes=0-1023` com HTTP 206 e `Content-Range` consistente. O resultado é publicado no GitHub Actions Job Summary. Este teste confirma a entrega HTTP dos assets, não o boot da VM nem o comportamento no Safari.

@@ -44,19 +44,44 @@ jobs:
           : "${CLOUDFLARE_API_TOKEN:?Missing CLOUDFLARE_API_TOKEN in production environment}"
           : "${CLOUDFLARE_ACCOUNT_ID:?Missing CLOUDFLARE_ACCOUNT_ID in production environment}"
           npx wrangler deploy
-      - name: Verify Alpine asset HTTP headers
+      - name: Verify Linux v86 production assets
+        shell: bash
         run: |
           set -euo pipefail
-          url="https://shell.migos.club/v86/alpine.iso"
-          for attempt in 1 2 3 4 5; do
-            status="$(curl -sSL -o /dev/null -w '%{http_code}' -I "$url" || true)"
-            if [ "$status" = 200 ]; then break; fi
-            echo "HEAD returned $status (attempt $attempt)"
-            sleep 5
+          base="https://shell.migos.club/v86"
+          assets=(libv86.js v86.wasm seabios.bin vgabios.bin alpine.iso)
+          types=("text/javascript" "application/wasm" "application/octet-stream" "application/octet-stream" "application/octet-stream")
+          {
+            echo "## 🐧 Linux v86 production smoke test"
+            echo "| Asset | HEAD | Range | Size |"
+            echo "| --- | --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for i in "${!assets[@]}"; do
+            name="${assets[$i]}"
+            url="$base/$name"
+            headers="$(mktemp)"
+            ranged="$(mktemp)"
+            trap 'rm -f "$headers" "$ranged"' EXIT
+            for attempt in 1 2 3 4 5; do
+              status="$(curl -sSL -o /dev/null -D "$headers" -w '%{http_code}' -I --max-time 20 "$url" || true)"
+              if [[ "$status" == 200 ]]; then break; fi
+              echo "::warning title=Linux asset retry::$name returned $status (attempt $attempt)"
+              sleep 5
+            done
+            if [[ "$status" != 200 ]]; then
+              echo "::error title=Linux asset unavailable::$name HEAD returned $status"
+              exit 1
+            fi
+            grep -qi "^content-type: ${types[$i]}" "$headers" || { echo "::error title=Unexpected MIME::$name"; exit 1; }
+            size="$(awk 'BEGIN{IGNORECASE=1} tolower($1)=="content-length:" {gsub("\\r","",$2);print $2}' "$headers" | tail -1)"
+            [[ "$size" =~ ^[0-9]+$ ]] && (( size > 0 )) || { echo "::error title=Invalid asset size::$name"; exit 1; }
+            code="$(curl -sSL -o /dev/null -D "$ranged" -w '%{http_code}' -H 'Range: bytes=0-1023' --max-time 20 "$url")"
+            [[ "$code" == 206 ]] || { echo "::error title=Range unsupported::$name returned $code"; exit 1; }
+            expected_end=1023
+            if (( size < 1024 )); then expected_end=$((size - 1)); fi
+            grep -qi "^content-range: bytes 0-${expected_end}/${size}" "$ranged" || { echo "::error title=Invalid Content-Range::$name"; exit 1; }
+            echo "| \`$name\` | 200 | 206 | $size bytes |" >> "$GITHUB_STEP_SUMMARY"
+            echo "Verified $name ($size bytes)"
+            rm -f "$headers" "$ranged"
+            trap - EXIT
           done
-          test "$status" = 200
-          headers="$(curl -fsSI -H 'Range: bytes=0-1023' "$url")"
-          printf '%s\n' "$headers"
-          printf '%s\n' "$headers" | grep -qi '^HTTP/.* 206'
-          printf '%s\n' "$headers" | grep -qi '^content-range: bytes 0-1023/'
-          echo "Alpine ISO is reachable with HTTP Range support"
