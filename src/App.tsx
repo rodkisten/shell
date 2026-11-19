@@ -342,7 +342,7 @@ export function App() {
         <main className="main-content">
           <Routes>
             <Route path="/" element={<>
-              <div className="page-heading"><div className="heading-top"><span className="eyebrow"><span className="live-dot"/> SHELL PLAYGROUND</span><span className="release-pill">ZSH + WEBASSEMBLY</span></div>
+              <div className="page-heading"><div className="heading-top"><span className="eyebrow"><span className="live-dot"/> SHELL PLAYGROUND</span><span className="release-pill">ZSH + WEBASSEMBLY</span><span role="status" aria-live="polite" className="release-pill" title={flowStatus.message ?? "Analisador CFG em Web Worker"}>CFG WASM: {flowStatus.state === "ready" ? "✓ pronto" : flowStatus.state === "loading" ? "⏳ carregando" : flowStatus.state === "error" ? "✕ falhou" : "aguardando"}</span></div>
                 <h1>Seu shell, <span>sob controle.</span></h1>
                 <p>Escreva, entenda e execute scripts. Tudo em um lugar, sem sair do navegador.</p>
               </div>
