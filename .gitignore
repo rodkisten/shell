@@ -9,3 +9,7 @@ dist/
 
 # Generated Linux VM assets (large binary downloads)
 /public/v86/
+
+# Generated Go WASM artifacts
+/public/wasm/shell-flow.wasm
+/public/wasm/wasm_exec.js

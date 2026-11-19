@@ -223,3 +223,47 @@ Static asset headers are defined in `public/_headers`, including `Cross-Origin-O
 ShellCheck and its WASM artifact are GPL-3.0-or-later. Verify distribution obligations when shipping compiled code. Other package licenses are in each upstream package.
 
 No tests are configured, by request.
+
+## Execution Explorer (em desenvolvimento)
+
+O painel **Explicar comando** agora inclui uma árvore AST interativa baseada no parser `sh-syntax` / `mvdan/sh`. É possível expandir e recolher nós, inspecionar suas descrições e navegar até o intervalo correspondente no editor CodeMirror 6. A interface é responsiva e prioriza o Safari no iPhone.
+
+**Estado atual:** a árvore é uma representação sintática estática, não um trace de execução. O módulo `src/lib/shell-analysis.ts` define os contratos `ShellAnalysis`, `FlowNode`, `FlowEdge` e `ExecutionEvent`; as arestas atuais representam apenas proximidade textual entre irmãos, com semântica `unknown`. Não são executados comandos para construir a árvore.
+
+### Roadmap do Execution Explorer
+
+- [x] Modelo TypeScript para nós, arestas e eventos
+- [x] Árvore AST expansível e inspector com navegação no CodeMirror
+- [x] Integração com painel de explicações e remoção do navegador duplicado
+- [x] Sincronização com a arquitetura compartilhada de parser da main
+- [x] Associar tokens semânticos do snapshot aos nós no painel
+- [ ] CFG com arestas verificadas para `if/elif/else`, `&&`, `||`, pipelines e loops
+- [ ] Timeline de simulação estática com ramificações explícitas
+- [ ] Trace real do sandbox WASM, com eventos observados separados de inferências
+- [ ] Testes automatizados de AST, navegação, fluxo e mobile
+- [ ] Abas Flow / AST / Explain / Output e inspector móvel em drawer
+
+A interface ignora resultados de análise antigos quando o texto muda durante o parsing. As explicações de comandos e operadores são obtidas do mesmo snapshot semântico do editor.
+
+**Segurança:** a análise estática não executa scripts. A execução do terminal permanece isolada no sandbox WebAssembly.
+
+### Protótipo Go → WebAssembly (experimental)
+
+O diretório `tools/shell-flow/` contém um módulo Go separado que usa `mvdan.cc/sh/v3/syntax` e exporta `shellFlowAnalyze(source)` via `syscall/js`. A função retorna JSON com instruções de nível superior, intervalos em bytes UTF-8 e arestas de sequência textual. **Ainda não implementa CFG semântico**, `if/else`, loops, `&&`, `||`, nem trace de execução.
+
+Para compilar, instale Go compatível, execute `cd tools/shell-flow && go mod tidy` e depois `bash scripts/build-shell-flow-wasm.sh`. O build grava `public/wasm/shell-flow.wasm` e `public/wasm/wasm_exec.js`, ignorados pelo Git. O cliente `src/lib/shell-flow-wasm.ts` carrega os artefatos sob demanda via `analyzeShellWasm(source)`. O protótipo **não é carregado pelo editor por padrão**, para não aumentar o custo inicial no iPhone.
+
+A versão inicial usa **modo Bash**, não Zsh. Não use seus resultados como confirmação de compatibilidade Zsh. Os offsets retornados pelo Go são bytes UTF-8 e devem ser convertidos antes de selecionar intervalos no CodeMirror 6.
+
+- [x] Criar módulo Go/WASM e contrato JSON
+- [x] Criar script de compilação e loader sob demanda
+- [ ] Confirmar compilação Go, validação TypeScript e testes no CI (workflow WASM criado, execução ainda não verificada)
+- [ ] Construir CFG completo a partir da AST Go (arestas conservadoras de `&&`, `||` e pipelines já implementadas)
+- [ ] Adicionar worker, limites de tamanho e cancelamento
+- [ ] Integrar visualização React Flow/ELK após validar a semântica
+
+O workflow `.github/workflows/shell-flow-wasm.yml` compila o módulo em PRs que alterem o analisador e publica o artefato temporário. A lógica inicial reconhece `&&`, `||` e pipelines no nível de `BinaryCmd`, mas ainda não modela todas as saídas de comandos compostos, condições e loops. Não confundir esse grafo conservador com um CFG completo.
+
+**Atualização do protótipo:** o visitante Go agora percorre listas de instruções e reconhece ramos `if/else` básicos, além de `&&`, `||` e pipelines. `elif`, comandos compostos e semântica completa de saída ainda precisam de testes e refinamento. A verificação dos quatro bytes mágicos do WASM no CI foi corrigida. A compilação local não pôde ser concluída porque o proxy de módulos Go estava inacessível neste ambiente.
+
+**Validação WASM:** `scripts/test-shell-flow-wasm.mjs` instancia o módulo compilado no Node 22 e verifica caminhos sequenciais, `&&`, `||`, pipelines, `if/else`, `elif` e erros de sintaxe. O workflow roda esses smoke tests após a compilação. O visitante condicional recursivo foi corrigido para evitar referência a uma função inexistente. Os testes foram adicionados, mas o resultado do CI ainda não foi confirmado.

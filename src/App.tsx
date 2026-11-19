@@ -10,6 +10,8 @@ import { Button } from './components/ui/button';
 import { ManPopover } from './components/ManPopover';
 import { ShellEditor, type ShellEditorHandle } from './components/ShellEditor';
 import { CommandHelp } from './components/CommandHelp';
+import { ExecutionExplorer } from './components/ExecutionExplorer';
+import { analyzeShell } from './lib/shell-analysis';
 import { HistoryPanel } from './components/HistoryPanel';
 import { LinuxPanel } from './components/LinuxPanel';
 import { WorkspacePanel } from './components/WorkspacePanel';
@@ -68,6 +70,8 @@ export function App() {
   const [output, setOutput] = useState<Output[]>([]);
   const [explanation, setExplanation] = useState<string | null>(null);
   const [astNodes, setAstNodes] = useState<ShellAstNode[]>([]);
+  const [analysisTokens, setAnalysisTokens] = useState<SemanticToken[]>([]);
+  const analysisRevision = useRef(0);
   const [toast, setToast] = useState('');
   const [historyRevision, setHistoryRevision] = useState(0);
   const [showSnippets, setShowSnippets] = useState(false);
@@ -126,7 +130,7 @@ export function App() {
   }, [script]);
   useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
 
-  const change = (text: string) => { setScript(text); setFindings([]); setExplanation(null); setAstNodes([]); setSemanticSelection(null); };
+  const change = (text: string) => { analysisRevision.current++; setScript(text); setFindings([]); setExplanation(null); setAstNodes([]); setAnalysisTokens([]); setSemanticSelection(null); };
   const insert = (text: string) => {
     navigation('/');
     // Editor may not be mounted yet when opened from the library.
@@ -278,13 +282,16 @@ export function App() {
   const explain = async () => {
     if (!script.trim()) return notify('Cole ou escreva um comando primeiro.');
     setBusy('explain');
+    const revision = ++analysisRevision.current;
     try {
       // Validate with the already-installed shell parser. Do not send scripts
       // (which may contain credentials) to the remote documentation endpoint.
       const snapshot = await parseShellSnapshot(script);
       const overview = inspectShellSnapshot(snapshot);
-      setAstNodes(overview.nodes);
       const tokens = explainKnownShellTokensFromSnapshot(snapshot);
+      if (revision !== analysisRevision.current) return;
+      setAstNodes(overview.nodes);
+      setAnalysisTokens(tokens);
       const steps = tokens.map((token, index) =>
         `${index + 1}. ${token.text} · ${token.title}\n   ${token.description}${token.example ? '\n   Exemplo: ' + token.example : ''}`
       );
@@ -292,9 +299,11 @@ export function App() {
         ? ['AST real (sh-syntax / mvdan)', `${overview.navigableCount}/${overview.count} nós com posição verificável`, ...overview.lines, overview.truncated ? '… árvore truncada para proteger o desempenho no celular.' : '', '', 'Análise semântica parcial (catálogo + operadores)', '', ...steps, '', 'A AST é estrutural; efeitos de expansões dinâmicas e comandos externos não são inferidos.'].join('\n')
         : ['AST real (sh-syntax / mvdan)', ...overview.lines, '', 'Nenhum comando reconhecido pelo catálogo semântico local.'].join('\n'));
     } catch (error) {
+      if (revision !== analysisRevision.current) return;
       setAstNodes([]);
+      setAnalysisTokens([]);
       setExplanation('Não foi possível analisar a sintaxe Zsh: ' + (error instanceof Error ? error.message : String(error)));
-    } finally { setBusy(null); }
+    } finally { if (revision === analysisRevision.current) setBusy(null); }
   };
 
   return (
@@ -385,14 +394,7 @@ export function App() {
                 <div className="subpanel-heading"><h3><CircleAlert size={17}/> Diagnósticos <span className="count-pill">{findings.length}</span></h3><Button variant="outline" size="sm" onClick={fix}><WandSparkles size={14}/> Aplicar correções possíveis</Button></div>
                 {findings.map((finding,i) => <div className="diagnostic-item" key={i}><span className={cn('severity',finding.level)}>{finding.level}</span><div><strong>SC{finding.code} <span>L{finding.line}:{finding.column}</span></strong><p>{finding.message}</p><a href={'https://www.shellcheck.net/wiki/SC'+finding.code} target="_blank" rel="noreferrer">Entenda esse diagnóstico ↗</a></div></div>)}
               </section>}
-              {explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div>{astNodes.length > 0 && <div aria-label="Navegação pela AST" style={{maxHeight:260,overflowY:'auto',display:'grid',gap:4,padding:'8px 0'}}>
-                {astNodes.map(node => <button key={node.id} type="button" disabled={node.from === undefined || node.to === undefined} title={node.description}
-                  onClick={() => { if (node.from !== undefined && node.to !== undefined) editor.current?.reveal(node.from,node.to); }}
-                  style={{textAlign:'left',padding:'7px 9px',paddingLeft:Math.min(node.depth,8)*10+9,borderRadius:8,background:'transparent',color:'inherit',border:'1px solid #34363e',opacity:node.from === undefined ? .55 : 1}}>
-                  <strong>{node.kind}</strong> <small>{node.description}</small>
-                  {node.from !== undefined && <small> · {node.from}–{node.to}</small>}
-                </button>)}
-              </div>}
+              {explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div>{astNodes.length > 0 && <ExecutionExplorer analysis={analyzeShell(script, astNodes, analysisTokens)} onReveal={(from, to) => editor.current?.reveal(from, to)} />}
               <pre>{explanation}</pre><p>Fonte: catálogo local e parser sh-syntax. Nenhum código é enviado para análise remota.</p></section>}
               <WorkspacePanel />
               <div className="footer-advice"><Info size={15}/><span>O terminal executa Zsh em WebAssembly com filesystem virtual persistente. <strong>Não executa comandos no seu iPhone, servidor ou Codespace.</strong> Requisições HTTP externas não são habilitadas no sandbox.</span></div>

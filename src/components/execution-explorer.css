@@ -1,0 +1,18 @@
+.execution-explorer{border:1px solid #27272a;border-radius:12px;background:#09090b;color:#fafafa;overflow:hidden;margin:12px 0;font-size:13px}
+.execution-explorer-header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid #27272a}
+.execution-explorer-header span,.execution-explorer-note{color:#a1a1aa;font-size:11px}
+.execution-explorer-note{margin:8px 14px;line-height:1.5}
+.execution-explorer-tree{max-height:320px;overflow:auto;padding:8px 4px}
+.execution-explorer-node{display:flex;align-items:center;min-height:32px;border-radius:6px}
+.execution-explorer-node:hover,.execution-explorer-node.is-selected{background:#27272a}
+.execution-explorer-node>button{border:0;background:transparent;color:inherit;cursor:pointer;min-height:32px}
+.execution-explorer-node>button:first-child{width:25px;flex-shrink:0}
+.execution-explorer-select{display:flex;gap:9px;align-items:center;min-width:0;flex:1;text-align:left}
+.execution-explorer-select span{font-family:ui-monospace,SFMono-Regular,monospace;color:#c4b5fd}
+.execution-explorer-select small{color:#a1a1aa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.execution-explorer-details{padding:12px 14px;border-top:1px solid #27272a;background:#111113}
+.execution-explorer-details p{color:#d4d4d8;line-height:1.5}
+.execution-explorer-details dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:11px}
+.execution-explorer-details dt{color:#a1a1aa}
+.execution-explorer-details dd{margin:0;overflow-wrap:anywhere}
+@media(max-width:640px){.execution-explorer-tree{max-height:42dvh}.execution-explorer-node{min-height:40px}.execution-explorer-node>button{min-height:40px}}
