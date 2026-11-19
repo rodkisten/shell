@@ -1,5 +1,5 @@
 import type { ShellAstNode } from './shell-ast';
-import { explainKnownShellTokens, type SemanticToken } from './semantic-shell';
+import type { SemanticToken } from './semantic-shell';
 
 /** Static analysis describes possible paths, never a verified runtime trace. */
 export type FlowEdgeKind = 'next' | 'true' | 'false' | 'loop' | 'conditional' | 'pipeline' | 'unknown';
@@ -36,8 +36,7 @@ export type ShellAnalysis = {
  * Sibling links represent lexical order, NOT guaranteed runtime execution.
  * Branches and loops must be resolved by a future control-flow visitor.
  */
-export function analyzeShell(source: string, astNodes: ShellAstNode[]): ShellAnalysis {
-  const tokens = explainKnownShellTokens(source);
+export function analyzeShell(source: string, astNodes: ShellAstNode[], tokens: readonly SemanticToken[] = []): ShellAnalysis {
   const nodes: FlowNode[] = astNodes
     .filter(node => node.navigable && node.from !== undefined && node.to !== undefined)
     .map(node => ({
