@@ -223,3 +223,24 @@ Static asset headers are defined in `public/_headers`, including `Cross-Origin-O
 ShellCheck and its WASM artifact are GPL-3.0-or-later. Verify distribution obligations when shipping compiled code. Other package licenses are in each upstream package.
 
 No tests are configured, by request.
+
+## Execution Explorer (em desenvolvimento)
+
+O painel **Explicar comando** agora inclui uma árvore AST interativa baseada no parser `sh-syntax` / `mvdan/sh`. É possível expandir e recolher nós, inspecionar suas descrições e navegar até o intervalo correspondente no editor CodeMirror 6. A interface é responsiva e prioriza o Safari no iPhone.
+
+**Estado atual:** a árvore é uma representação sintática estática, não um trace de execução. O módulo `src/lib/shell-analysis.ts` define os contratos `ShellAnalysis`, `FlowNode`, `FlowEdge` e `ExecutionEvent`; as arestas atuais representam apenas proximidade textual entre irmãos, com semântica `unknown`. Não são executados comandos para construir a árvore.
+
+### Roadmap do Execution Explorer
+
+- [x] Modelo TypeScript para nós, arestas e eventos
+- [x] Árvore AST expansível e inspector com navegação no CodeMirror
+- [x] Integração com painel de explicações e remoção do navegador duplicado
+- [x] Sincronização com a arquitetura compartilhada de parser da main
+- [ ] Associar tokens semânticos do snapshot aos nós no painel
+- [ ] CFG com arestas verificadas para `if/elif/else`, `&&`, `||`, pipelines e loops
+- [ ] Timeline de simulação estática com ramificações explícitas
+- [ ] Trace real do sandbox WASM, com eventos observados separados de inferências
+- [ ] Testes automatizados de AST, navegação, fluxo e mobile
+- [ ] Abas Flow / AST / Explain / Output e inspector móvel em drawer
+
+**Segurança:** a análise estática não executa scripts. A execução do terminal permanece isolada no sandbox WebAssembly.
