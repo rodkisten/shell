@@ -21,10 +21,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: tools/shell-flow/go.mod
-          cache-dependency-path: tools/shell-flow/go.sum
+          cache: false
       - name: Download Go dependencies
         working-directory: tools/shell-flow
-        run: go mod download
+        run: go mod tidy && go mod download
       - name: Verify Go module
         working-directory: tools/shell-flow
         run: go mod verify
