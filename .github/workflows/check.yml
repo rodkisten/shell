@@ -1,35 +1,36 @@
-name: 🧬 Filtered ShellConductor CI
-run-name: ShellConductor CI · ${{ github.ref_name }} · ${{ github.sha }}
+name: Filtered ShellConductor CI
+run-name: ShellConductor CI · ${{ github.ref_name }}
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
-
-concurrency:
-  group: shell-validation-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+    branches:
+      - main
 
 permissions:
   contents: read
   pull-requests: read
 
+concurrency:
+  group: shell-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
-    name: 🧬 Shared affected-area CI
-    uses: rodkisten/github/.github/workflows/filtered-ci.yml@main
+    name: Shared affected-area CI
     permissions:
       contents: read
       pull-requests: read
+    uses: rodkisten/github/.github/workflows/filtered-ci.yml@main
     with:
       repository-key: shell
       config-ref: main
       node-version: '24'
-      working-directory: .
-      test-command: npm test
-      build-command: npm run build
-      lint-command: npm run lint
+      working-directory: '.'
       run-tests: false
       run-build: true
       run-lint: true
+      build-command: 'npm run build'
+      lint-command: 'npm run lint'
