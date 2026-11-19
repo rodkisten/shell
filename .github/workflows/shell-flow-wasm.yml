@@ -12,6 +12,7 @@ on:
       - 'public/wasm/flow-worker.js'
       - 'vite.config.ts'
       - 'package.json'
+      - 'scripts/build-shell-flow-wasm.sh'
       - 'package-lock.json'
       - '.github/workflows/shell-flow-wasm.yml'
   workflow_dispatch:
@@ -53,8 +54,8 @@ jobs:
         run: node scripts/test-shell-flow-wasm.mjs
       - name: Install frontend dependencies
         run: npm ci
-      - name: Typecheck and bundle app with WASM
-        run: npm run build
+      - name: Typecheck and bundle app with previously compiled WASM
+        run: npm run ast:inspect && npm run typecheck && npx vite build
       - name: Verify deployable WASM assets
         run: |
           test -s dist/wasm/shell-flow.wasm
