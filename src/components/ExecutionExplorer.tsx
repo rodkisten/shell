@@ -1,3 +1,4 @@
+import './execution-explorer.css';
 import { useMemo, useState } from 'react';
 import type { ShellAnalysis } from '../lib/shell-analysis';
 
