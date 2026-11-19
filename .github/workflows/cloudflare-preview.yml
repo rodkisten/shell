@@ -210,8 +210,8 @@ jobs:
           for attempt in $(seq 1 12); do
             : > "$headers"
             curl --show-error --silent --max-time 15 --dump-header "$headers" --output /dev/null "https://shell.preview.migos.club/?verify=$GITHUB_RUN_ID-$attempt" || true
-            actual_target="$(grep -im1 '^x-shell-preview-target:' "$headers" | cut -d: -f2- | tr -d '\\r' | sed 's/^ *//' || true)"
-            actual_location="$(grep -im1 '^location:' "$headers" | cut -d: -f2- | tr -d '\\r' | sed 's/^ *//' || true)"
+            actual_target="$(grep -im1 '^x-shell-preview-target:' "$headers" | cut -d: -f2- | tr -d '\r' | sed 's/^ *//' || true)"
+            actual_location="$(grep -im1 '^location:' "$headers" | cut -d: -f2- | tr -d '\r' | sed 's/^ *//' || true)"
             expected_location="$NATIVE_PREVIEW_URL/?verify=$GITHUB_RUN_ID-$attempt"
             if [[ "$actual_target" == "$CUSTOM_PREVIEW_URL" && "$actual_location" == "$expected_location" ]]; then
               matched=true
