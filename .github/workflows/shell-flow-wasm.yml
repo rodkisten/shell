@@ -55,10 +55,17 @@ jobs:
         run: npm run ast:inspect && npm run typecheck && npx vite build
       - name: Verify deployable WASM assets
         run: |
-          test -s dist/wasm/shell-flow.wasm
-          test -s dist/wasm/wasm_exec.js
-          test -s dist/wasm/flow-worker.js
-          node --input-type=module -e "import { readFileSync } from 'node:fs'; const b=readFileSync('dist/wasm/shell-flow.wasm'); if (b.subarray(0,4).toString('hex')!=='0061736d') process.exit(1)"
+          # Cloudflare Vite plugin emits static files under dist/client.
+          asset_root="dist/client/wasm"
+          for asset in shell-flow.wasm wasm_exec.js flow-worker.js; do
+            test -s "$asset_root/$asset" || { echo "::error::Missing $asset_root/$asset"; find dist -maxdepth 4 -type f -name "$asset" -print; exit 1; }
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('dist/client/wasm/shell-flow.wasm')
+          assert path.read_bytes()[:4] == b'\\x00asm', f'Invalid WASM header: {path}'
+          print('Deployable WASM header valid')
+          PY
       - name: Upload deployable frontend
         uses: actions/upload-artifact@v4
         with:
