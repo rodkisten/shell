@@ -383,7 +383,7 @@ export function App() {
                       <button type="button" aria-label="Fechar explicação" onClick={() => setSemanticSelection(null)}><X size={17}/></button>
                     </div>
                     <button className="semantic-selection-target" type="button" onClick={() => editor.current?.reveal(semanticSelection.from, semanticSelection.to)} title="Selecionar trecho no editor"><code>{semanticSelection.text}</code> <span aria-hidden="true">↗</span></button>
-                    <p>{semanticSelection.description}</p>
+                    <p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{semanticSelection.description.replace(/\\n/g, '\n')}</p>
                     {semanticSelection.example && <pre>{semanticSelection.example}</pre>}
                     <small>Fonte: {semanticSelection.source === 'cli-spec' ? 'especificação CLI local' : semanticSelection.source === 'shell' ? 'operador shell' : 'catálogo local'}. Análise parcial.</small>
                   </section>}
@@ -451,7 +451,7 @@ export function App() {
                 {(['flow','ast','explanation'] as const).map(tab => <button key={tab} type="button" role="tab" aria-selected={explorerTab === tab} onClick={() => setExplorerTab(tab)}>{tab === 'flow' ? 'Fluxo' : tab === 'ast' ? 'AST' : 'Explicação'}</button>)}
               </div>
               {explorerTab !== 'explanation' && astNodes.length > 0 && <ExecutionExplorer view={explorerTab} analysis={analyzeShell(script, astNodes, analysisTokens)} flow={flowResult} flowStatus={flowStatus} flowError={flowError} source={script} onReveal={(from, to) => editor.current?.reveal(from, to)} />}
-              {explorerTab === 'explanation' && <pre className="explorer-explanation-text">{explanation?.replace(/\\\\n/g, '\\n') ?? 'Analisando…'}</pre>}<p>Fonte: catálogo local e parser sh-syntax. Nenhum código é enviado para análise remota.</p></section>}
+              {explorerTab === 'explanation' && <pre className="explorer-explanation-text">{explanation?.replace(/\\\\n/g, '\n') ?? 'Analisando…'}</pre>}<p>Fonte: catálogo local e parser sh-syntax. Nenhum código é enviado para análise remota.</p></section>}
     </div>
   );
 }
