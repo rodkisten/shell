@@ -5,7 +5,7 @@ on:
   push:
     paths:
       - package.json
-      - **/sync-lockfile.yaml
+      - sync-lockfile.yaml
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
