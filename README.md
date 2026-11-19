@@ -364,3 +364,10 @@ O build e o CI de WASM não executam mais `go mod tidy`; `GOFLAGS=-mod=readonly`
 - [x] Usar a action compartilhada de autenticação e atualizar apenas arquivos alterados.
 - [ ] Executar o workflow manualmente e verificar `go.sum` na main.
 - [ ] Confirmar o deploy após o bootstrap.
+
+### Lockfiles versionados: CI estrito
+
+- [x] Confirmado na `main`: `package-lock.json` e `tools/shell-flow/go.sum`.
+- [x] Pipeline Shell Flow WASM usa Node 24, cache npm e `npm ci --no-audit --no-fund` obrigatório, sem fallback de `npm install`.
+- [x] Build Go continua com `GOFLAGS=-mod=readonly` e `go mod verify`.
+- [ ] Confirmar execução do CI e deploy depois das alterações.
