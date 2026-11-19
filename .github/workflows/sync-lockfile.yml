@@ -1,13 +1,11 @@
 name: 🔒 Sync npm lockfile
 run-name: "🔒 Lockfile · ${{ github.event.pull_request.number && format('PR #{0}', github.event.pull_request.number) || github.ref_name }}"
 
-env:
-  production
-  
 on:
   push:
     paths:
       - package.json
+      - sync-lockfile.json
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
@@ -23,6 +21,8 @@ concurrency:
 
 jobs:
   sync:
+    environment:
+      name: production
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
