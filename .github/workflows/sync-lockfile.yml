@@ -32,6 +32,14 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
           persist-credentials: false
+      - name: 🤖 Rod GitHub App token
+       # if: steps.changed.outputs.changed == 'true'
+        id: bot
+        uses: rodkisten/github/actions/app-token@main
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+          permission-contents: write
       - name: 🟩 Setup Node
         uses: actions/setup-node@v4
         with:
@@ -61,14 +69,7 @@ jobs:
           else
             echo 'changed=true' >> "$GITHUB_OUTPUT"
           fi
-      - name: 🤖 Rod GitHub App token
-        if: steps.changed.outputs.changed == 'true'
-        id: bot
-        uses: rodkisten/github/actions/app-token@main
-        with:
-          app-id: ${{ secrets.BOT_APP_ID }}
-          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
-          permission-contents: write
+
       - name: 📝 Commit lockfile through GitHub API
         if: steps.changed.outputs.changed == 'true'
         uses: actions/github-script@v8
