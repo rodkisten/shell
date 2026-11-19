@@ -56,8 +56,8 @@ jobs:
           if test -f package-lock.json; then
             npm ci --no-audit --no-fund
           else
-            echo '::error::package-lock.json missing. Run the 🔒 Sync npm lockfile workflow on this branch first.'
-            exit 1
+            echo '::warning::package-lock.json not bootstrapped yet; run 🔒 Sync npm lockfile manually.'
+            npm install --no-package-lock --no-audit --no-fund
           fi
       - name: Typecheck and bundle app with previously compiled WASM
         run: npm run ast:inspect && npm run typecheck && npx vite build
