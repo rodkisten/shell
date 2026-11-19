@@ -210,9 +210,14 @@ jobs:
           for attempt in $(seq 1 12); do
             : > "$headers"
             curl --show-error --silent --max-time 15 --dump-header "$headers" --output /dev/null "https://shell.preview.migos.club/?verify=$GITHUB_RUN_ID-$attempt" || true
-            actual_target="$(awk 'BEGIN{IGNORECASE=1} /^x-shell-preview-target:/ {$1=""; sub(/^ /,""); sub(/\\r$/,""); print; exit}' "$headers")"
-            actual_location="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {$1=""; sub(/^ /,""); sub(/\\r$/,""); print; exit}' "$headers")"
-            if [[ "$actual_target" == "$CUSTOM_PREVIEW_URL" && "$actual_location" == "$NATIVE_PREVIEW_URL/?verify=$GITHUB_RUN_ID-$attempt" ]]; then matched=true; break; fi
+            actual_target="$(grep -im1 '^x-shell-preview-target:' "$headers" | cut -d: -f2- | tr -d '\\r' | sed 's/^ *//' || true)"
+            actual_location="$(grep -im1 '^location:' "$headers" | cut -d: -f2- | tr -d '\\r' | sed 's/^ *//' || true)"
+            expected_location="$NATIVE_PREVIEW_URL/?verify=$GITHUB_RUN_ID-$attempt"
+            if [[ "$actual_target" == "$CUSTOM_PREVIEW_URL" && "$actual_location" == "$expected_location" ]]; then
+              matched=true
+              break
+            fi
+            echo "::notice::Preview redirect pending ($attempt/12): target=$actual_target location=$actual_location"
             sleep 3
           done
           if [[ "$matched" != true ]]; then
