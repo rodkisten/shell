@@ -91,6 +91,9 @@ jobs:
               message: 'chore(lockfile): sync package-lock.json [skip ci]',
             });
             await core.summary.addRaw(`Updated \`${path}\` on \`${branch}\` using Rod GitHub App.\n`).write();
+      - name: 📋 Explain PR branch policy
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: echo 'Fork PRs are read-only; no bot credentials are exposed.' >> "$GITHUB_STEP_SUMMARY"
       - name: 💤 No changes
         if: steps.changed.outputs.changed == 'false'
         run: echo 'Lockfile already matches package.json.' >> "$GITHUB_STEP_SUMMARY"
