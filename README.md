@@ -267,3 +267,63 @@ O workflow `.github/workflows/shell-flow-wasm.yml` compila o módulo em PRs que 
 **Atualização do protótipo:** o visitante Go agora percorre listas de instruções e reconhece ramos `if/else` básicos, além de `&&`, `||` e pipelines. `elif`, comandos compostos e semântica completa de saída ainda precisam de testes e refinamento. A verificação dos quatro bytes mágicos do WASM no CI foi corrigida. A compilação local não pôde ser concluída porque o proxy de módulos Go estava inacessível neste ambiente.
 
 **Validação WASM:** `scripts/test-shell-flow-wasm.mjs` instancia o módulo compilado no Node 22 e verifica caminhos sequenciais, `&&`, `||`, pipelines, `if/else`, `elif` e erros de sintaxe. O workflow roda esses smoke tests após a compilação. O visitante condicional recursivo foi corrigido para evitar referência a uma função inexistente. Os testes foram adicionados, mas o resultado do CI ainda não foi confirmado.
+
+### Continuação: PR #11, robustez do Shell Flow WASM
+
+- [x] Testar integridade referencial de arestas (nenhuma conexão para nós inexistentes).
+- [x] Testar limites e ordenação dos offsets UTF-8 retornados pelo Go.
+- [x] Aguardar registro assíncrono de `shellFlowAnalyze` no smoke test e no loader web.
+- [x] Tratar rejeição da execução Go/WASM no loader sem bloquear a inicialização.
+- [ ] Confirmar build Go e smoke tests aprovados no GitHub Actions.
+- [ ] Migrar execução WASM para Web Worker, evitando bloqueio da thread principal no Safari.
+
+A validação do PR #11 foi **implementada, não confirmada como aprovada**. O runtime ainda é carregado na thread principal e não oferece cancelamento.
+
+### Execution Explorer: integração com Web Worker (PR #11)
+
+- [x] Mover a instanciação e a análise Go WASM para `public/wasm/flow-worker.js` (worker clássico compatível com `wasm_exec.js`).
+- [x] RPC assíncrono com IDs por requisição, estados `idle/loading/ready/error`, propagação de erros e recuperação em novas tentativas.
+- [x] Mostrar status persistente `CFG WASM` no cabeçalho e status detalhado no Execution Explorer.
+- [x] Conectar o resultado de análise ao Explorer, com lista navegável de nós e arestas condicionais e conversão de offsets UTF-8 para UTF-16 do CodeMirror 6.
+- [x] Ignorar resultados atrasados quando o conteúdo do editor muda.
+- [ ] Garantir que o artefato `public/wasm/shell-flow.wasm` e `wasm_exec.js` sejam compilados/publicados na pipeline de deploy. Atualmente estão no `.gitignore`; sem eles o indicador mostra falha e o AST existente continua funcionando.
+- [ ] Executar e aprovar testes Go/WASM, build TypeScript e teste real no Safari iPhone.
+- [ ] Implementar visualização React Flow + ELK, cancelamento/restart de worker e limites de memória.
+
+O CFG ainda é uma aproximação estática Bash. O novo painel exibe nós e arestas textualmente, **não** é ainda um diagrama React Flow. Os WASMs existentes de Zsh/ShellCheck têm carregamento próprio e não são representados por esse indicador.
+
+### Pipeline de validação e publicação do CFG WASM
+
+O workflow `.github/workflows/shell-flow-wasm.yml` compila o Go/WASM, executa os smoke tests, instala dependências com `npm ci`, executa `npm run build` e verifica a presença de `dist/wasm/shell-flow.wasm`, `dist/wasm/wasm_exec.js` e `dist/wasm/flow-worker.js`. Publica os artefatos `shell-flow-wasm` e `shell-flow-preview-dist` para inspeção.
+
+**Importante:** o workflow agora prepara um `dist/` verificável, mas não implanta automaticamente em produção. Qualquer pipeline externa de Cloudflare que rode `npm run build` sem executar antes `bash scripts/build-shell-flow-wasm.sh` ainda produzirá um site sem os binários. O próximo passo é integrar essa etapa ao deploy existente, evitando compilações duplicadas. Testes e checks continuam aguardando confirmação no GitHub Actions.
+
+### Build e deploy automáticos do Shell Flow WASM (PR #11)
+
+- [x] Adicionar `prebuild` ao `package.json`: `npm run build` agora executa `bash scripts/build-shell-flow-wasm.sh` automaticamente antes de TypeScript/Vite.
+- [x] Como `npm run deploy` chama `npm run build`, o deploy Wrangler também compila os binários Go e os inclui no `dist/wasm/`.
+- [x] Evitar compilação duplicada no CI de validação: o workflow compila uma vez para smoke tests e depois executa `npm run ast:inspect && npm run typecheck && npx vite build`.
+- [ ] Garantir Go disponível no ambiente de build Cloudflare (ou publicar artefato previamente compilado): sem Go e acesso ao módulo `mvdan.cc/sh/v3`, o `prebuild` falha de forma explícita.
+- [ ] Validar o build do preview, o workflow e a disponibilidade real de `/wasm/shell-flow.wasm`, `/wasm/wasm_exec.js` e `/wasm/flow-worker.js` no domínio.
+
+**Atenção:** `prebuild` requer Go instalado no ambiente de build. Não há fallback silencioso para artefatos antigos. O indicador da UI só mostra pronto após o runtime efetivamente inicializar no Web Worker.
+
+### CI real: diagnóstico do PR #11
+
+- [x] GitHub Actions run `44544714725`: Go dependencies, `go mod verify`, build WASM, magic header e smoke tests passaram.
+- [x] Identificar falha de `npm ci`: o repositório não possui `package-lock.json` versionado; erro `EUSAGE` confirmado nos logs.
+- [x] Corrigir a instalação no workflow: usar `npm ci` quando existir lockfile; caso contrário, `npm install --no-package-lock --no-audit --no-fund`.
+- [ ] Validar o workflow atualizado e a compilação Vite/TypeScript na nova execução.
+- [ ] Planejar lockfile reproduzível e revisão das dependências em PR separado.
+
+### Sincronização automática de package-lock.json
+
+O workflow `.github/workflows/sync-lockfile.yml` é acionado quando `package.json` muda em **qualquer branch** (`push`), em PRs internos (`pull_request`) e manualmente (`workflow_dispatch`). Usa Node 24 e `npm install --package-lock-only --ignore-scripts --no-audit --no-fund`, verifica as dependências do manifesto e escreve `package-lock.json` na **branch de origem** por GitHub API, autenticado pela action compartilhada `rodkisten/github/actions/app-token@main` e secrets `BOT_APP_ID`/`BOT_PRIVATE_KEY`.
+
+- [x] Cobrir `main`, branches e PRs internos; PRs de forks não recebem segredos.
+- [x] Evitar commits vazios e loops (gatilho apenas em `package.json`, commit com `[skip ci]`).
+- [x] Utilizar a action compartilhada de autenticação do bot.
+- [ ] Confirmar os secrets no repositório chamador e validar a primeira execução.
+- [ ] Depois que o lockfile for versionado, tornar `npm ci` obrigatório nos builds e eliminar fallback sem lockfile.
+
+A action compartilhada está referenciada em `@main` para usar a versão atual; piná-la em uma tag/SHA estável quando a release estiver disponível.

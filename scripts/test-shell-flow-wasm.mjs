@@ -1,19 +1,31 @@
 import { readFile } from 'node:fs/promises';
 import { strict as assert } from 'node:assert';
-import { pathToFileURL } from 'node:url';
 
 const root = new URL('../public/wasm/', import.meta.url);
-await import(pathToFileURL(new URL('wasm_exec.js', root).pathname).href);
+await import(new URL('wasm_exec.js', root).href);
 const go = new globalThis.Go();
 const wasm = await readFile(new URL('shell-flow.wasm', root));
 const { instance } = await WebAssembly.instantiate(wasm, go.importObject);
 void go.run(instance);
-await new Promise(resolve => setTimeout(resolve, 0));
+for (let attempt = 0; attempt < 50 && typeof globalThis.shellFlowAnalyze !== 'function'; attempt++) {
+  await new Promise(resolve => setTimeout(resolve, 10));
+}
 assert.equal(typeof globalThis.shellFlowAnalyze, 'function');
 
 function analyze(source) {
   const result = JSON.parse(globalThis.shellFlowAnalyze(source));
   assert.equal(result.error, undefined, JSON.stringify(result));
+  assert.ok(Array.isArray(result.nodes));
+  assert.ok(Array.isArray(result.edges));
+  for (const node of result.nodes) {
+    assert.ok(Number.isInteger(node.start) && Number.isInteger(node.end));
+    assert.ok(node.start >= 0 && node.end >= node.start);
+    assert.ok(node.end <= Buffer.byteLength(source, 'utf8'));
+  }
+  const ids = new Set(result.nodes.map(node => node.id));
+  for (const edge of result.edges) {
+    assert.ok(ids.has(edge.from) && ids.has(edge.to), `Dangling edge: ${JSON.stringify(edge)}`);
+  }
   return result;
 }
 function hasEdge(result, kind) {

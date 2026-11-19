@@ -12,6 +12,7 @@ import { ShellEditor, type ShellEditorHandle } from './components/ShellEditor';
 import { CommandHelp } from './components/CommandHelp';
 import { ExecutionExplorer } from './components/ExecutionExplorer';
 import { analyzeShell } from './lib/shell-analysis';
+import { analyzeShellWasm, initializeShellFlowWasm, subscribeShellFlowStatus, type FlowWasmStatus, type WasmFlowResult } from './lib/shell-flow-wasm';
 import { HistoryPanel } from './components/HistoryPanel';
 import { LinuxPanel } from './components/LinuxPanel';
 import { WorkspacePanel } from './components/WorkspacePanel';
@@ -71,6 +72,14 @@ export function App() {
   const [explanation, setExplanation] = useState<string | null>(null);
   const [astNodes, setAstNodes] = useState<ShellAstNode[]>([]);
   const [analysisTokens, setAnalysisTokens] = useState<SemanticToken[]>([]);
+  const [flowResult, setFlowResult] = useState<WasmFlowResult | null>(null);
+  const [flowError, setFlowError] = useState<string | null>(null);
+  const [flowStatus, setFlowStatus] = useState<FlowWasmStatus>({ state: 'idle' });
+  useEffect(() => {
+    const unsubscribe = subscribeShellFlowStatus(setFlowStatus);
+    initializeShellFlowWasm();
+    return unsubscribe;
+  }, []);
   const analysisRevision = useRef(0);
   const [toast, setToast] = useState('');
   const [historyRevision, setHistoryRevision] = useState(0);
@@ -130,7 +139,7 @@ export function App() {
   }, [script]);
   useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
 
-  const change = (text: string) => { analysisRevision.current++; setScript(text); setFindings([]); setExplanation(null); setAstNodes([]); setAnalysisTokens([]); setSemanticSelection(null); };
+  const change = (text: string) => { analysisRevision.current++; setScript(text); setFindings([]); setExplanation(null); setAstNodes([]); setAnalysisTokens([]); setFlowResult(null); setFlowError(null); setSemanticSelection(null); };
   const insert = (text: string) => {
     navigation('/');
     // Editor may not be mounted yet when opened from the library.
@@ -292,6 +301,13 @@ export function App() {
       if (revision !== analysisRevision.current) return;
       setAstNodes(overview.nodes);
       setAnalysisTokens(tokens);
+      setFlowResult(null);
+      setFlowError(null);
+      void analyzeShellWasm(script).then(result => {
+        if (revision === analysisRevision.current) setFlowResult(result);
+      }).catch(error => {
+        if (revision === analysisRevision.current) setFlowError(error instanceof Error ? error.message : String(error));
+      });
       const steps = tokens.map((token, index) =>
         `${index + 1}. ${token.text} · ${token.title}\n   ${token.description}${token.example ? '\n   Exemplo: ' + token.example : ''}`
       );
@@ -326,7 +342,7 @@ export function App() {
         <main className="main-content">
           <Routes>
             <Route path="/" element={<>
-              <div className="page-heading"><div className="heading-top"><span className="eyebrow"><span className="live-dot"/> SHELL PLAYGROUND</span><span className="release-pill">ZSH + WEBASSEMBLY</span></div>
+              <div className="page-heading"><div className="heading-top"><span className="eyebrow"><span className="live-dot"/> SHELL PLAYGROUND</span><span className="release-pill">ZSH + WEBASSEMBLY</span><span role="status" aria-live="polite" className="release-pill" title={flowStatus.message ?? "Analisador CFG em Web Worker"}>CFG WASM: {flowStatus.state === "ready" ? "✓ pronto" : flowStatus.state === "loading" ? "⏳ carregando" : flowStatus.state === "error" ? "✕ falhou" : "aguardando"}</span></div>
                 <h1>Seu shell, <span>sob controle.</span></h1>
                 <p>Escreva, entenda e execute scripts. Tudo em um lugar, sem sair do navegador.</p>
               </div>
@@ -394,7 +410,7 @@ export function App() {
                 <div className="subpanel-heading"><h3><CircleAlert size={17}/> Diagnósticos <span className="count-pill">{findings.length}</span></h3><Button variant="outline" size="sm" onClick={fix}><WandSparkles size={14}/> Aplicar correções possíveis</Button></div>
                 {findings.map((finding,i) => <div className="diagnostic-item" key={i}><span className={cn('severity',finding.level)}>{finding.level}</span><div><strong>SC{finding.code} <span>L{finding.line}:{finding.column}</span></strong><p>{finding.message}</p><a href={'https://www.shellcheck.net/wiki/SC'+finding.code} target="_blank" rel="noreferrer">Entenda esse diagnóstico ↗</a></div></div>)}
               </section>}
-              {explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div>{astNodes.length > 0 && <ExecutionExplorer analysis={analyzeShell(script, astNodes, analysisTokens)} onReveal={(from, to) => editor.current?.reveal(from, to)} />}
+              {explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div>{astNodes.length > 0 && <ExecutionExplorer analysis={analyzeShell(script, astNodes, analysisTokens)} flow={flowResult} flowStatus={flowStatus} flowError={flowError} source={script} onReveal={(from, to) => editor.current?.reveal(from, to)} />}
               <pre>{explanation}</pre><p>Fonte: catálogo local e parser sh-syntax. Nenhum código é enviado para análise remota.</p></section>}
               <WorkspacePanel />
               <div className="footer-advice"><Info size={15}/><span>O terminal executa Zsh em WebAssembly com filesystem virtual persistente. <strong>Não executa comandos no seu iPhone, servidor ou Codespace.</strong> Requisições HTTP externas não são habilitadas no sandbox.</span></div>
