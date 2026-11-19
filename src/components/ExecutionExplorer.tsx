@@ -21,6 +21,7 @@ export function ExecutionExplorer({ analysis, onReveal }: Props) {
     return map;
   }, [analysis.astNodes]);
   const selected = analysis.astNodes.find(node => node.id === selectedId);
+  const explanation = analysis.nodes.find(node => node.astId === selectedId)?.explanation;
   const visible = useMemo(() => {
     const output: typeof analysis.astNodes = [];
     const visit = (parent: string | undefined) => {
@@ -72,6 +73,7 @@ export function ExecutionExplorer({ analysis, onReveal }: Props) {
         <aside className="execution-explorer-details" aria-live="polite">
           <strong>{selected.kind}</strong>
           <p>{selected.description}</p>
+          {explanation && <div className="execution-explorer-semantic"><strong>{explanation.title}</strong><p>{explanation.description}</p><small>Fonte: {explanation.source}</small></div>}
           <dl><dt>Node ID</dt><dd>{selected.id}</dd><dt>Source range</dt>
             <dd>{selected.from === undefined ? 'Unavailable' : `${selected.from}–${selected.to}`}</dd></dl>
         </aside>
