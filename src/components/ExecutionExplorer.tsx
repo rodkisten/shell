@@ -5,6 +5,8 @@ import type { FlowWasmStatus, WasmFlowResult } from '../lib/shell-flow-wasm';
 
 type Props = {
   analysis: ShellAnalysis;
+  view?: 'flow' | 'ast';
+  cursorOffset?: number;
   flow?: WasmFlowResult | null;
   flowStatus?: FlowWasmStatus;
   flowError?: string | null;
@@ -13,8 +15,12 @@ type Props = {
 };
 
 /** Read-only AST navigator. No command execution is performed here. */
-export function ExecutionExplorer({ analysis, flow, flowStatus, flowError, source = '', onReveal }: Props) {
+export function ExecutionExplorer({ analysis, flow, flowStatus, flowError, source = '', onReveal, view = 'ast', cursorOffset }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
+  const utf8 = useMemo(() => new TextEncoder().encode(source), [source]);
+  const offset = (position: number) => new TextDecoder().decode(utf8.slice(0, position)).length;
+  const activeNode = flow?.nodes.find(node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset <= offset(node.end));
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const children = useMemo(() => {
     const map = new Map<string | undefined, typeof analysis.astNodes>();
@@ -50,25 +56,33 @@ export function ExecutionExplorer({ analysis, flow, flowStatus, flowError, sourc
         {flowStatus?.message && <small> · {flowStatus.message}</small>}
       </div>
       {flowError && <p role="alert" className="execution-explorer-note">CFG: {flowError}</p>}
-      {flow && <details className="execution-explorer-details">
-        <summary>Grafo de fluxo · {flow.nodes.length} nós / {flow.edges.length} conexões</summary>
-        <ol>
-          {flow.nodes.map(node => {
-            // Go syntax offsets are UTF-8 bytes; decode before displaying and
-            // converting to CodeMirror's UTF-16 positions.
-            const bytes = new TextEncoder().encode(source);
-            const from = new TextDecoder().decode(bytes.slice(0, node.start)).length;
-            const to = new TextDecoder().decode(bytes.slice(0, node.end)).length;
-            return <li key={node.id}>
-              <button type="button" onClick={() => onReveal?.(from, to)}>
-                {node.kind}: {source.slice(from, to).trim().slice(0, 90) || node.id}
-              </button>
-              <small> → {flow.edges.filter(edge => edge.from === node.id).map(edge => `${edge.kind}: ${edge.to}`).join(' · ') || 'fim'}</small>
-            </li>;
-          })}
-        </ol>
-        {flow.warnings.map(warning => <p key={warning} className="execution-explorer-note">{warning}</p>)}
-      </details>}
+      {view === 'flow' && (flow ? <div className="flow-visual" aria-label="Grafo de fluxo de controle">
+        <div className="flow-visual-summary">{flow.nodes.length} nós · {flow.edges.length} conexões · análise estática</div>
+        <div className="flow-visual-scroll">
+          <svg className="flow-visual-lines" width="100%" height={Math.max(120, flow.nodes.length * 84)} aria-hidden="true">
+            {flow.edges.map((edge, index) => {
+              const from = flow.nodes.findIndex(node => node.id === edge.from);
+              const to = flow.nodes.findIndex(node => node.id === edge.to);
+              if (from < 0 || to < 0) return null;
+              return <path key={index} d={`M 130 ${from * 84 + 66} C 130 ${from * 84 + 96}, 130 ${to * 84 + 12}, 130 ${to * 84 + 24}`} fill="none" stroke={edge.kind === 'next' ? '#64748b' : '#a78bfa'} strokeWidth="2" strokeDasharray={edge.kind === 'next' ? undefined : '5 4'}/>;
+            })}
+          </svg>
+          <div className="flow-visual-nodes">
+            {flow.nodes.map(node => {
+              const from = offset(node.start);
+              const to = offset(node.end);
+              return <button key={node.id} type="button" className={'flow-visual-node' + ((activeNode?.id === node.id || selectedFlowId === node.id) ? ' is-selected' : '')}
+                aria-pressed={activeNode?.id === node.id || selectedFlowId === node.id} onClick={() => { setSelectedFlowId(node.id); onReveal?.(from, to); }}>
+                <strong>{node.kind}</strong><code>{source.slice(from, to).trim().slice(0, 72) || node.id}</code>
+                <small>{flow.edges.filter(edge => edge.from === node.id).map(edge => edge.kind).join(' · ') || 'fim'}</small>
+              </button>;
+            })}
+          </div>
+        </div>
+        <p className="execution-explorer-note">As conexões são aproximações estáticas. Não representam execução observada.</p>
+        {flow.warnings.map((warning, i) => <p key={i} className="execution-explorer-note">{warning}</p>)}
+      </div> : <p className="execution-explorer-note">{flowStatus?.state === 'loading' ? 'Carregando grafo WASM…' : flowStatus?.state === 'error' ? 'Grafo indisponível. Verifique o erro acima.' : 'Execute Explicar para gerar o grafo.'}</p>)}
+      {view === 'ast' && <>
       <div role="tree" aria-label="Shell AST" className="execution-explorer-tree">
         {visible.map(node => {
           const hasChildren = (children.get(node.id)?.length ?? 0) > 0;
@@ -108,6 +122,7 @@ export function ExecutionExplorer({ analysis, flow, flowStatus, flowError, sourc
         </aside>
       )}
       {analysis.warnings.map(warning => <p key={warning} className="execution-explorer-note">{warning}</p>)}
+      </>}
     </section>
   );
 }

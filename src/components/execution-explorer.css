@@ -16,3 +16,49 @@
 .execution-explorer-details dt{color:#a1a1aa}
 .execution-explorer-details dd{margin:0;overflow-wrap:anywhere}
 @media(max-width:640px){.execution-explorer-tree{max-height:42dvh}.execution-explorer-node{min-height:40px}.execution-explorer-node>button{min-height:40px}}
+
+.explorer-tabs{display:flex;gap:6px;padding:8px 0;position:sticky;top:0;z-index:2;background:#0c0d10}
+.explorer-tabs button{flex:1;min-height:42px;border:1px solid #30313a;border-radius:9px;background:#17181d;color:#b5b6c1;font-weight:600;cursor:pointer}
+.explorer-tabs button[aria-selected="true"]{background:#34254b;border-color:#a78bfa;color:#f5edff}
+.flow-visual{padding:10px 12px}
+.flow-visual-summary{font-size:12px;color:#a1a1aa;margin-bottom:12px}
+.flow-visual-scroll{position:relative;overflow:auto;max-height:62dvh;min-height:150px;border:1px solid #292934;border-radius:10px;background:#0d0e14}
+.flow-visual-lines{position:absolute;top:0;left:0;pointer-events:none}
+.flow-visual-nodes{position:relative;display:flex;flex-direction:column;align-items:center;gap:24px;padding:24px 12px}
+.flow-visual-node{display:flex;flex-direction:column;gap:4px;justify-content:center;align-items:center;width:min(240px,90%);min-height:60px;border:1px solid #55516b;border-radius:10px;background:#242033;color:#f6f0ff;cursor:pointer;box-shadow:0 4px 16px #0005}
+.flow-visual-node.is-selected{outline:2px solid #c4b5fd;background:#3a2c58}
+.flow-visual-node code{font-size:11px;max-width:95%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.flow-visual-node small{font-size:10px;color:#c4b5fd}
+.editor-command-toolbar{display:flex;gap:7px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;padding:9px 10px;border-bottom:1px solid #2c2d35;background:#14151a}
+.editor-command-toolbar button{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:0 0 auto;min-height:42px;padding:0 12px;border:1px solid #383944;border-radius:9px;background:#202128;color:#e4e4e7;font-size:12px;font-weight:600}
+.editor-command-toolbar .editor-command-primary{border-color:#8064b5;background:#35264b;color:#f3e8ff}
+.editor-command-toolbar button:disabled{opacity:.5}
+@media(max-width:640px){.editor-command-toolbar{padding:7px 9px}.flow-visual-scroll{max-height:54dvh}}
+
+/* Editor tools share the same compact chrome as the file header. */
+.editor-command-toolbar{gap:4px;padding:5px 8px;background:#141519;border-color:#34363d}
+.editor-command-toolbar button{min-height:34px;padding:0 9px;border:1px solid #34363d;border-radius:7px;background:#141519;color:#ddd;font-size:12px;font-weight:500;white-space:nowrap}
+.editor-command-toolbar .editor-command-primary{background:#1e1f26;color:#e5e5e7;border-color:#454650}
+.explorer-dock{position:fixed;z-index:80;top:clamp(80px,13vh,130px);right:12px;bottom:80px;width:min(46vw,700px);display:flex;flex-direction:column;overflow:hidden;background:#101115;border:1px solid #383943;border-radius:14px;box-shadow:0 12px 60px #000a}
+.explorer-dock .subpanel-heading{flex-shrink:0;padding:10px 14px;border-bottom:1px solid #303139}
+.explorer-dock .explorer-tabs{flex-shrink:0;padding:7px 12px}
+.explorer-dock .execution-explorer{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain}
+.explorer-dock .explorer-explanation-text{overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px 16px;flex:1;font-size:12px;line-height:1.55}
+.explorer-dock > p{font-size:10px;margin:6px 12px}
+@media(max-width:700px){
+  .editor-command-toolbar{padding:4px 6px}
+  .editor-command-toolbar button{min-height:32px;padding:0 8px;font-size:11px}
+  .editor-command-toolbar button svg{width:14px;height:14px}
+  .explorer-dock{top:auto;right:0;left:0;bottom:calc(64px + env(safe-area-inset-bottom,0px));width:100%;height:min(47dvh,440px);border-radius:14px 14px 0 0;border-left:0;border-right:0}
+  .explorer-dock .flow-visual-scroll{max-height:24dvh}
+  .explorer-dock .explorer-tabs button{min-height:34px}
+}
+
+.explorer-dock{width:var(--dock-size,47%);max-width:80vw}
+.explorer-dock-resizer{position:absolute;left:0;top:0;bottom:0;width:10px;cursor:ew-resize;z-index:3;touch-action:none}
+.explorer-dock-resizer:focus-visible{outline:2px solid #a78bfa;outline-offset:-2px}
+@media(max-width:700px){
+  .explorer-dock{width:100%;max-width:none;height:var(--dock-size,47%);max-height:80dvh}
+  .explorer-dock-resizer{left:0;right:0;top:0;bottom:auto;width:100%;height:18px;cursor:ns-resize}
+  .explorer-dock-resizer::after{content:'';display:block;width:40px;height:4px;background:#646575;border-radius:9px;margin:6px auto}
+}

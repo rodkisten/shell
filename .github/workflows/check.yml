@@ -28,8 +28,11 @@ jobs:
       repository-key: shell
       config-ref: main
       node-version: '24'
-      working-directory: '.'
-      run-tests: false
+      working-directory: .
+      test-command: npm run test:explorer
+      build-command: npm run build
+      lint-command: npm run lint
+      run-tests: true
       run-build: true
       run-lint: true
       build-command: 'npm run build'

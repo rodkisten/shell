@@ -373,6 +373,15 @@ O build e o CI de WASM não executam mais `go mod tidy`; `GOFLAGS=-mod=readonly`
 - [x] Build Go continua com `GOFLAGS=-mod=readonly` e `go mod verify`.
 - [ ] Confirmar execução do CI e deploy depois das alterações.
 
+### Explorer visual e toolbar mobile (em validação)
+
+O editor apresenta uma segunda linha horizontal de ações rápidas: **Executar**, **Formatar**, **Validar**, **Explicar** e **Fluxo**. Em telas pequenas, a linha rola horizontalmente e preserva alvos de toque de 42 px. O painel de explicação contém abas **Fluxo**, **AST** e **Explicação**. A aba Fluxo apresenta nós e conexões do Go WASM; tocar num nó revela o trecho correspondente no CodeMirror 6. O fluxo é estático, não um rastreamento da execução. Validar build, lint e comportamento real no Safari antes de marcar como concluído.
 ### Smoke test de assets Linux em produção
 
 O workflow `.github/workflows/deploy-shell.yml` verifica os cinco assets do v86 (`libv86.js`, `v86.wasm`, `seabios.bin`, `vgabios.bin`, `alpine.iso`) após o deploy. Cada arquivo precisa responder a `HEAD` com HTTP 200, `Content-Type` esperado e tamanho positivo, além de `Range: bytes=0-1023` com HTTP 206 e `Content-Range` consistente. O resultado é publicado no GitHub Actions Job Summary. Este teste confirma a entrega HTTP dos assets, não o boot da VM nem o comportamento no Safari.
+
+#### Dock responsivo do explorador (PR #16)
+
+No mobile, o painel Fluxo/AST/Explicação agora é um dock inferior fixo, acessível sem rolar até o fim do editor; em telas maiores, aparece como painel lateral. O cursor do CodeMirror destaca o nó correspondente e tocar no nó seleciona o trecho no editor. O dock reanalisa alterações no script com debounce. A toolbar usa botões compactos alinhados ao cabeçalho. A renderização de explicações trata quebras de linha escapadas. **Pendente:** verificar CI e testes manuais no Safari; não representa execução dinâmica do shell. Para uma evolução futura com divisor arrastável, avaliar o componente Resizable do shadcn/ui (react-resizable-panels).
+
+O dock agora permite ajuste de tamanho por arraste touch/pointer e teclado, com tamanho salvo em `localStorage` (`shellconductor:dock-size`). A implementação atual usa Pointer Events nativos; a migração para o pacote shadcn/ui Resizable permanece opcional, sem dependência adicionada nesta etapa.
