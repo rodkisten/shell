@@ -1,0 +1,47 @@
+name: 🧠 Shell Flow WASM
+
+on:
+  pull_request:
+    paths:
+      - 'tools/shell-flow/**'
+      - 'scripts/build-shell-flow-wasm.sh'
+      - 'src/lib/shell-flow-wasm.ts'
+      - '.github/workflows/shell-flow-wasm.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wasm:
+    name: Compile and smoke-test Go WASM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/shell-flow/go.mod
+          cache-dependency-path: tools/shell-flow/go.sum
+      - name: Download Go dependencies
+        working-directory: tools/shell-flow
+        run: go mod download
+      - name: Verify Go module
+        working-directory: tools/shell-flow
+        run: go mod verify
+      - name: Build WASM
+        run: bash scripts/build-shell-flow-wasm.sh
+      - name: Check WASM magic header
+        run: |
+          test -s public/wasm/shell-flow.wasm
+          test -s public/wasm/wasm_exec.js
+          python3 - <<'PY'
+          from pathlib import Path
+          assert Path('public/wasm/shell-flow.wasm').read_bytes()[:4] == b'\\0asm'
+          print('WASM header valid')
+          PY
+      - name: Upload compiled artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shell-flow-wasm
+          path: public/wasm/
+          retention-days: 7
