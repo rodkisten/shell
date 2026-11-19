@@ -236,11 +236,13 @@ O painel **Explicar comando** agora inclui uma árvore AST interativa baseada no
 - [x] Árvore AST expansível e inspector com navegação no CodeMirror
 - [x] Integração com painel de explicações e remoção do navegador duplicado
 - [x] Sincronização com a arquitetura compartilhada de parser da main
-- [ ] Associar tokens semânticos do snapshot aos nós no painel
+- [x] Associar tokens semânticos do snapshot aos nós no painel
 - [ ] CFG com arestas verificadas para `if/elif/else`, `&&`, `||`, pipelines e loops
 - [ ] Timeline de simulação estática com ramificações explícitas
 - [ ] Trace real do sandbox WASM, com eventos observados separados de inferências
 - [ ] Testes automatizados de AST, navegação, fluxo e mobile
 - [ ] Abas Flow / AST / Explain / Output e inspector móvel em drawer
+
+A interface ignora resultados de análise antigos quando o texto muda durante o parsing. As explicações de comandos e operadores são obtidas do mesmo snapshot semântico do editor.
 
 **Segurança:** a análise estática não executa scripts. A execução do terminal permanece isolada no sandbox WebAssembly.
