@@ -327,3 +327,13 @@ O workflow `.github/workflows/sync-lockfile.yml` é acionado quando `package.jso
 - [ ] Depois que o lockfile for versionado, tornar `npm ci` obrigatório nos builds e eliminar fallback sem lockfile.
 
 A action compartilhada está referenciada em `@main` para usar a versão atual; piná-la em uma tag/SHA estável quando a release estiver disponível.
+
+### Bootstrap do lockfile (follow-up)
+
+- [x] Manter o CI de Go/WASM funcional enquanto o repositório ainda não possui `package-lock.json` versionado, com aviso explícito e fallback temporário.
+- [x] Remover o path duplicado do workflow Go/WASM.
+- [ ] Executar manualmente **🔒 Sync npm lockfile** na branch `main` para gerar o primeiro lockfile usando a Rod GitHub App.
+- [ ] Confirmar que os secrets `BOT_APP_ID` e `BOT_PRIVATE_KEY` estão disponíveis no repositório `rodkisten/shell` (ou como secrets de organização).
+- [ ] Após a geração, trocar o fallback por `npm ci` obrigatório em todas as pipelines.
+
+Não confundir `npm install --no-package-lock` (fallback temporário do CI) com a geração oficial `npm install --package-lock-only` do workflow de sincronização.
