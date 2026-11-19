@@ -246,3 +246,18 @@ O painel **Explicar comando** agora inclui uma árvore AST interativa baseada no
 A interface ignora resultados de análise antigos quando o texto muda durante o parsing. As explicações de comandos e operadores são obtidas do mesmo snapshot semântico do editor.
 
 **Segurança:** a análise estática não executa scripts. A execução do terminal permanece isolada no sandbox WebAssembly.
+
+### Protótipo Go → WebAssembly (experimental)
+
+O diretório `tools/shell-flow/` contém um módulo Go separado que usa `mvdan.cc/sh/v3/syntax` e exporta `shellFlowAnalyze(source)` via `syscall/js`. A função retorna JSON com instruções de nível superior, intervalos em bytes UTF-8 e arestas de sequência textual. **Ainda não implementa CFG semântico**, `if/else`, loops, `&&`, `||`, nem trace de execução.
+
+Para compilar, instale Go compatível, execute `cd tools/shell-flow && go mod tidy` e depois `bash scripts/build-shell-flow-wasm.sh`. O build grava `public/wasm/shell-flow.wasm` e `public/wasm/wasm_exec.js`, ignorados pelo Git. O cliente `src/lib/shell-flow-wasm.ts` carrega os artefatos sob demanda via `analyzeShellWasm(source)`. O protótipo **não é carregado pelo editor por padrão**, para não aumentar o custo inicial no iPhone.
+
+A versão inicial usa **modo Bash**, não Zsh. Não use seus resultados como confirmação de compatibilidade Zsh. Os offsets retornados pelo Go são bytes UTF-8 e devem ser convertidos antes de selecionar intervalos no CodeMirror 6.
+
+- [x] Criar módulo Go/WASM e contrato JSON
+- [x] Criar script de compilação e loader sob demanda
+- [ ] Executar compilação Go, validação TypeScript e testes no CI
+- [ ] Construir CFG real a partir da AST Go
+- [ ] Adicionar worker, limites de tamanho e cancelamento
+- [ ] Integrar visualização React Flow/ELK após validar a semântica
