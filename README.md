@@ -371,3 +371,7 @@ O build e o CI de WASM não executam mais `go mod tidy`; `GOFLAGS=-mod=readonly`
 - [x] Pipeline Shell Flow WASM usa Node 24, cache npm e `npm ci --no-audit --no-fund` obrigatório, sem fallback de `npm install`.
 - [x] Build Go continua com `GOFLAGS=-mod=readonly` e `go mod verify`.
 - [ ] Confirmar execução do CI e deploy depois das alterações.
+
+### Explorer visual e toolbar mobile (em validação)
+
+O editor apresenta uma segunda linha horizontal de ações rápidas: **Executar**, **Formatar**, **Validar**, **Explicar** e **Fluxo**. Em telas pequenas, a linha rola horizontalmente e preserva alvos de toque de 42 px. O painel de explicação contém abas **Fluxo**, **AST** e **Explicação**. A aba Fluxo apresenta nós e conexões do Go WASM; tocar num nó revela o trecho correspondente no CodeMirror 6. O fluxo é estático, não um rastreamento da execução. Validar build, lint e comportamento real no Safari antes de marcar como concluído.
