@@ -1,0 +1,131 @@
+.container {
+  --_border: var(--border, #4444);
+  --_input-border: #8886;
+  --_entry-border: #8883;
+  --_error-color: #f87171;
+  --_radius-lg: 12px;
+  --_radius-sm: 7px;
+  --_space: 1rem;
+  --_gap: 0.5rem;
+
+  margin-top: var(--_space);
+  padding: var(--_space);
+  border: 1px solid var(--_border);
+  border-radius: var(--_radius-lg);
+  min-width: 0;
+
+  @media (width <= 600px) {
+    --_space: 0.75rem;
+  }
+
+  & :where(input, textarea) {
+    font: inherit;
+  }
+
+  & :where(button) {
+    font: inherit;
+    font-size: 12px;
+  }
+
+  & :where(input:not([type="checkbox"]), textarea) {
+    padding: var(--_gap);
+    border: 1px solid var(--_input-border);
+    border-radius: var(--_radius-sm);
+    background: transparent;
+    color: inherit;
+  }
+
+  & button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem;
+    border-radius: var(--_radius-sm);
+
+    @media (width <= 600px) {
+      min-height: 40px;
+    }
+  }
+}
+
+.header,
+.entry,
+.create,
+.path {
+  display: flex;
+  align-items: center;
+  gap: var(--_gap);
+}
+
+.header {
+  justify-content: space-between;
+}
+
+.caption {
+  opacity: 0.7;
+  font-size: 0.8rem;
+  margin: 0.4rem 0;
+}
+
+.path {
+  min-width: 0;
+  font-size: 0.8rem;
+  opacity: 0.8;
+  overflow-wrap: anywhere;
+}
+
+.create {
+  flex-wrap: wrap;
+  margin: var(--_space) 0;
+
+  & input:not([type="checkbox"]) {
+    min-width: 0;
+    flex: 1 1 130px;
+  }
+
+  & label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+  }
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.entry {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--_entry-border);
+
+  & button:first-child {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+  }
+
+  & span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--_gap);
+  margin-top: var(--_space);
+
+  & textarea {
+    width: 100%;
+    resize: vertical;
+  }
+}
+
+.error {
+  color: var(--_error-color);
+  overflow-wrap: anywhere;
+}
