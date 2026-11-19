@@ -12,7 +12,6 @@ on:
       - 'public/wasm/flow-worker.js'
       - 'vite.config.ts'
       - 'package.json'
-      - 'scripts/build-shell-flow-wasm.sh'
       - 'package-lock.json'
       - '.github/workflows/shell-flow-wasm.yml'
   workflow_dispatch:
@@ -53,9 +52,13 @@ jobs:
       - name: Execute WASM smoke tests
         run: node scripts/test-shell-flow-wasm.mjs
       - name: Install frontend dependencies
-        # Repository does not currently commit package-lock.json.
         run: |
-          if test -f package-lock.json; then npm ci; else npm install --no-package-lock --no-audit --no-fund; fi
+          if test -f package-lock.json; then
+            npm ci --no-audit --no-fund
+          else
+            echo '::error::package-lock.json missing. Run the 🔒 Sync npm lockfile workflow on this branch first.'
+            exit 1
+          fi
       - name: Typecheck and bundle app with previously compiled WASM
         run: npm run ast:inspect && npm run typecheck && npx vite build
       - name: Verify deployable WASM assets
