@@ -383,3 +383,5 @@ O workflow `.github/workflows/deploy-shell.yml` verifica os cinco assets do v86 
 #### Dock responsivo do explorador (PR #16)
 
 No mobile, o painel Fluxo/AST/Explicação agora é um dock inferior fixo, acessível sem rolar até o fim do editor; em telas maiores, aparece como painel lateral. O cursor do CodeMirror destaca o nó correspondente e tocar no nó seleciona o trecho no editor. O dock reanalisa alterações no script com debounce. A toolbar usa botões compactos alinhados ao cabeçalho. A renderização de explicações trata quebras de linha escapadas. **Pendente:** verificar CI e testes manuais no Safari; não representa execução dinâmica do shell. Para uma evolução futura com divisor arrastável, avaliar o componente Resizable do shadcn/ui (react-resizable-panels).
+
+O dock agora permite ajuste de tamanho por arraste touch/pointer e teclado, com tamanho salvo em `localStorage` (`shellconductor:dock-size`). A implementação atual usa Pointer Events nativos; a migração para o pacote shadcn/ui Resizable permanece opcional, sem dependência adicionada nesta etapa.
