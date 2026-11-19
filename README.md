@@ -278,3 +278,16 @@ O workflow `.github/workflows/shell-flow-wasm.yml` compila o módulo em PRs que 
 - [ ] Migrar execução WASM para Web Worker, evitando bloqueio da thread principal no Safari.
 
 A validação do PR #11 foi **implementada, não confirmada como aprovada**. O runtime ainda é carregado na thread principal e não oferece cancelamento.
+
+### Execution Explorer: integração com Web Worker (PR #11)
+
+- [x] Mover a instanciação e a análise Go WASM para `public/wasm/flow-worker.js` (worker clássico compatível com `wasm_exec.js`).
+- [x] RPC assíncrono com IDs por requisição, estados `idle/loading/ready/error`, propagação de erros e recuperação em novas tentativas.
+- [x] Mostrar status persistente `CFG WASM` no cabeçalho e status detalhado no Execution Explorer.
+- [x] Conectar o resultado de análise ao Explorer, com lista navegável de nós e arestas condicionais e conversão de offsets UTF-8 para UTF-16 do CodeMirror 6.
+- [x] Ignorar resultados atrasados quando o conteúdo do editor muda.
+- [ ] Garantir que o artefato `public/wasm/shell-flow.wasm` e `wasm_exec.js` sejam compilados/publicados na pipeline de deploy. Atualmente estão no `.gitignore`; sem eles o indicador mostra falha e o AST existente continua funcionando.
+- [ ] Executar e aprovar testes Go/WASM, build TypeScript e teste real no Safari iPhone.
+- [ ] Implementar visualização React Flow + ELK, cancelamento/restart de worker e limites de memória.
+
+O CFG ainda é uma aproximação estática Bash. O novo painel exibe nós e arestas textualmente, **não** é ainda um diagrama React Flow. Os WASMs existentes de Zsh/ShellCheck têm carregamento próprio e não são representados por esse indicador.
