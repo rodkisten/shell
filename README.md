@@ -352,3 +352,15 @@ O build de produção falhou em `main.go:11:2` com `missing go.sum entry for mod
 - [x] Confirmar que a `main` já continha o trabalho do PR #13 antes de editar.
 - [x] Substituir `go mod download` por `go mod tidy && go mod verify` no build Go/WASM, porque `download` isolado pode não gerar o checksum completo do pacote importado.
 - [ ] Versionar `tools/shell-flow/go.sum` a partir de um ambiente com acesso ao proxy Go e executar CI/deploy novamente.
+
+### 🐹 Sync Go modules (separado do build)
+
+O workflow `.github/workflows/sync-go-modules.yml` sincroniza `go.mod` e `go.sum` de módulos sob `tools/` quando `go.mod` muda em `main`, branches ou PRs internos, além de permitir execução manual para gerar o primeiro `go.sum`. Ele executa `go mod tidy && go mod verify` e grava somente arquivos alterados na branch usando a Rod GitHub App (`BOT_APP_ID`/`BOT_PRIVATE_KEY`). PRs de forks não recebem segredos.
+
+O build e o CI de WASM não executam mais `go mod tidy`; `GOFLAGS=-mod=readonly` impede mudanças implícitas nas dependências durante a compilação. **Antes do próximo deploy, executar manualmente o workflow Go na main**, porque o primeiro `tools/shell-flow/go.sum` ainda não está versionado.
+
+- [x] Separar sincronização Go do build e do deploy.
+- [x] Adicionar execução automática por alteração de `go.mod` e manual para bootstrap.
+- [x] Usar a action compartilhada de autenticação e atualizar apenas arquivos alterados.
+- [ ] Executar o workflow manualmente e verificar `go.sum` na main.
+- [ ] Confirmar o deploy após o bootstrap.
