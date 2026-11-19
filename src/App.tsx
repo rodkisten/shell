@@ -388,14 +388,6 @@ export function App() {
                 {findings.map((finding,i) => <div className="diagnostic-item" key={i}><span className={cn('severity',finding.level)}>{finding.level}</span><div><strong>SC{finding.code} <span>L{finding.line}:{finding.column}</span></strong><p>{finding.message}</p><a href={'https://www.shellcheck.net/wiki/SC'+finding.code} target="_blank" rel="noreferrer">Entenda esse diagnóstico ↗</a></div></div>)}
               </section>}
               {explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div>{astNodes.length > 0 && <ExecutionExplorer analysis={analyzeShell(script, astNodes)} onReveal={(from, to) => editor.current?.reveal(from, to)} />}
-              {astNodes.length > 0 && <div aria-label="Navegação pela AST" style={{maxHeight:260,overflowY:'auto',display:'grid',gap:4,padding:'8px 0'}}>
-                {astNodes.map(node => <button key={node.id} type="button" disabled={node.from === undefined || node.to === undefined} title={node.description}
-                  onClick={() => { if (node.from !== undefined && node.to !== undefined) editor.current?.reveal(node.from,node.to); }}
-                  style={{textAlign:'left',padding:'7px 9px',paddingLeft:Math.min(node.depth,8)*10+9,borderRadius:8,background:'transparent',color:'inherit',border:'1px solid #34363e',opacity:node.from === undefined ? .55 : 1}}>
-                  <strong>{node.kind}</strong> <small>{node.description}</small>
-                  {node.from !== undefined && <small> · {node.from}–{node.to}</small>}
-                </button>)}
-              </div>}
               <pre>{explanation}</pre><p>Fonte: catálogo local e parser sh-syntax. Nenhum código é enviado para análise remota.</p></section>}
               <WorkspacePanel />
               <div className="footer-advice"><Info size={15}/><span>O terminal executa Zsh em WebAssembly com filesystem virtual persistente. <strong>Não executa comandos no seu iPhone, servidor ou Codespace.</strong> Requisições HTTP externas não são habilitadas no sandbox.</span></div>
