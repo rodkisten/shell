@@ -32,3 +32,16 @@ test('WASM graph is explicitly static and exposes status and errors', () => {
   assert.match(explorer, /flowStatus\?\.state === 'loading'/);
   assert.match(explorer, /flowError/);
 });
+
+test('dock supports pointer and keyboard resizing with persisted size', () => {
+  assert.match(app, /aria-label="Redimensionar explorador"/);
+  assert.match(app, /onPointerDown=\{resizeDock\}/);
+  assert.match(app, /onPointerMove=\{moveDock\}/);
+  assert.match(app, /setPointerCapture\(event.pointerId\)/);
+  assert.match(app, /shellconductor:dock-size/);
+  assert.match(css, /touch-action:none/);
+});
+test('explorer is rendered outside scrollable editor route', () => {
+  assert.ok(app.indexOf('className="explorer-dock-resizer"') > app.indexOf('</Routes>'));
+  assert.match(app, /cursorOffset=\{cursor\}/);
+});
