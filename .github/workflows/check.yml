@@ -27,9 +27,9 @@ jobs:
       config-ref: main
       node-version: '24'
       working-directory: .
-      test-command: npm test
+      test-command: npm run test:explorer
       build-command: npm run build
       lint-command: npm run lint
-      run-tests: false
+      run-tests: true
       run-build: true
       run-lint: true
