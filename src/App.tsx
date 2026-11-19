@@ -339,7 +339,7 @@ export function App() {
   const resizeDock = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     const mobile = window.matchMedia('(max-width: 700px)').matches;
-    dockDrag.current = { start: mobile ? event.clientY : event.clientX, size: dockSize };
+    dockDrag.current = { start: mobile ? event.clientY : event.clientX, size: dockSize, mobile };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
   const moveDock = (event: React.PointerEvent<HTMLDivElement>) => {
