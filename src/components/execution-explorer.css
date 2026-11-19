@@ -53,3 +53,12 @@
   .explorer-dock .flow-visual-scroll{max-height:24dvh}
   .explorer-dock .explorer-tabs button{min-height:34px}
 }
+
+.explorer-dock{width:var(--dock-size,47%);max-width:80vw}
+.explorer-dock-resizer{position:absolute;left:0;top:0;bottom:0;width:10px;cursor:ew-resize;z-index:3;touch-action:none}
+.explorer-dock-resizer:focus-visible{outline:2px solid #a78bfa;outline-offset:-2px}
+@media(max-width:700px){
+  .explorer-dock{width:100%;max-width:none;height:var(--dock-size,47%);max-height:80dvh}
+  .explorer-dock-resizer{left:0;right:0;top:0;bottom:auto;width:100%;height:18px;cursor:ns-resize}
+  .explorer-dock-resizer::after{content:'';display:block;width:40px;height:4px;background:#646575;border-radius:9px;margin:6px auto}
+}
