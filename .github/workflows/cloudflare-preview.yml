@@ -9,8 +9,8 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: shell-preview-pr-${{ github.event.pull_request.number || github.ref_name }}
-  cancel-in-progress: true
+  group: shell-preview-stable-redirect
+  cancel-in-progress: false
 
 jobs:
   preview:
@@ -206,16 +206,24 @@ jobs:
 
           headers="$(mktemp)"
           trap 'rm -f "$worker" "$response" "$headers"' EXIT
-          curl --show-error --silent --retry 8 --retry-all-errors --retry-delay 3 \
-            --dump-header "$headers" --output /dev/null "https://shell.preview.migos.club/"
-          actual_target="$(awk 'BEGIN{IGNORECASE=1} /^x-shell-preview-target:/ {$1=""; sub(/^ /,""); sub(/\r$/,""); print; exit}' "$headers")"
-          actual_location="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {$1=""; sub(/^ /,""); sub(/\r$/,""); print; exit}' "$headers")"
-          if [[ "$actual_target" != "$CUSTOM_PREVIEW_URL" ]]; then
-            echo "::error::Stable preview identity mismatch. Expected $CUSTOM_PREVIEW_URL, got $actual_target"
-            exit 1
-          fi
-          if [[ "$actual_location" != "$NATIVE_PREVIEW_URL/" ]]; then
-            echo "::error::Stable preview destination mismatch. Expected $NATIVE_PREVIEW_URL/, got $actual_location"
+          # Cloudflare edge propagation is eventually consistent after a Worker update.
+          # Retry identity and destination together instead of failing on a stale edge.
+          matched=false
+          for attempt in $(seq 1 12); do
+            : > "$headers"
+            curl --show-error --silent --max-time 15 \
+              --dump-header "$headers" --output /dev/null "https://shell.preview.migos.club/?verify=$GITHUB_RUN_ID-$attempt" || true
+            actual_target="$(awk 'BEGIN{IGNORECASE=1} /^x-shell-preview-target:/ {$1=""; sub(/^ /,""); sub(/\\r$/,""); print; exit}' "$headers")"
+            actual_location="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {$1=""; sub(/^ /,""); sub(/\\r$/,""); print; exit}' "$headers")"
+            if [[ "$actual_target" == "$CUSTOM_PREVIEW_URL" && "$actual_location" == "$NATIVE_PREVIEW_URL/?verify=$GITHUB_RUN_ID-$attempt" ]]; then
+              matched=true
+              break
+            fi
+            echo "::notice::Preview edge still propagating (attempt $attempt/12)"
+            sleep 3
+          done
+          if [[ "$matched" != true ]]; then
+            echo "::error::Stable preview redirect mismatch after retries. Expected $CUSTOM_PREVIEW_URL -> $NATIVE_PREVIEW_URL, got $actual_target -> $actual_location"
             exit 1
           fi
           curl --location --fail --show-error --silent --retry 8 --retry-all-errors --retry-delay 3 \
