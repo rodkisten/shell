@@ -63,7 +63,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           path = Path('dist/client/wasm/shell-flow.wasm')
-          assert path.read_bytes()[:4] == b'\\x00asm', f'Invalid WASM header: {path}'
+          assert path.read_bytes()[:4] == bytes([0, 97, 115, 109]), f'Invalid WASM header: {path}'
           print('Deployable WASM header valid')
           PY
       - name: Upload deployable frontend
