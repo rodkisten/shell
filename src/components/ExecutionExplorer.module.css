@@ -1,0 +1,391 @@
+/* Tokens compartilhados entre os componentes do Explorer e Toolbar */
+:where(.execution-explorer, .explorer-tabs, .flow-visual, .editor-command-toolbar, .explorer-dock) {
+  --_bg-base: #09090b;
+  --_bg-elevated: #111113;
+  --_bg-surface: #141519;
+  --_bg-hover: #27272a;
+  --_border: #27272a;
+  --_border-subtle: #34363d;
+  --_text-primary: #fafafa;
+  --_text-secondary: #d4d4d8;
+  --_text-muted: #a1a1aa;
+  --_accent: #a78bfa;
+  --_accent-soft: #c4b5fd;
+  --_font-mono: ui-monospace, SFMono-Regular, monospace;
+}
+
+.execution-explorer {
+  border: 1px solid var(--_border);
+  border-radius: 12px;
+  background: var(--_bg-base);
+  color: var(--_text-primary);
+  overflow: hidden;
+  margin-block: 12px;
+  font-size: 13px;
+
+  & .execution-explorer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--_border);
+
+    & span {
+      color: var(--_text-muted);
+      font-size: 11px;
+    }
+  }
+
+  & .execution-explorer-note {
+    color: var(--_text-muted);
+    font-size: 11px;
+    margin: 8px 14px;
+    line-height: 1.5;
+  }
+
+  & .execution-explorer-tree {
+    max-height: 320px;
+    overflow: auto;
+    padding: 8px 4px;
+
+    @media (width <= 640px) {
+      max-height: 42dvh;
+    }
+  }
+
+  & .execution-explorer-node {
+    --_node-height: 32px;
+
+    display: flex;
+    align-items: center;
+    min-height: var(--_node-height);
+    border-radius: 6px;
+
+    @media (width <= 640px) {
+      --_node-height: 40px;
+    }
+
+    &:is(:hover, .is-selected) {
+      background: var(--_bg-hover);
+    }
+
+    & > button {
+      border: 0;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      min-height: var(--_node-height);
+
+      &:first-child {
+        width: 25px;
+        flex-shrink: 0;
+      }
+    }
+  }
+
+  & .execution-explorer-select {
+    display: flex;
+    gap: 9px;
+    align-items: center;
+    min-width: 0;
+    flex: 1;
+    text-align: left;
+
+    & span {
+      font-family: var(--_font-mono);
+      color: var(--_accent-soft);
+    }
+
+    & small {
+      color: var(--_text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  & .execution-explorer-details {
+    padding: 12px 14px;
+    border-top: 1px solid var(--_border);
+    background: var(--_bg-elevated);
+
+    & p {
+      color: var(--_text-secondary);
+      line-height: 1.5;
+    }
+
+    & dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 12px;
+      font-size: 11px;
+    }
+
+    & dt {
+      color: var(--_text-muted);
+    }
+
+    & dd {
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+  }
+}
+
+.explorer-tabs {
+  display: flex;
+  gap: 6px;
+  padding-block: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #0c0d10;
+
+  & button {
+    flex: 1;
+    min-height: 42px;
+    border: 1px solid #30313a;
+    border-radius: 9px;
+    background: #17181d;
+    color: #b5b6c1;
+    font-weight: 600;
+    cursor: pointer;
+
+    &[aria-selected="true"] {
+      background: #34254b;
+      border-color: var(--_accent);
+      color: #f5edff;
+    }
+  }
+}
+
+.flow-visual {
+  padding: 10px 12px;
+
+  & .flow-visual-summary {
+    font-size: 12px;
+    color: var(--_text-muted);
+    margin-bottom: 12px;
+  }
+
+  & .flow-visual-scroll {
+    position: relative;
+    overflow: auto;
+    max-height: 62dvh;
+    min-height: 150px;
+    border: 1px solid #292934;
+    border-radius: 10px;
+    background: #0d0e14;
+
+    @media (width <= 640px) {
+      max-height: 54dvh;
+    }
+  }
+
+  & .flow-visual-lines {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    pointer-events: none;
+  }
+
+  & .flow-visual-nodes {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    padding: 24px 12px;
+  }
+
+  & .flow-visual-node {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    justify-content: center;
+    align-items: center;
+    width: min(240px, 90%);
+    min-height: 60px;
+    border: 1px solid #55516b;
+    border-radius: 10px;
+    background: #242033;
+    color: #f6f0ff;
+    cursor: pointer;
+    box-shadow: 0 4px 16px #0005;
+
+    &.is-selected {
+      outline: 2px solid var(--_accent-soft);
+      background: #3a2c58;
+    }
+
+    & code {
+      font-size: 11px;
+      max-width: 95%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    & small {
+      font-size: 10px;
+      color: var(--_accent-soft);
+    }
+  }
+}
+
+/* Consolidado com os overrides compactos finais do arquivo original */
+.editor-command-toolbar {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--_border-subtle);
+  background: var(--_bg-surface);
+
+  @media (width <= 700px) {
+    padding: 4px 6px;
+  }
+
+  & button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding-inline: 9px;
+    border: 1px solid var(--_border-subtle);
+    border-radius: 7px;
+    background: var(--_bg-surface);
+    color: #ddd;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+
+    @media (width <= 700px) {
+      min-height: 32px;
+      padding-inline: 8px;
+      font-size: 11px;
+
+      & svg {
+        width: 14px;
+        height: 14px;
+      }
+    }
+
+    &:disabled {
+      opacity: 0.5;
+    }
+
+    &.editor-command-primary {
+      background: #1e1f26;
+      color: #e5e5e7;
+      border-color: #454650;
+    }
+  }
+}
+
+.explorer-dock {
+  position: fixed;
+  z-index: 80;
+  top: clamp(80px, 13vh, 130px);
+  right: 12px;
+  bottom: 80px;
+  width: var(--dock-size, 47%);
+  max-width: 80vw;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #101115;
+  border: 1px solid #383943;
+  border-radius: 14px;
+  box-shadow: 0 12px 60px #000a;
+
+  @media (width <= 700px) {
+    inset: auto 0 calc(64px + env(safe-area-inset-bottom, 0px)) 0;
+    width: 100%;
+    max-width: none;
+    height: var(--dock-size, 47%);
+    max-height: 80dvh;
+    border-radius: 14px 14px 0 0;
+    border-inline: 0;
+  }
+
+  & .subpanel-heading {
+    flex-shrink: 0;
+    padding: 10px 14px;
+    border-bottom: 1px solid #303139;
+  }
+
+  & .explorer-tabs {
+    flex-shrink: 0;
+    padding: 7px 12px;
+
+    @media (width <= 700px) {
+      & button {
+        min-height: 34px;
+      }
+    }
+  }
+
+  & .execution-explorer {
+    min-height: 0;
+    flex: 1;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  & .flow-visual-scroll {
+    @media (width <= 700px) {
+      max-height: 24dvh;
+    }
+  }
+
+  & .explorer-explanation-text {
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    padding: 12px 16px;
+    flex: 1;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  & > p {
+    font-size: 10px;
+    margin: 6px 12px;
+  }
+
+  & .explorer-dock-resizer {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 10px;
+    cursor: ew-resize;
+    z-index: 3;
+    touch-action: none;
+
+    &:focus-visible {
+      outline: 2px solid var(--_accent);
+      outline-offset: -2px;
+    }
+
+    @media (width <= 700px) {
+      inset: 0 0 auto 0;
+      width: 100%;
+      height: 18px;
+      cursor: ns-resize;
+
+      &::after {
+        content: "";
+        display: block;
+        width: 40px;
+        height: 4px;
+        background: #646575;
+        border-radius: 9px;
+        margin: 6px auto;
+      }
+    }
+  }
+}
