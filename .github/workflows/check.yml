@@ -24,6 +24,7 @@ jobs:
       pull-requests: read
     with:
       repository-key: shell
+      config-ref: feat/typescript-reusable-workflows
       node-version: '22'
       working-directory: .
       test-command: npm test
