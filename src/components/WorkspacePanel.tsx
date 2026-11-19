@@ -4,6 +4,7 @@ import {
   createWorkspaceDirectory, deleteWorkspaceEntry, listWorkspace,
   readWorkspaceFile, saveWorkspaceFile, type WorkspaceEntry,
 } from '../lib/workspace';
+import styles from './WorkspacePanel.module.css';
 
 export function WorkspacePanel() {
   const [cwd, setCwd] = useState('');
@@ -38,50 +39,116 @@ export function WorkspacePanel() {
     });
   };
 
-  return <section className="workspace-files" aria-label="Arquivos persistentes">
-    <div className="workspace-files-header">
-      <strong>Arquivos locais</strong>
-      <button type="button" onClick={() => void refresh()} title="Atualizar arquivos"><RefreshCw size={16}/></button>
-    </div>
-    <div className="workspace-files-path"><button type="button" disabled={!cwd} onClick={() => { setCwd(value => value.split('/').slice(0, -1).join('/')); setSelected(null); }} aria-label="Voltar à pasta anterior"><ArrowLeft size={15}/></button><span>/home/user{cwd ? '/' + cwd : ''} · IndexedDB</span></div>
-    <div className="workspace-files-create">
-      <input aria-label="Nome do arquivo ou pasta" value={newName} onChange={e => setNewName(e.target.value)} placeholder="novo-arquivo.txt" />
-      <label><input type="checkbox" checked={directory} onChange={e => setDirectory(e.target.checked)}/> Pasta</label>
-      <button type="button" disabled={busy || !newName.trim()} onClick={() => void task(async () => {
-        if (directory) await createWorkspaceDirectory(newName.trim(), cwd);
-        else await saveWorkspaceFile(newName.trim(), '', cwd);
-        setNewName('');
-      })}><Plus size={15}/> Criar</button>
-    </div>
-    <div className="workspace-files-list">
-      {items.map(item => <div className="workspace-files-entry" key={item.name}>
-        <button type="button" onClick={() => open(item)}>{item.directory ? <Folder size={16}/> : <FileText size={16}/>}<span>{item.name}</span></button>
-        <button type="button" title={'Excluir ' + item.name} disabled={busy} onClick={() => {
-          if (window.confirm('Excluir ' + item.name + '?')) void task(async () => {
-            await deleteWorkspaceEntry(item.name, item.directory, cwd);
-            if (selected === item.name) setSelected(null);
-          });
-        }}><Trash2 size={15}/></button>
-      </div>)}
-      {!items.length && <p className="workspace-files-caption">Nenhum arquivo. Crie um acima ou use o terminal.</p>}
-    </div>
-    {selected && <div className="workspace-files-editor">
-      <strong>{selected}</strong>
-      <textarea aria-label={'Conteúdo de ' + selected} value={contents} onChange={e => setContents(e.target.value)} rows={7} spellCheck={false}/>
-      <button type="button" onClick={() => {
-        const blob = new Blob([contents], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = selected;
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      }}><Download size={15}/> Baixar</button>
-      <button type="button" disabled={busy} onClick={() => void task(async () => {
-        await saveWorkspaceFile(selected, contents, cwd); setNotice('Arquivo salvo no workspace.');
-      })}><Save size={15}/> Salvar</button>
-    </div>}
-    {error && <p role="alert" className="workspace-files-error">{error}</p>}
-    {notice && <p role="status" className="workspace-files-caption">{notice}</p>}
-  </section>;
+  return (
+    <section className={styles.container} aria-label="Arquivos persistentes">
+      <div className={styles.header}>
+        <strong>Arquivos locais</strong>
+        <button type="button" onClick={() => void refresh()} title="Atualizar arquivos">
+          <RefreshCw size={16} />
+        </button>
+      </div>
+
+      <div className={styles.path}>
+        <button
+          type="button"
+          disabled={!cwd}
+          onClick={() => { setCwd(value => value.split('/').slice(0, -1).join('/')); setSelected(null); }}
+          aria-label="Voltar à pasta anterior"
+        >
+          <ArrowLeft size={15} />
+        </button>
+        <span>/home/user{cwd ? '/' + cwd : ''} · IndexedDB</span>
+      </div>
+
+      <div className={styles.create}>
+        <input
+          aria-label="Nome do arquivo ou pasta"
+          value={newName}
+          onChange={e => setNewName(e.target.value)}
+          placeholder="novo-arquivo.txt"
+        />
+        <label>
+          <input type="checkbox" checked={directory} onChange={e => setDirectory(e.target.checked)} /> Pasta
+        </label>
+        <button
+          type="button"
+          disabled={busy || !newName.trim()}
+          onClick={() => void task(async () => {
+            if (directory) await createWorkspaceDirectory(newName.trim(), cwd);
+            else await saveWorkspaceFile(newName.trim(), '', cwd);
+            setNewName('');
+          })}
+        >
+          <Plus size={15} /> Criar
+        </button>
+      </div>
+
+      <div className={styles.list}>
+        {items.map(item => (
+          <div className={styles.entry} key={item.name}>
+            <button type="button" onClick={() => open(item)}>
+              {item.directory ? <Folder size={16} /> : <FileText size={16} />}
+              <span>{item.name}</span>
+            </button>
+            <button
+              type="button"
+              title={'Excluir ' + item.name}
+              disabled={busy}
+              onClick={() => {
+                if (window.confirm('Excluir ' + item.name + '?')) void task(async () => {
+                  await deleteWorkspaceEntry(item.name, item.directory, cwd);
+                  if (selected === item.name) setSelected(null);
+                });
+              }}
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+        ))}
+        {!items.length && (
+          <p className={styles.caption}>Nenhum arquivo. Crie um acima ou use o terminal.</p>
+        )}
+      </div>
+
+      {selected && (
+        <div className={styles.editor}>
+          <strong>{selected}</strong>
+          <textarea
+            aria-label={'Conteúdo de ' + selected}
+            value={contents}
+            onChange={e => setContents(e.target.value)}
+            rows={7}
+            spellCheck={false}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const blob = new Blob([contents], { type: 'text/plain;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = selected;
+              link.click();
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }}
+          >
+            <Download size={15} /> Baixar
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void task(async () => {
+              await saveWorkspaceFile(selected, contents, cwd);
+              setNotice('Arquivo salvo no workspace.');
+            })}
+          >
+            <Save size={15} /> Salvar
+          </button>
+        </div>
+      )}
+
+      {error && <p role="alert" className={styles.error}>{error}</p>}
+      {notice && <p role="status" className={styles.caption}>{notice}</p>}
+    </section>
+  );
 }
