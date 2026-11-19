@@ -70,6 +70,7 @@ export function App() {
   const [findings, setFindings] = useState<Finding[]>([]);
   const [output, setOutput] = useState<Output[]>([]);
   const [explanation, setExplanation] = useState<string | null>(null);
+  const [explorerTab, setExplorerTab] = useState<'flow' | 'ast' | 'explanation'>('flow');
   const [astNodes, setAstNodes] = useState<ShellAstNode[]>([]);
   const [analysisTokens, setAnalysisTokens] = useState<SemanticToken[]>([]);
   const [flowResult, setFlowResult] = useState<WasmFlowResult | null>(null);
@@ -289,6 +290,7 @@ export function App() {
     element.addEventListener('pointercancel', finish);
   };
   const explain = async () => {
+    setExplorerTab('flow');
     if (!script.trim()) return notify('Cole ou escreva um comando primeiro.');
     setBusy('explain');
     const revision = ++analysisRevision.current;
@@ -356,6 +358,13 @@ export function App() {
                     <div className="panel-tabs"><span className="file-icon"><FileCode2 size={15}/></span><span>script.zsh</span><span className="unsaved-dot" aria-label="Rascunho local"/></div>
                     <div className="panel-header-actions"><label title="Tamanho da fonte do editor" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, flexShrink: 0 }}><span className="editor-font-label">Fonte</span><select aria-label="Tamanho da fonte" value={editorFontSize} onChange={event => setEditorFontSize(Number(event.target.value))} style={{ background: "#141519", color: "#eee", border: "1px solid #34363d", borderRadius: 5, padding: "4px 2px", fontSize: 16, maxWidth: 74 }}>{[9,10,11,12,13,14].map(size => <option key={size} value={size}>{size}px</option>)}</select></label><label title="Quebrar linhas longas" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}><input type="checkbox" checked={editorWordWrap} onChange={event => setEditorWordWrap(event.target.checked)} /> Wrap</label><span className="language-label">Zsh</span><button title="Colar texto" onClick={paste} aria-label="Colar"><Clipboard size={15}/></button><button title="Copiar script" onClick={() => void copy()} aria-label="Copiar"><Copy size={15}/></button><button title="Salvar script" onClick={save} aria-label="Salvar"><Bookmark size={15}/></button></div>
                   </div>
+                  <nav className="editor-command-toolbar" aria-label="Ferramentas do editor">
+                    <button type="button" onClick={() => { void run(); }} disabled={!!busy}><Play size={15}/> Executar</button>
+                    <button type="button" onClick={() => void convert(false)} disabled={!!busy}><WandSparkles size={15}/> Formatar</button>
+                    <button type="button" onClick={() => void check()} disabled={!!busy}><ShieldCheck size={15}/> Validar</button>
+                    <button type="button" className="editor-command-primary" onClick={() => void explain()} disabled={!!busy}><BookOpen size={15}/> Explicar</button>
+                    <button type="button" onClick={() => { if (!explanation) void explain(); else setExplorerTab('flow'); }} disabled={!!busy}><Activity size={15}/> Fluxo</button>
+                  </nav>
                   <div className="editor-inner" style={{ height: editorHeight }}><ShellEditor ref={editor} code={script} fontSize={editorFontSize} wordWrap={editorWordWrap} onChange={change} onCursor={setCursor} onInspect={setInspected} onSemanticInspect={setSemanticSelection} onRun={() => { void run(); }}/></div>
                   <CommandHelp help={quickHelp} onManual={setInspected}/>
                   {semanticSelection && <section className="semantic-selection-card" aria-label="Explicação do trecho selecionado" aria-live="polite">
@@ -410,8 +419,11 @@ export function App() {
                 <div className="subpanel-heading"><h3><CircleAlert size={17}/> Diagnósticos <span className="count-pill">{findings.length}</span></h3><Button variant="outline" size="sm" onClick={fix}><WandSparkles size={14}/> Aplicar correções possíveis</Button></div>
                 {findings.map((finding,i) => <div className="diagnostic-item" key={i}><span className={cn('severity',finding.level)}>{finding.level}</span><div><strong>SC{finding.code} <span>L{finding.line}:{finding.column}</span></strong><p>{finding.message}</p><a href={'https://www.shellcheck.net/wiki/SC'+finding.code} target="_blank" rel="noreferrer">Entenda esse diagnóstico ↗</a></div></div>)}
               </section>}
-              {explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div>{astNodes.length > 0 && <ExecutionExplorer analysis={analyzeShell(script, astNodes, analysisTokens)} flow={flowResult} flowStatus={flowStatus} flowError={flowError} source={script} onReveal={(from, to) => editor.current?.reveal(from, to)} />}
-              <pre>{explanation}</pre><p>Fonte: catálogo local e parser sh-syntax. Nenhum código é enviado para análise remota.</p></section>}
+              {explanation && <section className="explain-panel"><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplanation(null)} title="Fechar"><X size={17}/></button></div><div className="explorer-tabs" role="tablist" aria-label="Visualização da análise">
+                {(['flow','ast','explanation'] as const).map(tab => <button key={tab} type="button" role="tab" aria-selected={explorerTab === tab} onClick={() => setExplorerTab(tab)}>{tab === 'flow' ? 'Fluxo' : tab === 'ast' ? 'AST' : 'Explicação'}</button>)}
+              </div>
+              {explorerTab !== 'explanation' && astNodes.length > 0 && <ExecutionExplorer view={explorerTab} analysis={analyzeShell(script, astNodes, analysisTokens)} flow={flowResult} flowStatus={flowStatus} flowError={flowError} source={script} onReveal={(from, to) => editor.current?.reveal(from, to)} />}
+              {explorerTab === 'explanation' && <pre>{explanation}</pre>}<p>Fonte: catálogo local e parser sh-syntax. Nenhum código é enviado para análise remota.</p></section>}
               <WorkspacePanel />
               <div className="footer-advice"><Info size={15}/><span>O terminal executa Zsh em WebAssembly com filesystem virtual persistente. <strong>Não executa comandos no seu iPhone, servidor ou Codespace.</strong> Requisições HTTP externas não são habilitadas no sandbox.</span></div>
             </>} />
