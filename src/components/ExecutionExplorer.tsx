@@ -6,6 +6,7 @@ import type { FlowWasmStatus, WasmFlowResult } from '../lib/shell-flow-wasm';
 type Props = {
   analysis: ShellAnalysis;
   view?: 'flow' | 'ast';
+  cursorOffset?: number;
   flow?: WasmFlowResult | null;
   flowStatus?: FlowWasmStatus;
   flowError?: string | null;
@@ -14,11 +15,12 @@ type Props = {
 };
 
 /** Read-only AST navigator. No command execution is performed here. */
-export function ExecutionExplorer({ analysis, flow, flowStatus, flowError, source = '', onReveal, view = 'ast' }: Props) {
+export function ExecutionExplorer({ analysis, flow, flowStatus, flowError, source = '', onReveal, view = 'ast', cursorOffset }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const utf8 = useMemo(() => new TextEncoder().encode(source), [source]);
   const offset = (position: number) => new TextDecoder().decode(utf8.slice(0, position)).length;
+  const activeNode = flow?.nodes.find(node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset <= offset(node.end));
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const children = useMemo(() => {
     const map = new Map<string | undefined, typeof analysis.astNodes>();
@@ -69,8 +71,8 @@ export function ExecutionExplorer({ analysis, flow, flowStatus, flowError, sourc
             {flow.nodes.map(node => {
               const from = offset(node.start);
               const to = offset(node.end);
-              return <button key={node.id} type="button" className={'flow-visual-node' + (selectedFlowId === node.id ? ' is-selected' : '')}
-                aria-pressed={selectedFlowId === node.id} onClick={() => { setSelectedFlowId(node.id); onReveal?.(from, to); }}>
+              return <button key={node.id} type="button" className={'flow-visual-node' + ((activeNode?.id === node.id || selectedFlowId === node.id) ? ' is-selected' : '')}
+                aria-pressed={activeNode?.id === node.id || selectedFlowId === node.id} onClick={() => { setSelectedFlowId(node.id); onReveal?.(from, to); }}>
                 <strong>{node.kind}</strong><code>{source.slice(from, to).trim().slice(0, 72) || node.id}</code>
                 <small>{flow.edges.filter(edge => edge.from === node.id).map(edge => edge.kind).join(' · ') || 'fim'}</small>
               </button>;
