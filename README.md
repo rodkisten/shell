@@ -401,3 +401,5 @@ O workflow **Verify Shell production revision** pode ser executado manualmente e
 O explorador de Fluxo, AST e Explicação usa um painel inferior no iPhone, com alça de redimensionamento, atalhos de teclado (setas, Home e End), botão para restaurar o tamanho padrão e persistência local do tamanho. A barra de ações do editor rola horizontalmente em telas estreitas sem ampliar os botões. O painel respeita a área segura inferior do Safari e permite rolar seu conteúdo independentemente do editor.
 
 No desktop, abrir o explorador reserva uma faixa lateral do workspace, evitando que o dock flutue sobre o código. A largura acompanha o tamanho salvo; no mobile permanece um painel inferior independente.
+
+O grafo WASM converte os intervalos UTF-8 do parser para offsets UTF-16 do CodeMirror, inclusive com emojis e caracteres fora do BMP. Quando o cursor está em nós aninhados, o menor intervalo correspondente recebe destaque; clicar no nó navega para o intervalo no editor.
