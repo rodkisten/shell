@@ -4,6 +4,18 @@ A mobile-first shell workbench for learning and daily use. Designed for the iPho
 
 **Stack:** React 19 + React Router (library / SPA) + Vite 7 + TypeScript + shadcn-style Radix primitives + Tailwind v4 + CodeMirror 6 + Cloudflare Workers.
 
+
+## 🐧 Debian Release Portal
+
+A rota `/debian/` oferece um catálogo de releases do `rodkisten/codespaces`, notas de versão obtidas diretamente da API do GitHub, assets ZIP, seletor de versão e comandos de instalação, verificação e atualização. O design usa React, CSS dedicado e ícones Lucide; os blocos de código usam `highlight.js` via `esm.sh`, e as release notes usam `marked` + `DOMPurify` via `esm.sh`. Se o CDN não estiver disponível, código e notas continuam legíveis em texto simples.
+
+- `/debian/installer`: script Bash para última release estável.
+- `/debian/installer/1.0.0`: script para release fixa.
+- `rod-self-update --check`: consulta a última release.
+- `sudo rod-self-update --self-update`: atualiza a instalação.
+
+O portal não inventa versões ou changelogs: sem releases publicadas, mostra estado vazio. O endpoint depende do script `debian/release-installer.sh` na `main` de `rodkisten/codespaces`; só ficará disponível após o merge e deploy dos PRs correspondentes.
+
 ## Roadmap de implementação (checklist consolidada)
 
 Esta lista reúne todos os pedidos anteriores e atuais. Marcar uma tarefa somente após a implementação; commits não substituem validação de build ou teste no Safari.
