@@ -72,7 +72,10 @@ export function App() {
   const [explanation, setExplanation] = useState<string | null>(null);
   const [explorerTab, setExplorerTab] = useState<'flow' | 'ast' | 'explanation'>('flow');
   const [explorerOpen, setExplorerOpen] = useState(false);
-  const [dockSize, setDockSize] = useState(() => Math.max(25, Math.min(80, Number(localStorage.getItem('shellconductor:dock-size')) || 47)));
+  const [dockSize, setDockSize] = useState(() => {
+    try { return Math.max(25, Math.min(80, Number(localStorage.getItem('shellconductor:dock-size')) || 47)); }
+    catch { return 47; }
+  });
   const dockDrag = useRef<{ start: number; size: number; mobile: boolean } | null>(null);
   const [astNodes, setAstNodes] = useState<ShellAstNode[]>([]);
   const [analysisTokens, setAnalysisTokens] = useState<SemanticToken[]>([]);
@@ -347,10 +350,10 @@ export function App() {
     const delta = (drag.start - (drag.mobile ? event.clientY : event.clientX)) / dimension * 100;
     setDockSize(Math.max(25, Math.min(80, drag.size + delta)));
   };
-  const finishDock = () => {
+  useEffect(() => {\n    try { localStorage.setItem('shellconductor:dock-size', String(Math.round(dockSize))); } catch { /* Safari private mode */ }\n  }, [dockSize]);\n\n  const finishDock = () => {
     if (!dockDrag.current) return;
     dockDrag.current = null;
-    localStorage.setItem('shellconductor:dock-size', String(Math.round(dockSize)));
+    try { localStorage.setItem('shellconductor:dock-size', String(Math.round(dockSize))); } catch { /* Safari private mode */ }
   };
 
   return (
@@ -466,7 +469,7 @@ export function App() {
         <NavLink to="/historico" className={({isActive}) => cn(isActive && 'active')}><Clock3 size={20}/><span>Histórico</span></NavLink>
       </nav>
       {toast && <div role="status" className="toast"><CircleCheck size={16}/> {toast}<button onClick={() => setToast('')} aria-label="Fechar aviso"><X size={14}/></button></div>}
-              {explorerOpen && <section className="explain-panel explorer-dock" role="dialog" aria-label="Explorador de análise" aria-modal="false" style={{ "--dock-size": `${dockSize}%` } as React.CSSProperties}><div className="explorer-dock-resizer" role="separator" aria-label="Redimensionar explorador" aria-orientation="horizontal" tabIndex={0} onPointerDown={resizeDock} onPointerMove={moveDock} onPointerUp={finishDock} onPointerCancel={finishDock} onKeyDown={event => { if (event.key === "ArrowUp" || event.key === "ArrowRight") { event.preventDefault(); setDockSize(v => Math.min(80,v+5)); } else if (event.key === "ArrowDown" || event.key === "ArrowLeft") { event.preventDefault(); setDockSize(v => Math.max(25,v-5)); } }} /><div className="subpanel-heading"><h3><BookOpen size={17}/> Explicação contextual</h3><button className="subtle-icon" onClick={() => setExplorerOpen(false)} title="Fechar"><X size={17}/></button></div><div className="explorer-tabs" role="tablist" aria-label="Visualização da análise">
+              {explorerOpen && <section className="explain-panel explorer-dock" role="dialog" aria-label="Explorador de análise" aria-modal="false" style={{ "--dock-size": `${dockSize}%` } as React.CSSProperties}><div className="explorer-dock-resizer" role="separator" aria-label="Redimensionar explorador" aria-orientation="horizontal" tabIndex={0} onPointerDown={resizeDock} onPointerMove={moveDock} onPointerUp={finishDock} onPointerCancel={finishDock} onKeyDown={event => { if (event.key === "Home") { event.preventDefault(); setDockSize(25); } else if (event.key === "End") { event.preventDefault(); setDockSize(80); } else if (event.key === "ArrowUp" || event.key === "ArrowRight") { event.preventDefault(); setDockSize(v => Math.min(80,v+5)); } else if (event.key === "ArrowDown" || event.key === "ArrowLeft") { event.preventDefault(); setDockSize(v => Math.max(25,v-5)); } }} /><div className="subpanel-heading"><h3><BookOpen size={15}/> Explorador</h3><div className="dock-header-actions"><button type="button" className="subtle-icon" onClick={() => setDockSize(47)} title="Restaurar tamanho" aria-label="Restaurar tamanho"><ArrowLeftRight size={15}/></button><button className="subtle-icon" onClick={() => setExplorerOpen(false)} title="Fechar" aria-label="Fechar explorador"><X size={16}/></button></div></div><div className="explorer-tabs" role="tablist" aria-label="Visualização da análise">
                 {(['flow','ast','explanation'] as const).map(tab => <button key={tab} type="button" role="tab" aria-selected={explorerTab === tab} onClick={() => setExplorerTab(tab)}>{tab === 'flow' ? 'Fluxo' : tab === 'ast' ? 'AST' : 'Explicação'}</button>)}
               </div>
               {explorerTab !== 'explanation' && astNodes.length > 0 && <ExecutionExplorer cursorOffset={cursor} view={explorerTab} analysis={analyzeShell(script, astNodes, analysisTokens)} flow={flowResult} flowStatus={flowStatus} flowError={flowError} source={script} onReveal={(from, to) => editor.current?.reveal(from, to)} />}
