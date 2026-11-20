@@ -27,11 +27,23 @@ export function ExecutionExplorer({
 }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
-  const utf8 = useMemo(() => new TextEncoder().encode(source), [source]);
-  const offset = (position: number) => new TextDecoder().decode(utf8.slice(0, position)).length;
-  const activeNode = flow?.nodes.find(
-    node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset <= offset(node.end)
-  );
+  // Build a single UTF-8 byte -> UTF-16 offset map, including astral Unicode.
+  // CodeMirror uses UTF-16 offsets; the Go/WASM parser reports UTF-8 bytes.
+  const byteOffsets = useMemo(() => {
+    const mapping: number[] = [0];
+    let utf16 = 0;
+    for (const character of source) {
+      const bytes = new TextEncoder().encode(character).length;
+      for (let i = 1; i < bytes; i++) mapping.push(utf16);
+      utf16 += character.length;
+      mapping.push(utf16);
+    }
+    return mapping;
+  }, [source]);
+  const offset = (position: number) => byteOffsets[Math.max(0, Math.min(byteOffsets.length - 1, position))] ?? 0;
+  const activeNode = flow?.nodes
+    .filter(node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset < offset(node.end))
+    .sort((a, b) => (offset(a.end) - offset(a.start)) - (offset(b.end) - offset(b.start)))[0];
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
 
   const children = useMemo(() => {
@@ -116,7 +128,7 @@ export function ExecutionExplorer({
                 {flow.nodes.map(node => {
                   const from = offset(node.start);
                   const to = offset(node.end);
-                  const isSelected = activeNode?.id === node.id || selectedFlowId === node.id;
+                  const isSelected = activeNode ? activeNode.id === node.id : selectedFlowId === node.id;
                   return (
                     <button
                       key={node.id}
