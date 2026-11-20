@@ -5,6 +5,13 @@ import './DebianPage.css';
 type Asset = { name: string; size: number; browser_download_url: string; digest?: string };
 type Release = { id: number; tag_name: string; name: string; body: string | null; published_at: string; html_url: string; prerelease: boolean; draft: boolean; assets: Asset[] };
 const API = 'https://api.github.com/repos/rodkisten/codespaces/releases?per_page=30';
+// Keep CDN module specifiers dynamic: TypeScript cannot resolve HTTP imports at build time.
+const CDN = {
+  highlight: 'https://esm.sh/highlight.js@11.11.1/lib/core?bundle',
+  bash: 'https://esm.sh/highlight.js@11.11.1/lib/languages/bash?bundle',
+  marked: 'https://esm.sh/marked@15.0.12?bundle',
+  purify: 'https://esm.sh/dompurify@3.2.6?bundle',
+} as const;
 const commands = [
   { name: 'Install', subtitle: 'Latest stable release', value: 'curl -fsSL https://shell.migos.club/debian/installer -o /tmp/rod-install.sh\nsudo bash /tmp/rod-install.sh' },
   { name: 'Check updates', subtitle: 'Read-only version check', value: 'rod-self-update --check' },
@@ -16,8 +23,8 @@ function Code({ value }: { value: string }) {
   const [html, setHtml] = useState('');
   useEffect(() => {
     let active = true;
-    import(/* @vite-ignore */ 'https://esm.sh/highlight.js@11.11.1/lib/core?bundle').then(async (module) => {
-      const bash = await import(/* @vite-ignore */ 'https://esm.sh/highlight.js@11.11.1/lib/languages/bash?bundle');
+    import(/* @vite-ignore */ CDN.highlight).then(async (module) => {
+      const bash = await import(/* @vite-ignore */ CDN.bash);
       const hljs = module.default as { registerLanguage: (name: string, fn: unknown) => void; highlight: (text: string, options: { language: string }) => { value: string } };
       hljs.registerLanguage('bash', bash.default);
       if (active) setHtml(hljs.highlight(value, { language: 'bash' }).value);
@@ -32,8 +39,8 @@ function ReleaseNotes({ text }: { text: string }) {
   useEffect(() => {
     let active = true;
     Promise.all([
-      import(/* @vite-ignore */ 'https://esm.sh/marked@15.0.12?bundle'),
-      import(/* @vite-ignore */ 'https://esm.sh/dompurify@3.2.6?bundle'),
+      import(/* @vite-ignore */ CDN.marked),
+      import(/* @vite-ignore */ CDN.purify),
     ]).then(([marked, purify]) => {
       const raw = marked.marked.parse(text, { async: false }) as string;
       if (active) setHtml(purify.default.sanitize(raw));
