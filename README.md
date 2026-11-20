@@ -405,3 +405,5 @@ No desktop, abrir o explorador reserva uma faixa lateral do workspace, evitando 
 O grafo WASM converte os intervalos UTF-8 do parser para offsets UTF-16 do CodeMirror, inclusive com emojis e caracteres fora do BMP. Quando o cursor está em nós aninhados, o menor intervalo correspondente recebe destaque; clicar no nó navega para o intervalo no editor.
 
 O redimensionamento mobile usa a altura do viewport visual (quando disponível) e aplica a altura do painel em `dvh`, preservando o limite superior e a safe area quando o Safari muda suas barras. No desktop, a largura reservada e a largura renderizada do explorador compartilham o mesmo limite para evitar sobreposição.
+
+A alça do Dock reconhece o identificador do ponteiro ativo, libera a captura ao terminar e expõe o valor percentual atual para tecnologias assistivas. A árvore AST também destaca automaticamente o nó mais específico sob o cursor, mantendo a seleção manual como alternativa quando o cursor está fora dos intervalos conhecidos.
