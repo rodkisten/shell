@@ -44,7 +44,7 @@ type LinuxBucket = {
     writeHttpMetadata(headers: Headers): void;
   } | null>;
 };
-type Env = { LINUX_ASSETS?: LinuxBucket };
+type Env = { LINUX_ASSETS?: LinuxBucket; ASSETS: { fetch(request: Request): Promise<Response> } };
 const linuxAssets = new Set(['libv86.js', 'v86.wasm', 'seabios.bin', 'vgabios.bin', 'alpine.iso']);
 
 async function linuxAsset(request: Request, env: Env): Promise<Response> {
@@ -139,7 +139,13 @@ async function debianInstaller(request: Request, path: string): Promise<Response
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/debian/installer')) return debianInstaller(request, url.pathname);
+    if (url.pathname === '/debian' || url.pathname === '/debian/') {
+      if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405 });
+      // Return the SPA entrypoint, preserving the browser URL for React Router.
+      const indexUrl = new URL('/index.html', url);
+      return env.ASSETS.fetch(new Request(indexUrl, request));
+    }
+    if (url.pathname.startsWith('/debian/')) return debianInstaller(request, url.pathname);
     if (url.pathname.startsWith('/v86/')) return linuxAsset(request, env);
     if (url.pathname.startsWith('/api/')) {
       if (request.method !== 'GET') return json({ error: 'Método não permitido' }, 405);
