@@ -30,7 +30,8 @@
       "/api/*",
       "/v86/*",
       "/debian",
-      "/debian/*"
+      "/debian/*",
+      "/install/*"
     ]
   }
 }

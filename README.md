@@ -407,3 +407,37 @@ Após cada publicação, compare `curl -fsS https://shell.migos.club/api/version
 ### Conferência automatizada da produção
 
 O workflow **Verify Shell production revision** pode ser executado manualmente em GitHub Actions. Ele não faz deploy nem altera recursos do Cloudflare: apenas consulta `https://shell.migos.club/api/version`, compara o SHA completo e falha se o endpoint estiver inacessível ou publicar outra revisão. Opcionalmente, informe `expected_sha` (40 caracteres) para conferir uma revisão específica. Localmente: `EXPECTED_SHA=$(git rev-parse HEAD) node scripts/verify-production-version.mjs`. A verificação faz até 12 tentativas, com 5 segundos entre elas; customize `VERSION_RETRIES`, `VERSION_DELAY_MS` e `SHELL_VERSION_URL` se necessário. Uma resposta `unknown` nunca é aceita como versão confirmada.
+
+
+## 🦀 Eita: links curtos de instalação
+
+Este Worker responde às rotas abaixo antes do fallback da SPA (definidas em `wrangler.jsonc`):
+
+- `/install/eita`: instalador oficial da release estável mais recente.
+- `/install/eita/pr/2`: instalador da prerelease movível do PR #2.
+- `/install/eita/main-0123456789ab`: instalador de um commit identificado pela tag.
+
+~~~sh
+curl -fsSL https://shell.migos.club/install/eita | sh
+curl -fsSL https://shell.migos.club/install/eita/pr/2 | sh
+~~~
+
+O Worker não hospeda binários nem incorpora tokens. Ele busca `install.sh` da `main` de `rodkisten/eita` e, para previews, prefixa `EITA_VERSION=pr-N` sem aceitar valores arbitrários. O script do Eita baixa o arquivo do GitHub Release e verifica o SHA-256 antes de instalar.
+
+O PR de build do Eita publica um comentário único com URL curta, link direto do artefato e da prerelease. As rotas só estarão disponíveis em produção após o merge e deploy do Shell.
+
+
+### 📦 Link direto para arquivos, sem executar o instalador
+
+~~~sh
+# Archive Linux x64, sempre do último build bem-sucedido do PR #3
+curl -fL https://shell.migos.club/install/eita/pr/3/artifact -o eita-pr-3.tar.gz
+
+# SHA-256 correspondente
+curl -fL https://shell.migos.club/install/eita/pr/3/checksum -o eita-pr-3.tar.gz.sha256
+
+# Para Linux ARM64 ou macOS, adicione ?target=...
+curl -fL 'https://shell.migos.club/install/eita/pr/3/artifact?target=aarch64-unknown-linux-gnu' -o eita-arm64.tar.gz
+~~~
+
+Os links de arquivo respondem com HTTP 302 para o GitHub Release correspondente, sem passar o binário pelo Worker. Plataformas disponíveis dependem dos targets habilitados no workflow do Eita.
