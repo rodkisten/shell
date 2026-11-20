@@ -62,3 +62,77 @@
   .explorer-dock-resizer{left:0;right:0;top:0;bottom:auto;width:100%;height:18px;cursor:ns-resize}
   .explorer-dock-resizer::after{content:'';display:block;width:40px;height:4px;background:#646575;border-radius:9px;margin:6px auto}
 }
+
+
+/* Dock 2.0: compact touch controls and safe-area-aware mobile sheet. */
+.explorer-dock .dock-header-actions{display:flex;align-items:center;gap:4px}
+.explorer-dock .subpanel-heading{min-height:38px;padding:5px 10px}
+.explorer-dock .subpanel-heading h3{font-size:12px;gap:6px}
+.explorer-dock .subpanel-heading .subtle-icon{width:30px;height:30px;min-width:30px;display:inline-flex;align-items:center;justify-content:center}
+.explorer-dock .explorer-tabs{padding:4px 8px;gap:4px}
+.explorer-dock .explorer-tabs button{min-height:30px;padding:4px 10px;font-size:12px}
+.explorer-dock{isolation:isolate}
+.explorer-dock-resizer{user-select:none;-webkit-user-select:none}
+@media(max-width:700px){
+  .explorer-dock{
+    position:fixed;
+    inset:auto 0 calc(56px + env(safe-area-inset-bottom,0px));
+    width:100%;
+    height:min(var(--dock-size,47%),calc(100dvh - 116px - env(safe-area-inset-bottom,0px)));
+    max-height:calc(100dvh - 116px - env(safe-area-inset-bottom,0px));
+    border-radius:14px 14px 0 0;
+    box-shadow:0 -8px 36px #0009;
+  }
+  .explorer-dock .subpanel-heading{padding:8px 10px 4px;min-height:40px}
+  .explorer-dock .explorer-tabs{padding:3px 8px}
+  .explorer-dock .explorer-tabs button{min-height:32px;flex:1}
+  .explorer-dock-resizer{height:16px}
+  .explorer-dock .execution-explorer{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  .explorer-dock > p{margin:4px 10px;font-size:9px}
+  .editor-command-toolbar{display:flex;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;gap:4px;padding:4px 6px}
+  .editor-command-toolbar::-webkit-scrollbar{display:none}
+  .editor-command-toolbar button{flex:0 0 auto;min-height:30px;padding:4px 7px;font-size:11px;white-space:nowrap}
+  .editor-command-toolbar button svg{width:13px;height:13px}
+}
+@media(prefers-reduced-motion:reduce){
+  .explorer-dock,.explorer-dock *{scroll-behavior:auto!important}
+}
+
+/* Desktop: the explorer is a real adjacent workspace pane, never an editor overlay. */
+@media(min-width:701px){
+  .main-column.with-explorer-dock{
+    padding-right:clamp(300px,var(--explorer-reserved-width,47vw),80vw);
+    transition:padding-right 120ms ease-out;
+    min-width:0;
+  }
+  .main-column.with-explorer-dock .workspace-layout{min-width:0}
+  .main-column.with-explorer-dock .editor-panel{min-width:0}
+  .explorer-dock{
+    top:70px;
+    right:0;
+    bottom:0;
+    width:var(--dock-size,47%);
+    max-width:min(80vw,calc(100vw - 360px));
+    border-radius:12px 0 0 0;
+  }
+}
+@media(max-width:700px){
+  .main-column.with-explorer-dock{padding-right:0}
+}
+
+
+/* Consistent pane dimensions and viewport-relative mobile sheet sizing. */
+@media(min-width:701px){
+  .main-column.with-explorer-dock{
+    padding-right:min(var(--explorer-reserved-width,47vw),calc(100vw - 360px));
+  }
+  .explorer-dock{
+    width:min(var(--dock-size,47%),calc(100vw - 360px));
+  }
+}
+@media(max-width:700px){
+  .explorer-dock{
+    height:min(var(--dock-height,47dvh),calc(100dvh - 116px - env(safe-area-inset-bottom,0px)));
+    min-height:min(25dvh,200px);
+  }
+}

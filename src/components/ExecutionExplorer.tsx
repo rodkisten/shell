@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ShellAnalysis } from '../lib/shell-analysis';
 import type { FlowWasmStatus, WasmFlowResult } from '../lib/shell-flow-wasm';
 import styles from './ExecutionExplorer.module.css';
@@ -27,12 +27,37 @@ export function ExecutionExplorer({
 }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
-  const utf8 = useMemo(() => new TextEncoder().encode(source), [source]);
-  const offset = (position: number) => new TextDecoder().decode(utf8.slice(0, position)).length;
-  const activeNode = flow?.nodes.find(
-    node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset <= offset(node.end)
-  );
+  const activeAstRef = useRef<HTMLDivElement | null>(null);
+  const activeFlowRef = useRef<HTMLButtonElement | null>(null);
+  // Build a single UTF-8 byte -> UTF-16 offset map, including astral Unicode.
+  // CodeMirror uses UTF-16 offsets; the Go/WASM parser reports UTF-8 bytes.
+  const byteOffsets = useMemo(() => {
+    const mapping: number[] = [0];
+    let utf16 = 0;
+    for (const character of source) {
+      const bytes = new TextEncoder().encode(character).length;
+      for (let i = 1; i < bytes; i++) mapping.push(utf16);
+      utf16 += character.length;
+      mapping.push(utf16);
+    }
+    return mapping;
+  }, [source]);
+  const offset = (position: number) => byteOffsets[Math.max(0, Math.min(byteOffsets.length - 1, position))] ?? 0;
+  const activeNode = flow?.nodes
+    .filter(node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset < offset(node.end))
+    .sort((a, b) => (offset(a.end) - offset(a.start)) - (offset(b.end) - offset(b.start)))[0];
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    const target = view === 'flow' ? activeFlowRef.current : activeAstRef.current;
+    if (!target) return;
+    const container = target.closest('[role="tree"], [aria-label="Grafo de fluxo de controle"]');
+    if (!container) return;
+    const targetRect = target.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    if (targetRect.top < containerRect.top || targetRect.bottom > containerRect.bottom) {
+      target.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    }
+  }, [cursorOffset, view]);
 
   const children = useMemo(() => {
     const map = new Map<string | undefined, typeof analysis.astNodes>();
@@ -44,7 +69,10 @@ export function ExecutionExplorer({
     return map;
   }, [analysis.astNodes]);
 
-  const selected = analysis.astNodes.find(node => node.id === selectedId);
+  const activeAstNode = analysis.astNodes
+    .filter(node => cursorOffset !== undefined && node.from !== undefined && node.to !== undefined && node.from <= cursorOffset && cursorOffset < node.to)
+    .sort((a, b) => ((a.to ?? 0) - (a.from ?? 0)) - ((b.to ?? 0) - (b.from ?? 0)))[0];
+  const selected = analysis.astNodes.find(node => node.id === (activeAstNode?.id ?? selectedId));
   const explanation = analysis.nodes.find(node => node.astId === selectedId)?.explanation;
 
   const visible = useMemo(() => {
@@ -116,10 +144,11 @@ export function ExecutionExplorer({
                 {flow.nodes.map(node => {
                   const from = offset(node.start);
                   const to = offset(node.end);
-                  const isSelected = activeNode?.id === node.id || selectedFlowId === node.id;
+                  const isSelected = activeNode ? activeNode.id === node.id : selectedFlowId === node.id;
                   return (
                     <button
                       key={node.id}
+                      ref={isSelected ? activeFlowRef : undefined}
                       type="button"
                       className={`${styles.flowNode} ${isSelected ? styles.isSelected : ''}`}
                       aria-pressed={isSelected}
@@ -166,10 +195,11 @@ export function ExecutionExplorer({
             {visible.map(node => {
               const hasChildren = (children.get(node.id)?.length ?? 0) > 0;
               const isCollapsed = collapsed.has(node.id);
-              const isSelected = selectedId === node.id;
+              const isSelected = (activeAstNode?.id ?? selectedId) === node.id;
               return (
                 <div
                   key={node.id}
+                  ref={isSelected ? activeAstRef : undefined}
                   role="treeitem"
                   aria-level={node.depth + 1}
                   aria-selected={isSelected}

@@ -407,3 +407,21 @@ Após cada publicação, compare `curl -fsS https://shell.migos.club/api/version
 ### Conferência automatizada da produção
 
 O workflow **Verify Shell production revision** pode ser executado manualmente em GitHub Actions. Ele não faz deploy nem altera recursos do Cloudflare: apenas consulta `https://shell.migos.club/api/version`, compara o SHA completo e falha se o endpoint estiver inacessível ou publicar outra revisão. Opcionalmente, informe `expected_sha` (40 caracteres) para conferir uma revisão específica. Localmente: `EXPECTED_SHA=$(git rev-parse HEAD) node scripts/verify-production-version.mjs`. A verificação faz até 12 tentativas, com 5 segundos entre elas; customize `VERSION_RETRIES`, `VERSION_DELAY_MS` e `SHELL_VERSION_URL` se necessário. Uma resposta `unknown` nunca é aceita como versão confirmada.
+
+### Dock mobile compacto
+
+O explorador de Fluxo, AST e Explicação usa um painel inferior no iPhone, com alça de redimensionamento, atalhos de teclado (setas, Home e End), botão para restaurar o tamanho padrão e persistência local do tamanho. A barra de ações do editor rola horizontalmente em telas estreitas sem ampliar os botões. O painel respeita a área segura inferior do Safari e permite rolar seu conteúdo independentemente do editor.
+
+No desktop, abrir o explorador reserva uma faixa lateral do workspace, evitando que o dock flutue sobre o código. A largura acompanha o tamanho salvo; no mobile permanece um painel inferior independente.
+
+O grafo WASM converte os intervalos UTF-8 do parser para offsets UTF-16 do CodeMirror, inclusive com emojis e caracteres fora do BMP. Quando o cursor está em nós aninhados, o menor intervalo correspondente recebe destaque; clicar no nó navega para o intervalo no editor.
+
+O redimensionamento mobile usa a altura do viewport visual (quando disponível) e aplica a altura do painel em `dvh`, preservando o limite superior e a safe area quando o Safari muda suas barras. No desktop, a largura reservada e a largura renderizada do explorador compartilham o mesmo limite para evitar sobreposição.
+
+A alça do Dock reconhece o identificador do ponteiro ativo, libera a captura ao terminar e expõe o valor percentual atual para tecnologias assistivas. A árvore AST também destaca automaticamente o nó mais específico sob o cursor, mantendo a seleção manual como alternativa quando o cursor está fora dos intervalos conhecidos.
+
+Quando a seleção do cursor muda, o explorador tenta manter o nó AST/Fluxo ativo visível, rolando somente se estiver fora da região atualmente exibida. A rolagem é instantânea para evitar animações contínuas durante a digitação.
+
+### CI e módulos ESM externos
+
+A página Debian carrega Highlight.js, Marked e DOMPurify sob demanda pelo `esm.sh`. Os endereços são constantes passadas a `import(/* @vite-ignore */ url)` para evitar que o TypeScript tente resolver URLs HTTP como módulos locais durante o build. Se o CDN estiver indisponível, a interface preserva o texto original sem realce.
