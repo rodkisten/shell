@@ -1,3 +1,5 @@
+declare const __SHELL_BUILD__: { sha: string; builtAt: string; environment: string };
+
 // Only API routes reach this Worker. Cloudflare serves the SPA and assets directly.
 
 function json(data: unknown, status = 200) {
@@ -110,6 +112,11 @@ export default {
     if (url.pathname.startsWith('/v86/')) return linuxAsset(request, env);
     if (url.pathname.startsWith('/api/')) {
       if (request.method !== 'GET') return json({ error: 'Método não permitido' }, 405);
+      if (url.pathname === '/api/version') {
+        return new Response(JSON.stringify(__SHELL_BUILD__), {
+          headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+        });
+      }
       if (url.pathname.startsWith('/api/man/')) return manPage(decodeURIComponent(url.pathname.slice('/api/man/'.length)));
       if (url.pathname === '/api/explain') {
         const line = (url.searchParams.get('q') || '').slice(0, 1200);
