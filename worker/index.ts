@@ -136,9 +136,70 @@ async function debianInstaller(request: Request, path: string): Promise<Response
   }
 }
 
+
+// Short install links for Eita releases. The installer itself stays in the Eita repo.
+// Eita binaries are downloaded from GitHub Releases and verified by SHA-256 there.
+export async function eitaInstaller(request: Request, path: string): Promise<Response> {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD' } });
+  }
+  const match = /^\/install\/eita(?:\/(?:(?:pr\/([1-9][0-9]{0,7}))|(main-[a-f0-9]{12})))?(?:\/(artifact|checksum))?\/?$/.exec(path);
+  if (!match) return new Response('Installer not found', { status: 404 });
+
+  const version = match[1] ? 'pr-' + match[1] : (match[2] || undefined);
+  const downloadType = match[3];
+  if (downloadType) {
+    const target = new URL(request.url).searchParams.get('target') || 'x86_64-unknown-linux-gnu';
+    const allowed = new Set([
+      'x86_64-unknown-linux-gnu',
+      'aarch64-unknown-linux-gnu',
+      'x86_64-apple-darwin',
+      'aarch64-apple-darwin',
+    ]);
+    if (!allowed.has(target)) return new Response('Unsupported target', { status: 400 });
+    const base = version
+      ? 'https://github.com/rodkisten/eita/releases/download/' + version
+      : 'https://github.com/rodkisten/eita/releases/latest/download';
+    const asset = 'eita-' + target + '.tar.gz' + (downloadType === 'checksum' ? '.sha256' : '');
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: base + '/' + asset,
+        'Cache-Control': 'public, max-age=30',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  }
+
+  const source = 'https://raw.githubusercontent.com/rodkisten/eita/main/install.sh';
+  try {
+    const upstream = await fetch(source, { signal: AbortSignal.timeout(8000) });
+    if (!upstream.ok) return new Response('Eita installer unavailable', { status: 502 });
+    const script = await upstream.text();
+    if (!script.startsWith('#!/bin/sh') || !script.includes('EITA_VERSION:-latest')) {
+      return new Response('Unexpected Eita installer source', { status: 502 });
+    }
+    const response = version
+      ? '#!/bin/sh\nEITA_VERSION=' + version + '\nexport EITA_VERSION\n' + script
+      : script;
+    return new Response(request.method === 'HEAD' ? null : response, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/x-shellscript; charset=utf-8',
+        'Content-Disposition': 'inline; filename="eita-install.sh"',
+        'Cache-Control': 'public, max-age=60',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  } catch {
+    return new Response('Eita installer unavailable', { status: 502 });
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/install/')) return eitaInstaller(request, url.pathname);
     if (url.pathname === '/debian' || url.pathname === '/debian/') {
       if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405 });
       // Return the SPA entrypoint, preserving the browser URL for React Router.

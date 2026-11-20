@@ -118,6 +118,33 @@ jobs:
           curl --fail --show-error --silent --retry 5 --retry-all-errors --retry-delay 3 --output /dev/null "$PREVIEW_URL/"
           echo "Wrangler preview responded successfully: $PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Smoke test Eita installer and artifact routes
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          node --input-type=module <<'NODE'
+          const base = process.env.PREVIEW_URL;
+          const pr = process.env.PR_NUMBER;
+          const installer = await fetch(new URL('/install/eita/pr/' + pr, base));
+          if (installer.status !== 200) {
+            throw new Error('Eita installer route returned ' + installer.status);
+          }
+          const script = await installer.text();
+          if (!script.startsWith('#!/bin/sh') || !script.includes('EITA_VERSION=pr-' + pr)) {
+            throw new Error('Eita PR installer did not pin preview version');
+          }
+          const archive = await fetch(new URL('/install/eita/pr/' + pr + '/artifact', base), {
+            redirect: 'manual',
+          });
+          const expected = 'https://github.com/rodkisten/eita/releases/download/pr-' + pr
+            + '/eita-x86_64-unknown-linux-gnu.tar.gz';
+          if (archive.status !== 302 || archive.headers.get('location') !== expected) {
+            throw new Error('Unexpected Eita artifact redirect');
+          }
+          console.log('Verified Eita installer and archive short links');
+          NODE
+
       - id: custom_preview
         name: Verify custom PR preview domain
         env:
