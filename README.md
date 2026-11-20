@@ -395,3 +395,7 @@ Após cada publicação, compare `curl -fsS https://shell.migos.club/api/version
 ### Conferência automatizada da produção
 
 O workflow **Verify Shell production revision** pode ser executado manualmente em GitHub Actions. Ele não faz deploy nem altera recursos do Cloudflare: apenas consulta `https://shell.migos.club/api/version`, compara o SHA completo e falha se o endpoint estiver inacessível ou publicar outra revisão. Opcionalmente, informe `expected_sha` (40 caracteres) para conferir uma revisão específica. Localmente: `EXPECTED_SHA=$(git rev-parse HEAD) node scripts/verify-production-version.mjs`. A verificação faz até 12 tentativas, com 5 segundos entre elas; customize `VERSION_RETRIES`, `VERSION_DELAY_MS` e `SHELL_VERSION_URL` se necessário. Uma resposta `unknown` nunca é aceita como versão confirmada.
+
+### Dock mobile compacto
+
+O explorador de Fluxo, AST e Explicação usa um painel inferior no iPhone, com alça de redimensionamento, atalhos de teclado (setas, Home e End), botão para restaurar o tamanho padrão e persistência local do tamanho. A barra de ações do editor rola horizontalmente em telas estreitas sem ampliar os botões. O painel respeita a área segura inferior do Safari e permite rolar seu conteúdo independentemente do editor.
