@@ -407,3 +407,5 @@ O grafo WASM converte os intervalos UTF-8 do parser para offsets UTF-16 do CodeM
 O redimensionamento mobile usa a altura do viewport visual (quando disponível) e aplica a altura do painel em `dvh`, preservando o limite superior e a safe area quando o Safari muda suas barras. No desktop, a largura reservada e a largura renderizada do explorador compartilham o mesmo limite para evitar sobreposição.
 
 A alça do Dock reconhece o identificador do ponteiro ativo, libera a captura ao terminar e expõe o valor percentual atual para tecnologias assistivas. A árvore AST também destaca automaticamente o nó mais específico sob o cursor, mantendo a seleção manual como alternativa quando o cursor está fora dos intervalos conhecidos.
+
+Quando a seleção do cursor muda, o explorador tenta manter o nó AST/Fluxo ativo visível, rolando somente se estiver fora da região atualmente exibida. A rolagem é instantânea para evitar animações contínuas durante a digitação.
