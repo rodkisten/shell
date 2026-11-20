@@ -28,7 +28,8 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": [
       "/api/*",
-      "/v86/*"
+      "/v86/*",
+      "/debian/installer*"
     ]
   }
 }
