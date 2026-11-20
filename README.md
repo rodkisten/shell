@@ -421,3 +421,7 @@ O redimensionamento mobile usa a altura do viewport visual (quando disponível) 
 A alça do Dock reconhece o identificador do ponteiro ativo, libera a captura ao terminar e expõe o valor percentual atual para tecnologias assistivas. A árvore AST também destaca automaticamente o nó mais específico sob o cursor, mantendo a seleção manual como alternativa quando o cursor está fora dos intervalos conhecidos.
 
 Quando a seleção do cursor muda, o explorador tenta manter o nó AST/Fluxo ativo visível, rolando somente se estiver fora da região atualmente exibida. A rolagem é instantânea para evitar animações contínuas durante a digitação.
+
+### CI e módulos ESM externos
+
+A página Debian carrega Highlight.js, Marked e DOMPurify sob demanda pelo `esm.sh`. Os endereços são constantes passadas a `import(/* @vite-ignore */ url)` para evitar que o TypeScript tente resolver URLs HTTP como módulos locais durante o build. Se o CDN estiver indisponível, a interface preserva o texto original sem realce.
