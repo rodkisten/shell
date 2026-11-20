@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ShellAnalysis } from '../lib/shell-analysis';
 import type { FlowWasmStatus, WasmFlowResult } from '../lib/shell-flow-wasm';
 import styles from './ExecutionExplorer.module.css';
@@ -27,6 +27,8 @@ export function ExecutionExplorer({
 }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
+  const activeAstRef = useRef<HTMLDivElement | null>(null);
+  const activeFlowRef = useRef<HTMLButtonElement | null>(null);
   // Build a single UTF-8 byte -> UTF-16 offset map, including astral Unicode.
   // CodeMirror uses UTF-16 offsets; the Go/WASM parser reports UTF-8 bytes.
   const byteOffsets = useMemo(() => {
@@ -45,6 +47,17 @@ export function ExecutionExplorer({
     .filter(node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset < offset(node.end))
     .sort((a, b) => (offset(a.end) - offset(a.start)) - (offset(b.end) - offset(b.start)))[0];
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    const target = view === 'flow' ? activeFlowRef.current : activeAstRef.current;
+    if (!target) return;
+    const container = target.closest('[role="tree"], [aria-label="Grafo de fluxo de controle"]');
+    if (!container) return;
+    const targetRect = target.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    if (targetRect.top < containerRect.top || targetRect.bottom > containerRect.bottom) {
+      target.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    }
+  }, [cursorOffset, view]);
 
   const children = useMemo(() => {
     const map = new Map<string | undefined, typeof analysis.astNodes>();
@@ -135,6 +148,7 @@ export function ExecutionExplorer({
                   return (
                     <button
                       key={node.id}
+                      ref={isSelected ? activeFlowRef : undefined}
                       type="button"
                       className={`${styles.flowNode} ${isSelected ? styles.isSelected : ''}`}
                       aria-pressed={isSelected}
@@ -185,6 +199,7 @@ export function ExecutionExplorer({
               return (
                 <div
                   key={node.id}
+                  ref={isSelected ? activeAstRef : undefined}
                   role="treeitem"
                   aria-level={node.depth + 1}
                   aria-selected={isSelected}
