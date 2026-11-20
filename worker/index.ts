@@ -106,9 +106,40 @@ async function linuxAsset(request: Request, env: Env): Promise<Response> {
   return new Response(request.method === 'HEAD' ? null : object.body, { status: range ? 206 : 200, headers });
 }
 
+
+// Small bootstrap script lives in codespaces; releases carry the immutable ZIP.
+// Never fetch release assets in the Worker: the client verifies GitHub's SHA256.
+async function debianInstaller(request: Request, path: string): Promise<Response> {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405 });
+  const match = /^\/debian\/installer(?:\/(v?[0-9]+\.[0-9]+\.[0-9]+))?\/?$/.exec(path);
+  if (!match) return new Response('Invalid installer version', { status: 404 });
+  const version = match[1] ?? 'latest';
+  const source = 'https://raw.githubusercontent.com/rodkisten/codespaces/main/debian/release-installer.sh';
+  try {
+    const response = await fetch(source, { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) return new Response('Installer source unavailable', { status: 502 });
+    const body = await response.text();
+    if (!body.startsWith('#!/usr/bin/env bash') || !body.includes('__ROD_VERSION__')) {
+      return new Response('Installer source invalid', { status: 502 });
+    }
+    return new Response(request.method === 'HEAD' ? null : body.replace('VERSION="__ROD_VERSION__"', 'VERSION="' + version + '"'), {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/x-shellscript; charset=utf-8',
+        'Content-Disposition': 'inline; filename="rod-debian-installer.sh"',
+        'Cache-Control': version === 'latest' ? 'public, max-age=60' : 'public, max-age=300',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  } catch {
+    return new Response('Installer source unavailable', { status: 502 });
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/debian/installer')) return debianInstaller(request, url.pathname);
     if (url.pathname.startsWith('/v86/')) return linuxAsset(request, env);
     if (url.pathname.startsWith('/api/')) {
       if (request.method !== 'GET') return json({ error: 'Método não permitido' }, 405);
