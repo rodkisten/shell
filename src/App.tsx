@@ -253,7 +253,6 @@ export function App() {
     element.setPointerCapture(event.pointerId);
     const move = (e: PointerEvent) => {
       const bounds = parent.getBoundingClientRect();
-      const available = Math.max(1, bounds.width - 300);
       setSplitRatio(Math.max(25, Math.min(75, ((e.clientX - bounds.left) / Math.max(1, bounds.width)) * 100)));
     };
     const finish = () => {
@@ -333,7 +332,6 @@ export function App() {
     const timer = window.setTimeout(() => { void explain(true); }, 450);
     return () => window.clearTimeout(timer);
     // Recompute only when source changes while dock is open.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [script, explorerOpen]);
 
   const resizeDock = (event: React.PointerEvent<HTMLDivElement>) => {
