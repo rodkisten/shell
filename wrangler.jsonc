@@ -29,6 +29,7 @@
     "run_worker_first": [
       "/api/*",
       "/v86/*",
+      "/debian",
       "/debian/*"
     ]
   }
