@@ -56,7 +56,10 @@ export function ExecutionExplorer({
     return map;
   }, [analysis.astNodes]);
 
-  const selected = analysis.astNodes.find(node => node.id === selectedId);
+  const activeAstNode = analysis.astNodes
+    .filter(node => cursorOffset !== undefined && node.from !== undefined && node.to !== undefined && node.from <= cursorOffset && cursorOffset < node.to)
+    .sort((a, b) => ((a.to ?? 0) - (a.from ?? 0)) - ((b.to ?? 0) - (b.from ?? 0)))[0];
+  const selected = analysis.astNodes.find(node => node.id === (activeAstNode?.id ?? selectedId));
   const explanation = analysis.nodes.find(node => node.astId === selectedId)?.explanation;
 
   const visible = useMemo(() => {
@@ -178,7 +181,7 @@ export function ExecutionExplorer({
             {visible.map(node => {
               const hasChildren = (children.get(node.id)?.length ?? 0) > 0;
               const isCollapsed = collapsed.has(node.id);
-              const isSelected = selectedId === node.id;
+              const isSelected = (activeAstNode?.id ?? selectedId) === node.id;
               return (
                 <div
                   key={node.id}
