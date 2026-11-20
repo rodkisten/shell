@@ -97,3 +97,25 @@
 @media(prefers-reduced-motion:reduce){
   .explorer-dock,.explorer-dock *{scroll-behavior:auto!important}
 }
+
+/* Desktop: the explorer is a real adjacent workspace pane, never an editor overlay. */
+@media(min-width:701px){
+  .main-column.with-explorer-dock{
+    padding-right:clamp(300px,var(--explorer-reserved-width,47vw),80vw);
+    transition:padding-right 120ms ease-out;
+    min-width:0;
+  }
+  .main-column.with-explorer-dock .workspace-layout{min-width:0}
+  .main-column.with-explorer-dock .editor-panel{min-width:0}
+  .explorer-dock{
+    top:70px;
+    right:0;
+    bottom:0;
+    width:var(--dock-size,47%);
+    max-width:min(80vw,calc(100vw - 360px));
+    border-radius:12px 0 0 0;
+  }
+}
+@media(max-width:700px){
+  .main-column.with-explorer-dock{padding-right:0}
+}
