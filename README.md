@@ -403,3 +403,5 @@ O explorador de Fluxo, AST e Explicação usa um painel inferior no iPhone, com 
 No desktop, abrir o explorador reserva uma faixa lateral do workspace, evitando que o dock flutue sobre o código. A largura acompanha o tamanho salvo; no mobile permanece um painel inferior independente.
 
 O grafo WASM converte os intervalos UTF-8 do parser para offsets UTF-16 do CodeMirror, inclusive com emojis e caracteres fora do BMP. Quando o cursor está em nós aninhados, o menor intervalo correspondente recebe destaque; clicar no nó navega para o intervalo no editor.
+
+O redimensionamento mobile usa a altura do viewport visual (quando disponível) e aplica a altura do painel em `dvh`, preservando o limite superior e a safe area quando o Safari muda suas barras. No desktop, a largura reservada e a largura renderizada do explorador compartilham o mesmo limite para evitar sobreposição.
