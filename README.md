@@ -385,3 +385,9 @@ O workflow `.github/workflows/deploy-shell.yml` verifica os cinco assets do v86 
 No mobile, o painel Fluxo/AST/Explicação agora é um dock inferior fixo, acessível sem rolar até o fim do editor; em telas maiores, aparece como painel lateral. O cursor do CodeMirror destaca o nó correspondente e tocar no nó seleciona o trecho no editor. O dock reanalisa alterações no script com debounce. A toolbar usa botões compactos alinhados ao cabeçalho. A renderização de explicações trata quebras de linha escapadas. **Pendente:** verificar CI e testes manuais no Safari; não representa execução dinâmica do shell. Para uma evolução futura com divisor arrastável, avaliar o componente Resizable do shadcn/ui (react-resizable-panels).
 
 O dock agora permite ajuste de tamanho por arraste touch/pointer e teclado, com tamanho salvo em `localStorage` (`shellconductor:dock-size`). A implementação atual usa Pointer Events nativos; a migração para o pacote shadcn/ui Resizable permanece opcional, sem dependência adicionada nesta etapa.
+
+## Identificação da versão publicada
+
+O endpoint `GET /api/version` retorna JSON com `sha` (commit da árvore efetivamente compilada), `builtAt` (ISO 8601) e `environment`. A resposta usa `Cache-Control: no-store` para não mascarar rollouts. O build injeta os metadados pelo Vite, sem expor segredos nem depender de variáveis de CI potencialmente desatualizadas. Se o build ocorrer fora de um checkout Git, o SHA será `unknown` e **não deve** ser considerado prova de sincronização.
+
+Após cada publicação, compare `curl -fsS https://shell.migos.club/api/version` com `git rev-parse HEAD` da revisão que foi publicada. O endpoint comprova a identidade dos arquivos compilados; não dispara deploy e não substitui os checks do CI. O Cloudflare Worker pode ser publicado pelo Wrangler fora do GitHub Actions, portanto não presuma que um workflow ausente significa que não houve deploy.
