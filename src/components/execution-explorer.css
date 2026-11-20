@@ -119,3 +119,20 @@
 @media(max-width:700px){
   .main-column.with-explorer-dock{padding-right:0}
 }
+
+
+/* Consistent pane dimensions and viewport-relative mobile sheet sizing. */
+@media(min-width:701px){
+  .main-column.with-explorer-dock{
+    padding-right:min(var(--explorer-reserved-width,47vw),calc(100vw - 360px));
+  }
+  .explorer-dock{
+    width:min(var(--dock-size,47%),calc(100vw - 360px));
+  }
+}
+@media(max-width:700px){
+  .explorer-dock{
+    height:min(var(--dock-height,47dvh),calc(100dvh - 116px - env(safe-area-inset-bottom,0px)));
+    min-height:min(25dvh,200px);
+  }
+}
