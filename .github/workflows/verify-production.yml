@@ -1,0 +1,34 @@
+name: Verify Shell production revision
+run-name: Production SHA · ${{ github.event_name }} · ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full 40-character SHA to verify (defaults to main HEAD)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shell-production-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify live /api/version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify production SHA
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha || github.sha }}
+        run: node scripts/verify-production-version.mjs
