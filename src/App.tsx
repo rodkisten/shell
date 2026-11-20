@@ -350,7 +350,11 @@ export function App() {
     const delta = (drag.start - (drag.mobile ? event.clientY : event.clientX)) / dimension * 100;
     setDockSize(Math.max(25, Math.min(80, drag.size + delta)));
   };
-  useEffect(() => {\n    try { localStorage.setItem('shellconductor:dock-size', String(Math.round(dockSize))); } catch { /* Safari private mode */ }\n  }, [dockSize]);\n\n  const finishDock = () => {
+  useEffect(() => {
+    try { localStorage.setItem('shellconductor:dock-size', String(Math.round(dockSize))); } catch { /* Safari private mode */ }
+  }, [dockSize]);
+
+  const finishDock = () => {
     if (!dockDrag.current) return;
     dockDrag.current = null;
     try { localStorage.setItem('shellconductor:dock-size', String(Math.round(dockSize))); } catch { /* Safari private mode */ }
