@@ -52,18 +52,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: 🐚 Install ShellCheck, shfmt and Zsh
         run: sudo apt-get update && sudo apt-get install -y shellcheck shfmt zsh
-      - name: 🧩 Checkout Rod Actions
-        uses: actions/checkout@v4
-        with:
-          repository: rodkisten/github
-          ref: main
-          path: .rod-actions
-          persist-credentials: false
-      - name: 📦 Build shared TypeScript Actions
-        working-directory: .rod-actions
-        run: npm ci --no-audit --no-fund && npm run build
       - name: 🎨 Validate modified files
-        uses: ./.rod-actions/actions/format
+        uses: rodkisten/github/actions/format@main
         with:
           mode: check
           scope: changed
