@@ -47,6 +47,24 @@ export function ExecutionExplorer({
     .filter(node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset < offset(node.end))
     .sort((a, b) => (offset(a.end) - offset(a.start)) - (offset(b.end) - offset(b.start)))[0];
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const matchingIds = useMemo(() => {
+    if (!normalizedQuery) return null;
+    const matches = new Set<string>();
+    const byId = new Map(analysis.astNodes.map(node => [node.id, node]));
+    for (const node of analysis.astNodes) {
+      if (!`${node.kind} ${node.label} ${node.description} ${node.id}`.toLocaleLowerCase().includes(normalizedQuery)) continue;
+      let current: typeof node | undefined = node;
+      const visited = new Set<string>();
+      while (current && !visited.has(current.id)) {
+        matches.add(current.id);
+        visited.add(current.id);
+        current = current.parentId ? byId.get(current.parentId) : undefined;
+      }
+    }
+    return matches;
+  }, [analysis.astNodes, normalizedQuery]);
   useEffect(() => {
     const target = view === 'flow' ? activeFlowRef.current : activeAstRef.current;
     if (!target) return;
@@ -73,19 +91,20 @@ export function ExecutionExplorer({
     .filter(node => cursorOffset !== undefined && node.from !== undefined && node.to !== undefined && node.from <= cursorOffset && cursorOffset < node.to)
     .sort((a, b) => ((a.to ?? 0) - (a.from ?? 0)) - ((b.to ?? 0) - (b.from ?? 0)))[0];
   const selected = analysis.astNodes.find(node => node.id === (activeAstNode?.id ?? selectedId));
-  const explanation = analysis.nodes.find(node => node.astId === selectedId)?.explanation;
+  const explanation = analysis.nodes.find(node => node.astId === (activeAstNode?.id ?? selectedId))?.explanation;
 
   const visible = useMemo(() => {
     const output: typeof analysis.astNodes = [];
     const visit = (parent: string | undefined) => {
       for (const node of children.get(parent) ?? []) {
+        if (matchingIds && !matchingIds.has(node.id)) continue;
         output.push(node);
-        if (!collapsed.has(node.id)) visit(node.id);
+        if (matchingIds || !collapsed.has(node.id)) visit(node.id);
       }
     };
     visit(undefined);
     return output;
-  }, [children, collapsed]);
+  }, [children, collapsed, matchingIds]);
 
   return (
     <section aria-label="Execution Explorer" className={styles.explorer}>
@@ -191,10 +210,16 @@ export function ExecutionExplorer({
 
       {view === 'ast' && (
         <>
+          <div className={styles.astTools}>
+            <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar tipo, comando ou nó…" aria-label="Buscar nós AST" />
+            <button type="button" onClick={() => setCollapsed(new Set())} disabled={collapsed.size === 0}>Expandir</button>
+            <button type="button" onClick={() => setCollapsed(new Set(analysis.astNodes.filter(node => (children.get(node.id)?.length ?? 0) > 0).map(node => node.id)))}>Recolher</button>
+          </div>
+          {matchingIds && <p className={styles.note} role="status">{analysis.astNodes.filter(node => matchingIds.has(node.id) && `${node.kind} ${node.label} ${node.description} ${node.id}`.toLocaleLowerCase().includes(normalizedQuery)).length} correspondências</p>}
           <div role="tree" aria-label="Shell AST" className={styles.tree}>
             {visible.map(node => {
               const hasChildren = (children.get(node.id)?.length ?? 0) > 0;
-              const isCollapsed = collapsed.has(node.id);
+              const isCollapsed = !matchingIds && collapsed.has(node.id);
               const isSelected = (activeAstNode?.id ?? selectedId) === node.id;
               return (
                 <div
