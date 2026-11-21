@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ShellAnalysis } from '../lib/shell-analysis';
+import type { SemanticToken } from '../lib/semantic-shell';
 import type { FlowWasmStatus, WasmFlowResult } from '../lib/shell-flow-wasm';
 import styles from './ExecutionExplorer.module.css';
 
@@ -11,6 +12,7 @@ type Props = {
   flowStatus?: FlowWasmStatus;
   flowError?: string | null;
   source?: string;
+  tokens?: readonly SemanticToken[];
   onReveal?: (from: number, to: number) => void;
 };
 
@@ -21,6 +23,7 @@ export function ExecutionExplorer({
   flowStatus,
   flowError,
   source = '',
+  tokens = [],
   onReveal,
   view = 'ast',
   cursorOffset,
@@ -48,6 +51,7 @@ export function ExecutionExplorer({
     .sort((a, b) => (offset(a.end) - offset(a.start)) - (offset(b.end) - offset(b.start)))[0];
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState('');
+  const [focusedToken, setFocusedToken] = useState<SemanticToken | null>(null);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matchingIds = useMemo(() => {
     if (!normalizedQuery) return null;
@@ -95,6 +99,18 @@ export function ExecutionExplorer({
   const selectedParent = selected?.parentId ? analysis.astNodes.find(node => node.id === selected.parentId) : undefined;
   const selectedChildren = selected ? (children.get(selected.id) ?? []) : [];
   const selectedSource = selected?.from !== undefined && selected.to !== undefined ? source.slice(selected.from, selected.to) : '';
+  const explainedTokens = useMemo(() => {
+    if (!selected || selected.from === undefined || selected.to === undefined) return [];
+    const result: SemanticToken[] = [];
+    let end = selected.from;
+    for (const token of [...tokens].sort((a, b) => a.from - b.from || b.to - a.to)) {
+      if (token.from < end || token.from < selected.from || token.to > selected.to || token.to <= token.from) continue;
+      result.push(token);
+      end = token.to;
+    }
+    return result;
+  }, [selected, tokens]);
+  const inspectedToken = focusedToken && explainedTokens.some(token => token.from === focusedToken.from && token.to === focusedToken.to && token.title === focusedToken.title) ? focusedToken : null;
   const selectAstNode = (node: typeof analysis.astNodes[number]) => {
     setSelectedId(node.id);
     if (node.navigable && node.from !== undefined && node.to !== undefined) onReveal?.(node.from, node.to);
@@ -287,7 +303,21 @@ export function ExecutionExplorer({
                 <button type="button" disabled={!selectedSource} onClick={() => { if (selectedSource) void navigator.clipboard?.writeText(selectedSource); }}>Copiar trecho</button>
                 <button type="button" disabled={!selectedParent} onClick={() => { if (selectedParent) selectAstNode(selectedParent); }}>Ir ao pai</button>
               </div>
-              {selectedSource && <pre className={styles.sourcePreview}><code>{selectedSource.length > 500 ? `${selectedSource.slice(0, 500)}…` : selectedSource}</code></pre>}
+              {selectedSource && <div className={styles.explainBlock} aria-label="Explicação interativa do código">
+                <p className={styles.note}>Selecione um comando, argumento ou operador para entender o que ele faz.</p>
+                <div className={styles.explainCode}><code>{(() => {
+                  const pieces: React.ReactNode[] = [];
+                  let position = selected.from ?? 0;
+                  for (const token of explainedTokens) {
+                    if (token.from > position) pieces.push(source.slice(position, token.from));
+                    pieces.push(<button key={`${token.from}:${token.to}:${token.title}`} type="button" className={styles.explainToken} aria-pressed={inspectedToken?.from === token.from && inspectedToken?.to === token.to} onClick={() => { setFocusedToken(token); onReveal?.(token.from, token.to); }} title={token.title}>{source.slice(token.from, token.to)}</button>);
+                    position = token.to;
+                  }
+                  if (position < (selected.to ?? 0)) pieces.push(source.slice(position, selected.to));
+                  return pieces;
+                })()}</code></div>
+                {inspectedToken ? <div className={styles.tokenExplanation} role="status"><strong>{inspectedToken.title}</strong><p>{inspectedToken.description}</p>{inspectedToken.example && <pre><code>{inspectedToken.example}</code></pre>}<small>Fonte: {inspectedToken.source}</small></div> : <p className={styles.note}>{explainedTokens.length ? `${explainedTokens.length} partes explicáveis neste bloco` : 'Nenhuma explicação detalhada disponível para este trecho; consulte a descrição estrutural acima.'}</p>}
+              </div>}
               <dl>
                 <dt>Node ID</dt>
                 <dd>{selected.id}</dd>
