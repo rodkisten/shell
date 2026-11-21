@@ -425,3 +425,7 @@ Quando a seleção do cursor muda, o explorador tenta manter o nó AST/Fluxo ati
 ### CI e módulos ESM externos
 
 A página Debian carrega Highlight.js, Marked e DOMPurify sob demanda pelo `esm.sh`. Os endereços são constantes passadas a `import(/* @vite-ignore */ url)` para evitar que o TypeScript tente resolver URLs HTTP como módulos locais durante o build. Se o CDN estiver indisponível, a interface preserva o texto original sem realce.
+
+### Workbench 3.0: Dock layouts
+
+The analysis Dock can be placed on either desktop edge and collapsed to a compact header without losing its selected tab. Position and collapsed state are persisted independently from the existing Dock size in local storage; mobile retains the bottom-sheet layout and safe-area spacing.
