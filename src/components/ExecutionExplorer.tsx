@@ -95,7 +95,7 @@ export function ExecutionExplorer({
     .filter(node => cursorOffset !== undefined && node.from !== undefined && node.to !== undefined && node.from <= cursorOffset && cursorOffset < node.to)
     .sort((a, b) => ((a.to ?? 0) - (a.from ?? 0)) - ((b.to ?? 0) - (b.from ?? 0)))[0];
   const selected = analysis.astNodes.find(node => node.id === (activeAstNode?.id ?? selectedId));
-  const explanation = analysis.nodes.find(node => node.astId === (activeAstNode?.id ?? selectedId))?.explanation;
+  const explanation = analysis.nodes.find(node => node.astId === selected?.id)?.explanation;
   const selectedParent = selected?.parentId ? analysis.astNodes.find(node => node.id === selected.parentId) : undefined;
   const selectedChildren = selected ? (children.get(selected.id) ?? []) : [];
   const selectedSource = selected?.from !== undefined && selected.to !== undefined ? source.slice(selected.from, selected.to) : '';
@@ -243,7 +243,7 @@ export function ExecutionExplorer({
             {visible.map(node => {
               const hasChildren = (children.get(node.id)?.length ?? 0) > 0;
               const isCollapsed = !matchingIds && collapsed.has(node.id);
-              const isSelected = (activeAstNode?.id ?? selectedId) === node.id;
+              const isSelected = selected?.id === node.id;
               return (
                 <div
                   key={node.id}
@@ -299,6 +299,7 @@ export function ExecutionExplorer({
                 </div>
               )}
               <div className={styles.inspectorActions}>
+                <button type="button" disabled={!selectedId} onClick={() => { setSelectedId(null); setFocusedToken(null); }}>Seguir cursor</button>
                 <button type="button" disabled={!selected.navigable || selected.from === undefined || selected.to === undefined} onClick={() => selectAstNode(selected)}>Localizar no editor</button>
                 <button type="button" disabled={!selectedSource} onClick={() => { if (selectedSource) void navigator.clipboard?.writeText(selectedSource); }}>Copiar trecho</button>
                 <button type="button" disabled={!selectedParent} onClick={() => { if (selectedParent) selectAstNode(selectedParent); }}>Ir ao pai</button>
