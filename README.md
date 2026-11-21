@@ -429,3 +429,5 @@ A página Debian carrega Highlight.js, Marked e DOMPurify sob demanda pelo `esm.
 ### Workbench 3.0: Dock layouts
 
 The analysis Dock can be placed on either desktop edge and collapsed to a compact header without losing its selected tab. Position and collapsed state are persisted independently from the existing Dock size in local storage; mobile retains the bottom-sheet layout and safe-area spacing.
+
+Dock sizing offers 35%, 50% and 70% presets, plus the existing draggable separator and reset control. Resizing respects the selected desktop edge: dragging inward grows the pane, regardless of whether it is docked left or right. When collapsed, the resize separator is removed from keyboard navigation.
