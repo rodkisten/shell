@@ -219,3 +219,10 @@
     color: var(--_accent-soft);
   }
 }
+
+.astTools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 8px}
+.astTools input{flex:1 1 140px;min-width:0;border:1px solid #64748b66;border-radius:7px;padding:7px 9px;background:transparent;color:inherit;font:inherit;font-size:12px}
+.astTools input:focus-visible{outline:2px solid #a78bfa;outline-offset:1px}
+.astTools button{border:1px solid #64748b66;border-radius:7px;background:transparent;color:inherit;padding:7px 9px;font:inherit;font-size:11px;cursor:pointer}
+.astTools button:disabled{opacity:.45;cursor:default}
+@media(max-width:700px){.astTools{gap:4px}.astTools input{flex-basis:100%}.astTools button{min-height:32px}}
