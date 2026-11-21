@@ -136,3 +136,17 @@
     min-height:min(25dvh,200px);
   }
 }
+
+/* Workbench 3.0: persistent dock placement and compact collapsed rail. */
+@media(min-width:701px){
+  .main-column.with-explorer-dock.dock-left{padding-right:0;padding-left:min(var(--explorer-reserved-width,47vw),calc(100vw - 360px))}
+  .explorer-dock.dock-left{right:auto;left:0;border-radius:0 12px 0 0}
+  .explorer-dock.dock-left .explorer-dock-resizer{left:auto;right:0}
+  .explorer-dock.dock-collapsed{top:70px;bottom:auto;width:auto;max-width:min(360px,90vw);height:auto;min-height:0}
+  .explorer-dock.dock-collapsed.dock-left{left:0;right:auto}
+}
+.explorer-dock.dock-collapsed .explorer-dock-resizer{display:none}
+.explorer-dock.dock-collapsed .subpanel-heading{margin:0}
+@media(max-width:700px){
+  .explorer-dock.dock-collapsed{height:auto;min-height:0;max-height:none;bottom:calc(56px + env(safe-area-inset-bottom,0px));border-radius:14px 14px 0 0}
+}
