@@ -150,3 +150,8 @@
 @media(max-width:700px){
   .explorer-dock.dock-collapsed{height:auto;min-height:0;max-height:none;bottom:calc(56px + env(safe-area-inset-bottom,0px));border-radius:14px 14px 0 0}
 }
+
+.explorer-dock .dock-size-presets{display:flex;align-items:center;gap:3px}
+.explorer-dock .dock-size-presets button{font:inherit;font-size:10px;padding:4px 5px;border:1px solid transparent;border-radius:5px;background:transparent;color:inherit;cursor:pointer}
+.explorer-dock .dock-size-presets button.active,.explorer-dock .dock-size-presets button[aria-pressed=true]{border-color:#a78bfa;background:#a78bfa22}
+@media(max-width:700px){.explorer-dock .dock-size-presets button{padding:6px 4px;font-size:10px}}
