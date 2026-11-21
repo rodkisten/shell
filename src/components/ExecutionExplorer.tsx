@@ -92,6 +92,13 @@ export function ExecutionExplorer({
     .sort((a, b) => ((a.to ?? 0) - (a.from ?? 0)) - ((b.to ?? 0) - (b.from ?? 0)))[0];
   const selected = analysis.astNodes.find(node => node.id === (activeAstNode?.id ?? selectedId));
   const explanation = analysis.nodes.find(node => node.astId === (activeAstNode?.id ?? selectedId))?.explanation;
+  const selectedParent = selected?.parentId ? analysis.astNodes.find(node => node.id === selected.parentId) : undefined;
+  const selectedChildren = selected ? (children.get(selected.id) ?? []) : [];
+  const selectedSource = selected?.from !== undefined && selected.to !== undefined ? source.slice(selected.from, selected.to) : '';
+  const selectAstNode = (node: typeof analysis.astNodes[number]) => {
+    setSelectedId(node.id);
+    if (node.navigable && node.from !== undefined && node.to !== undefined) onReveal?.(node.from, node.to);
+  };
 
   const visible = useMemo(() => {
     const output: typeof analysis.astNodes = [];
@@ -254,10 +261,7 @@ export function ExecutionExplorer({
                     type="button"
                     className={styles.select}
                     onClick={() => {
-                      setSelectedId(node.id);
-                      if (node.navigable && node.from !== undefined && node.to !== undefined) {
-                        onReveal?.(node.from, node.to);
-                      }
+                      selectAstNode(node);
                     }}
                   >
                     <span>{node.kind}</span>
@@ -278,9 +282,23 @@ export function ExecutionExplorer({
                   <small>Fonte: {explanation.source}</small>
                 </div>
               )}
+              <div className={styles.inspectorActions}>
+                <button type="button" disabled={!selected.navigable || selected.from === undefined || selected.to === undefined} onClick={() => selectAstNode(selected)}>Localizar no editor</button>
+                <button type="button" disabled={!selectedSource} onClick={() => { if (selectedSource) void navigator.clipboard?.writeText(selectedSource); }}>Copiar trecho</button>
+                <button type="button" disabled={!selectedParent} onClick={() => { if (selectedParent) selectAstNode(selectedParent); }}>Ir ao pai</button>
+              </div>
+              {selectedSource && <pre className={styles.sourcePreview}><code>{selectedSource.length > 500 ? `${selectedSource.slice(0, 500)}…` : selectedSource}</code></pre>}
               <dl>
                 <dt>Node ID</dt>
                 <dd>{selected.id}</dd>
+                <dt>Parent</dt>
+                <dd>{selectedParent?.kind ?? 'Root'}</dd>
+                <dt>Children</dt>
+                <dd>{selectedChildren.length}</dd>
+                <dt>Depth</dt>
+                <dd>{selected.depth}</dd>
+                <dt>Navigable</dt>
+                <dd>{selected.navigable ? 'Yes' : 'No'}</dd>
                 <dt>Source range</dt>
                 <dd>{selected.from === undefined ? 'Unavailable' : `${selected.from}–${selected.to}`}</dd>
               </dl>
