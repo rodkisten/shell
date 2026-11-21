@@ -437,3 +437,7 @@ Dock sizing offers 35%, 50% and 70% presets, plus the existing draggable separat
 The AST tree supports incremental search by node kind, label, description and ID. Search preserves ancestor paths and temporarily reveals matching descendants without changing the user's collapsed state. Expand/reduce controls let users quickly navigate large syntax trees. The contextual explanation follows the node under the CodeMirror cursor when available.
 
 The contextual inspector shows the selected node's parent, child count, depth, navigability and source range. It includes a bounded source preview, a copy-source action, editor reveal, and parent navigation. All inspection is static and does not execute shell commands.
+
+### Interactive Bash Explain inspector
+
+Selecting an AST node opens a syntax-aware source breakdown: known commands, subcommands, options, positional arguments, and shell operators become clickable spans. Clicking one shows its explanation, provenance and example when available, and reveals the corresponding source range in CodeMirror. The selected AST block remains pinned while inspecting its parts; **Follow cursor** returns to automatic selection. Explanations come from the existing shell parser, command catalog and CLI specifications, not remote AI or executed commands. Unknown tokens remain plain text rather than receiving invented explanations.
