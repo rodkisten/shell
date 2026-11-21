@@ -435,3 +435,5 @@ Dock sizing offers 35%, 50% and 70% presets, plus the existing draggable separat
 ### AST explorer navigation
 
 The AST tree supports incremental search by node kind, label, description and ID. Search preserves ancestor paths and temporarily reveals matching descendants without changing the user's collapsed state. Expand/reduce controls let users quickly navigate large syntax trees. The contextual explanation follows the node under the CodeMirror cursor when available.
+
+The contextual inspector shows the selected node's parent, child count, depth, navigability and source range. It includes a bounded source preview, a copy-source action, editor reveal, and parent navigation. All inspection is static and does not execute shell commands.
