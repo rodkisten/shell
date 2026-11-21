@@ -226,3 +226,10 @@
 .astTools button{border:1px solid #64748b66;border-radius:7px;background:transparent;color:inherit;padding:7px 9px;font:inherit;font-size:11px;cursor:pointer}
 .astTools button:disabled{opacity:.45;cursor:default}
 @media(max-width:700px){.astTools{gap:4px}.astTools input{flex-basis:100%}.astTools button{min-height:32px}}
+
+.inspectorActions{display:flex;gap:5px;flex-wrap:wrap;margin:10px 0}
+.inspectorActions button{border:1px solid var(--_border);background:var(--_bg-elevated);color:var(--_text-primary);border-radius:7px;padding:7px 9px;font-size:11px;cursor:pointer}
+.inspectorActions button:disabled{opacity:.4;cursor:default}
+.inspectorActions button:focus-visible{outline:2px solid var(--_accent);outline-offset:2px}
+.sourcePreview{max-height:160px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--_border);border-radius:8px;background:var(--_bg-elevated);padding:10px;font:11px/1.5 var(--_font-mono)}
+@media(max-width:700px){.inspectorActions button{min-height:34px}}
