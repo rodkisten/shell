@@ -233,3 +233,16 @@
 .inspectorActions button:focus-visible{outline:2px solid var(--_accent);outline-offset:2px}
 .sourcePreview{max-height:160px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--_border);border-radius:8px;background:var(--_bg-elevated);padding:10px;font:11px/1.5 var(--_font-mono)}
 @media(max-width:700px){.inspectorActions button{min-height:34px}}
+
+/* Bash-explain-style interactive source breakdown. */
+.explainBlock{border:1px solid var(--_border);border-radius:9px;overflow:hidden;margin:10px 0;background:var(--_bg-elevated)}
+.explainCode{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;padding:12px;font:12px/1.9 var(--_font-mono);-webkit-overflow-scrolling:touch}
+.explainToken{display:inline;border:0;border-radius:4px;background:#a78bfa28;color:#ddd6fe;box-shadow:inset 0 -2px #a78bfa;cursor:pointer;font:inherit;padding:2px 1px;white-space:pre-wrap;overflow-wrap:anywhere}
+.explainToken:hover,.explainToken[aria-pressed=true]{background:#a78bfa66;color:#fff}
+.explainToken:focus-visible{outline:2px solid #c4b5fd;outline-offset:2px}
+.tokenExplanation{border-top:1px solid var(--_border);padding:12px;background:#a78bfa12}
+.tokenExplanation strong{color:#ddd6fe}
+.tokenExplanation p{margin:7px 0;line-height:1.6}
+.tokenExplanation pre{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.5 var(--_font-mono)}
+.tokenExplanation small{color:var(--_text-muted)}
+@media(max-width:700px){.explainCode{font-size:11px;padding:10px}.explainToken{min-height:24px}}
