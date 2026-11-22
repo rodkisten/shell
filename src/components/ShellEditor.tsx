@@ -195,7 +195,8 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       const view = editor.current;
       if (!view) return;
       if (from < 0 || to < from || to > view.state.doc.length) return;
-      view.dispatch({ selection: { anchor: from, head: to }, scrollIntoView: true });
+      view.dispatch({ selection: { anchor: from, head: to }, effects: EditorView.scrollIntoView(from, { y: 'center' }), scrollIntoView: true });
+      node.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       view.focus();
     },
   }), []);
