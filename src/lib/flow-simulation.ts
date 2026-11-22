@@ -27,7 +27,7 @@ export function evaluateShellCondition(code: string, values: SimulationVariables
   const text = code.trim().replace(/;?\s*then\s*;?$/, '').trim();
   if (text === 'true' || text === ':') return 'true';
   if (text === 'false') return 'false';
-  const body = text.match(/^(?:\[\[|\[|test)\s+([\s\S]*?)\s*(?:\]\]|\])?$/)?.[1];
+  const body = text.startsWith('[[ ') && text.endsWith(' ]]') ? text.slice(3, -3).trim() : text.startsWith('[ ') && text.endsWith(' ]') ? text.slice(2, -2).trim() : text.startsWith('test ') ? text.slice(5).trim() : undefined;
   if (!body) return 'unknown';
   const unary = body.match(/^(-[zn])\s+(.+?)$/);
   if (unary) {
