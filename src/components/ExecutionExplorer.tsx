@@ -192,7 +192,19 @@ export function ExecutionExplorer({
   const blockRelations = useMemo(() => new Map(analysis.edges.map(edge => [`${edge.from}:${edge.to}`, edge.kind])), [analysis.edges]);
   const blockNodes = useMemo(() => analysis.astNodes.filter(node => node.navigable && node.from !== undefined && node.to !== undefined && (node.kind === 'Stmt' || node.kind === 'BinaryCmd' || node.kind === 'FuncDecl' || node.kind === 'IfClause' || node.kind === 'ForClause' || node.kind === 'WhileClause' || node.kind === 'CaseClause')).filter(node => !matchingIds || matchingIds.has(node.id)), [analysis.astNodes, matchingIds]);
 
-  const blockOrder = useMemo(() => [...blockNodes].sort((a, b) => (a.from ?? 0) - (b.from ?? 0) || (b.to ?? 0) - (a.to ?? 0)), [blockNodes]);
+  const blockOrder = useMemo(() => {
+    const sorted = [...blockNodes].sort((a, b) => (a.from ?? 0) - (b.from ?? 0) || (b.to ?? 0) - (a.to ?? 0));
+    // A Stmt wrapper and its executable clause often cover exactly the same
+    // source range. Display the specific clause, never two duplicate cards.
+    const rank = (kind: string) => kind === 'Stmt' ? 0 : 1;
+    const unique = new Map<string, typeof sorted[number]>();
+    for (const node of sorted) {
+      const key = `${node.from}:${node.to}`;
+      const previous = unique.get(key);
+      if (!previous || rank(node.kind) > rank(previous.kind)) unique.set(key, node);
+    }
+    return [...unique.values()].sort((a, b) => (a.from ?? 0) - (b.from ?? 0) || (b.to ?? 0) - (a.to ?? 0));
+  }, [blockNodes]);
   const pathDetails = (node: typeof analysis.astNodes[number]) => {
     if (node.kind === 'BinaryCmd') {
       const operands = (children.get(node.id) ?? [])
@@ -389,10 +401,10 @@ export function ExecutionExplorer({
               const paths = pathDetails(node);
               const isExpanded = expandedPaths.has(node.id);
               return <div key={node.id} className={styles.blockEntry}>
-                {index > 0 && <div className={styles.blockRelation} aria-label="Relação estrutural">{nested ? "↳ Bloco interno" : relation ? `↓ Relação estática: ${relation}` : "↓ Próximo trecho no código"}</div>}
+                {index > 0 && <div className={styles.blockRelation} aria-label="Relação estrutural">{nested ? "↳ Bloco interno" : relation ? `↓ ${relation === "unknown" ? "Relação não determinada" : `Relação: ${relation}`}` : "↓ Próximo trecho no código"}</div>}
                 <button ref={selected?.id === node.id ? activeBlockRef : undefined} type="button" className={`${styles.blockCard} ${selected?.id === node.id ? styles.blockCardActive : ""}`} aria-pressed={selected?.id === node.id} onClick={() => { selectAstNode(node); setFocusedToken(null); }}>
-                <span className={styles.blockCardHeading}><strong>{index + 1}. {node.kind}</strong><small>{parts.length} partes explicáveis</small></span>
-                <code>{code.length > 180 ? `${code.slice(0, 180)}…` : code}</code>
+                <span className={styles.blockCardHeading}><strong style={{ color: flowNodeColor(node.kind, code) }}>{index + 1}. {node.kind}</strong><small>{parts.length} partes explicáveis</small></span>
+                <code className={styles.flowHighlighted} dangerouslySetInnerHTML={{ __html: highlightFlowSource(code.length > 180 ? `${code.slice(0, 180)}…` : code) }} />
                 <span className={styles.blockCardDescription}>{node.description}</span>
               </button>
                 {paths && <div className={styles.pathPanel}>
@@ -452,7 +464,7 @@ export function ExecutionExplorer({
           </div>}
           {selected && (
             <aside className={styles.details} aria-live="polite">
-              <strong>{selected.kind}</strong>
+              <strong style={{ color: flowNodeColor(selected.kind, selectedSource) }}>{selected.kind}</strong>
               <p>{selected.description}</p>
               {explanation && (
                 <div className={styles.semantic}>
@@ -469,20 +481,20 @@ export function ExecutionExplorer({
               </div>
               {selectedSource && <div className={styles.explainBlock} aria-label="Explicação interativa do código">
                 <p className={styles.note}>Selecione um comando, argumento ou operador para entender o que ele faz.</p>
-                <div className={styles.explainCode}><code>{(() => {
+                <div className={styles.explainCode}><code className={styles.flowHighlighted}>{(() => {
                   const pieces: React.ReactNode[] = [];
                   let position = selected.from ?? 0;
                   for (const token of explainedTokens) {
-                    if (token.from > position) pieces.push(source.slice(position, token.from));
+                    if (token.from > position) pieces.push(<span key={`plain:${position}`} dangerouslySetInnerHTML={{ __html: highlightFlowSource(source.slice(position, token.from)) }} />);
                     pieces.push(<button key={`${token.from}:${token.to}:${token.title}`} type="button" className={styles.explainToken} aria-pressed={inspectedToken?.from === token.from && inspectedToken?.to === token.to} onClick={() => { setFocusedToken(token); onReveal?.(token.from, token.to); }} title={token.title}>{source.slice(token.from, token.to)}</button>);
                     position = token.to;
                   }
-                  if (position < (selected.to ?? 0)) pieces.push(source.slice(position, selected.to));
+                  if (position < (selected.to ?? 0)) pieces.push(<span key={`plain:${position}`} dangerouslySetInnerHTML={{ __html: highlightFlowSource(source.slice(position, selected.to)) }} />);
                   return pieces;
                 })()}</code></div>
                 {inspectedToken ? <div className={styles.tokenExplanation} role="status"><strong>{inspectedToken.title}</strong><p>{inspectedToken.description}</p>{inspectedToken.example && <pre><code>{inspectedToken.example}</code></pre>}<small>Fonte: {inspectedToken.source}</small></div> : <p className={styles.note}>{explainedTokens.length ? `${explainedTokens.length} partes explicáveis neste bloco` : 'Nenhuma explicação detalhada disponível para este trecho; consulte a descrição estrutural acima.'}</p>}
               </div>}
-              <dl>
+              <details className={styles.astMetadata}><summary>Detalhes técnicos do AST</summary><dl>
                 <dt>Node ID</dt>
                 <dd>{selected.id}</dd>
                 <dt>Parent</dt>
@@ -495,7 +507,7 @@ export function ExecutionExplorer({
                 <dd>{selected.navigable ? 'Yes' : 'No'}</dd>
                 <dt>Source range</dt>
                 <dd>{selected.from === undefined ? 'Unavailable' : `${selected.from}–${selected.to}`}</dd>
-              </dl>
+              </dl></details>
             </aside>
           )}
           {analysis.warnings.map(warning => (
