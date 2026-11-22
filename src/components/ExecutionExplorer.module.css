@@ -260,3 +260,7 @@
 .blockCard code{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.5 var(--_font-mono);color:#ddd6fe}
 .blockCardDescription{color:var(--_text-secondary);font-size:11px;line-height:1.5}
 @media(max-width:700px){.blockList{max-height:32dvh}.blockCard{padding:10px;min-height:65px}}
+
+.blockEntry{min-width:0}
+.blockRelation{font-size:10px;line-height:1.5;color:var(--_text-muted);padding:3px 10px 7px;border-left:1px dashed #a78bfa77;margin-left:12px}
+.blockCard[aria-pressed=true]{border-color:#c4b5fd;box-shadow:0 0 0 1px #a78bfa55}
