@@ -120,15 +120,43 @@ export function ExecutionExplorer({
   };
 
   const blockRelations = useMemo(() => new Map(analysis.edges.map(edge => [`${edge.from}:${edge.to}`, edge.kind])), [analysis.edges]);
-  const blockNodes = useMemo(() => analysis.astNodes.filter(node => node.navigable && node.from !== undefined && node.to !== undefined && (node.kind === 'Stmt' || node.kind === 'FuncDecl' || node.kind === 'IfClause' || node.kind === 'ForClause' || node.kind === 'WhileClause' || node.kind === 'CaseClause')).filter(node => !matchingIds || matchingIds.has(node.id)), [analysis.astNodes, matchingIds]);
+  const blockNodes = useMemo(() => analysis.astNodes.filter(node => node.navigable && node.from !== undefined && node.to !== undefined && (node.kind === 'Stmt' || node.kind === 'BinaryCmd' || node.kind === 'FuncDecl' || node.kind === 'IfClause' || node.kind === 'ForClause' || node.kind === 'WhileClause' || node.kind === 'CaseClause')).filter(node => !matchingIds || matchingIds.has(node.id)), [analysis.astNodes, matchingIds]);
 
   const blockOrder = useMemo(() => [...blockNodes].sort((a, b) => (a.from ?? 0) - (b.from ?? 0) || (b.to ?? 0) - (a.to ?? 0)), [blockNodes]);
   const pathDetails = (node: typeof analysis.astNodes[number]) => {
-    const code = source.slice(node.from ?? 0, node.to ?? 0);
+    if (node.kind === 'BinaryCmd') {
+      const operands = (children.get(node.id) ?? [])
+        .filter(child => child.navigable && child.from !== undefined && child.to !== undefined)
+        .sort((a, b) => a.from! - b.from!);
+      const left = operands[0];
+      const right = operands.find(child => left && child.from! >= left.to!);
+      if (!left || !right || left.to === undefined || right.from === undefined) return null;
+      // Read the operator only between AST operand ranges. Operators inside
+      // quoted arguments, strings or nested commands cannot be mistaken for it.
+      const operator = source.slice(left.to, right.from).trim();
+      const kinds: Record<string, { label: string; branches: { label: string; detail: string }[] }> = {
+        '&&': { label: 'E lógico (&&)', branches: [
+          { label: '✓ Esquerda teve sucesso', detail: 'O comando à direita pode ser executado.' },
+          { label: '✕ Esquerda falhou', detail: 'O comando à direita é ignorado.' },
+        ] },
+        '||': { label: 'OU lógico (||)', branches: [
+          { label: '✕ Esquerda falhou', detail: 'O comando à direita pode ser executado.' },
+          { label: '✓ Esquerda teve sucesso', detail: 'O comando à direita é ignorado.' },
+        ] },
+        '|': { label: 'Pipeline (|)', branches: [
+          { label: 'stdout → stdin', detail: 'A saída padrão do processo esquerdo alimenta a entrada do direito.' },
+          { label: 'stderr separado', detail: 'A saída de erro não é encaminhada pelo pipe por padrão.' },
+        ] },
+        '|&': { label: 'Pipeline com erros (|&)', branches: [
+          { label: 'stdout → stdin', detail: 'A saída padrão alimenta a entrada do processo à direita.' },
+          { label: 'stderr → stdin', detail: 'A saída de erro também é encaminhada ao pipe.' },
+        ] },
+      };
+      return kinds[operator] ?? null;
+    }
     if (node.kind === 'IfClause') return { label: 'Condição', branches: [{ label: '✓ Condição verdadeira', detail: 'O ramo then pode ser executado.' }, { label: '✕ Condição falsa', detail: 'O ramo else/elif pode ser avaliado, quando existir.' }] };
     if (node.kind === 'WhileClause' || node.kind === 'ForClause') return { label: 'Repetição', branches: [{ label: '↻ Próxima iteração', detail: 'O corpo pode executar novamente conforme a condição ou os itens restantes.' }, { label: '→ Saída do laço', detail: 'A execução pode continuar após o laço.' }] };
     if (node.kind === 'CaseClause') return { label: 'Seleção', branches: [{ label: '◇ Padrão correspondente', detail: 'Um ramo pode ser escolhido conforme o padrão.' }, { label: '→ Próxima instrução', detail: 'O comportamento depende dos padrões e terminadores do case.' }] };
-    if (node.kind === 'Stmt' && /\|\||&&|\|&|\|/.test(code)) return { label: 'Composição', branches: [{ label: '│ Pipeline', detail: 'Um pipe conecta streams entre processos; && e || dependem do status de saída.' }, { label: '→ Continuação', detail: 'A continuação depende dos operadores presentes no trecho.' }] };
     return null;
   };
   const visible = useMemo(() => {
