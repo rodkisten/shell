@@ -1,4 +1,11 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  type RefObject,
+} from 'react';
 import { autocompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 import { indentWithTab } from '@codemirror/commands';
 import { syntaxTree } from '@codemirror/language';
@@ -25,7 +32,7 @@ import { contextualHintsFromActive } from '../lib/suggestions';
  * O que mover:
  * - Constantes de comportamento, limites numéricos, regexes de tokenização,
  *   prioridades (`boost`) do autocomplete, paleta visual do tema CodeMirror,
- *   classes CSS de decoração e textos de acessibilidade/placeholder.
+ *   classes CSS de decoração, constantes anti-zoom do Safari e textos de UI.
  *
  * Contratos a preservar:
  * - Classes CSS `.cm-autosuggestion`, `.shell-diagnostic`,
@@ -64,6 +71,7 @@ const EDITOR_LIMITS = {
   minFontSizePx: 8,
   maxFontSizePx: 32,
   iosSafariBaseFontSizePx: 16,
+  doubleTapThresholdMs: 300,
   tabSizeSpaces: 2,
   maxSyntaxBreadcrumbs: 8,
   maxAutocompleteOptions: 8,
@@ -79,6 +87,11 @@ const COMPLETION_BOOST = {
   flagHint: 30,
   snippet: 10,
 } as const;
+
+const ZOOM_SHORTCUT_KEYS = new Set(['+', '=', '-', '_', '0']);
+const LOCKED_VIEWPORT_CONTENT =
+  'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+const TOUCH_ACTION_PAN_ONLY = 'pan-x pan-y';
 
 const COMPLETION_TOKEN_BEFORE_REGEX = /[\w.+-]*/;
 const COMPLETION_VALID_FOR_REGEX = /^[\w.+-]*$/;
@@ -135,16 +148,185 @@ const TOOLTIP_INLINE_STYLES = {
 } as const;
 
 /* ============================================================================
+ * [EXTRAIR PARA HOOK: src/hooks/usePreventPageZoom.ts]
+ * ----------------------------------------------------------------------------
+ * O que mover:
+ * - `usePreventPageZoom` e `UsePreventPageZoomOptions`.
+ * - Intercepta pinch-to-zoom, gestos multi-touch (`touchstart`/`touchmove` com
+ *   2+ dedos ou `scale !== 1`), eventos proprietários `gesture*` do Safari/WebKit,
+ *   double-tap zoom, `Ctrl/Cmd + Wheel`, atalhos `Ctrl/Cmd + +/-/0`, auto-zoom
+ *   de foco no iOS Safari e fornece a extensão CodeMirror que emula 16px no
+ *   DOM enquanto mantém o tamanho visual idêntico ao `visualFontSize`.
+ * ============================================================================ */
+
+type UsePreventPageZoomOptions = {
+  containerRef: RefObject<HTMLElement | null>;
+  visualFontSize: number;
+  enabled?: boolean;
+};
+
+export function usePreventPageZoom({
+  containerRef,
+  visualFontSize,
+  enabled = true,
+}: UsePreventPageZoomOptions) {
+  // 1. Trava a meta viewport e define touch-action: pan-x pan-y no documento
+  useEffect(() => {
+    if (!enabled || typeof document === 'undefined') return;
+
+    let meta = document.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
+    const previousContent = meta?.getAttribute('content') ?? null;
+
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'viewport';
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute('content', LOCKED_VIEWPORT_CONTENT);
+
+    const prevTouchAction = document.documentElement.style.touchAction;
+    document.documentElement.style.touchAction = TOUCH_ACTION_PAN_ONLY;
+
+    return () => {
+      document.documentElement.style.touchAction = prevTouchAction;
+      if (meta && previousContent !== null) {
+        meta.setAttribute('content', previousContent);
+      }
+    };
+  }, [enabled]);
+
+  // 2. Intercepta gestos multi-touch, pinch, drag-zoom, double-tap, wheel-zoom e atalhos
+  useEffect(() => {
+    if (!enabled || typeof window === 'undefined') return;
+
+    let lastTouchEnd = 0;
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length > 1) {
+        event.preventDefault();
+      }
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const touchScale = (event as TouchEvent & { scale?: number }).scale;
+      if (event.touches.length > 1 || (typeof touchScale === 'number' && touchScale !== 1)) {
+        event.preventDefault();
+      }
+    };
+
+    const handleTouchEnd = (event: TouchEvent) => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= EDITOR_LIMITS.doubleTapThresholdMs) {
+        event.preventDefault();
+      }
+      lastTouchEnd = now;
+    };
+
+    const handleGesture = (event: Event) => {
+      event.preventDefault();
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && ZOOM_SHORTCUT_KEYS.has(event.key)) {
+        event.preventDefault();
+      }
+    };
+
+    const handleViewportResize = () => {
+      const vv = window.visualViewport;
+      if (vv && vv.scale > 1) {
+        window.scrollTo(0, 0);
+      }
+    };
+
+    const nonPassive: AddEventListenerOptions = { passive: false, capture: true };
+
+    document.addEventListener('touchstart', handleTouchStart, nonPassive);
+    document.addEventListener('touchmove', handleTouchMove, nonPassive);
+    document.addEventListener('touchend', handleTouchEnd, nonPassive);
+    document.addEventListener('gesturestart', handleGesture, nonPassive);
+    document.addEventListener('gesturechange', handleGesture, nonPassive);
+    document.addEventListener('gestureend', handleGesture, nonPassive);
+    window.addEventListener('wheel', handleWheel, nonPassive);
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    window.visualViewport?.addEventListener('resize', handleViewportResize);
+
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart, true);
+      document.removeEventListener('touchmove', handleTouchMove, true);
+      document.removeEventListener('touchend', handleTouchEnd, true);
+      document.removeEventListener('gesturestart', handleGesture, true);
+      document.removeEventListener('gesturechange', handleGesture, true);
+      document.removeEventListener('gestureend', handleGesture, true);
+      window.removeEventListener('wheel', handleWheel, true);
+      window.removeEventListener('keydown', handleKeyDown, true);
+      window.visualViewport?.removeEventListener('resize', handleViewportResize);
+    };
+  }, [enabled]);
+
+  // 3. Garante computed font-size >= 16px em qualquer elemento focado dentro do container
+  useEffect(() => {
+    if (!enabled) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleFocusIn = (event: FocusEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      const computedSize = parseFloat(
+        window.getComputedStyle(target).fontSize || String(EDITOR_LIMITS.iosSafariBaseFontSizePx),
+      );
+      if (computedSize < EDITOR_LIMITS.iosSafariBaseFontSizePx) {
+        target.style.fontSize = `${EDITOR_LIMITS.iosSafariBaseFontSizePx}px`;
+      }
+    };
+
+    container.addEventListener('focusin', handleFocusIn, true);
+    return () => container.removeEventListener('focusin', handleFocusIn, true);
+  }, [containerRef, enabled]);
+
+  // 4. Emula 16px no .cm-content para o Safari e compensa visualmente via CSS zoom
+  const safariNoZoomFontExtension = useMemo(() => {
+    const clampedSize = Math.max(
+      EDITOR_LIMITS.minFontSizePx,
+      Math.min(EDITOR_LIMITS.maxFontSizePx, visualFontSize),
+    );
+    const scaleRatio = clampedSize / EDITOR_LIMITS.iosSafariBaseFontSizePx;
+    const basePx = `${EDITOR_LIMITS.iosSafariBaseFontSizePx}px`;
+
+    return EditorView.theme({
+      '&': {
+        fontSize: basePx,
+        zoom: String(scaleRatio),
+        touchAction: TOUCH_ACTION_PAN_ONLY,
+      },
+      '.cm-scroller': {
+        touchAction: TOUCH_ACTION_PAN_ONLY,
+        WebkitTextSizeAdjust: '100%',
+      },
+      '.cm-content': {
+        fontSize: basePx,
+        WebkitTextSizeAdjust: '100%',
+      },
+    });
+  }, [visualFontSize]);
+
+  return { safariNoZoomFontExtension };
+}
+
+/* ============================================================================
  * [EXTRAIR PARA UTILITÁRIO: src/lib/codemirror-syntax-context.ts]
  * ----------------------------------------------------------------------------
  * O que mover:
- * - `withSyntaxContext` e helpers de resolução de AST do Lezer.
+ * - `withSyntaxContext` e `findTokenAtOffset`.
  * - Responsabilidade única: enriquecer `SemanticToken` com a trilha estrutural
  *   do parser incremental do CodeMirror sem acoplar ao React.
- *
- * Contratos a preservar:
- * - Assinatura `(token: SemanticToken, state: EditorState) => SemanticToken`.
- * - Ignorar nós anônimos e nós de erro (`⚠`), limitando a 8 níveis.
  * ============================================================================ */
 
 /**
@@ -182,13 +364,9 @@ function findTokenAtOffset(tokens: readonly SemanticToken[], pos: number): Seman
  * [EXTRAIR PARA EXTENSÃO CODEMIRROR: src/lib/codemirror-diagnostics.ts]
  * ----------------------------------------------------------------------------
  * O que mover:
- * - `setDiagnostics`, `diagnosticsField` e `buildDiagnosticDecorations(state, findings)`.
+ * - `setDiagnostics`, `diagnosticsField` e `buildDiagnosticDecorations`.
  * - Encapsula toda a tradução de `(line, column, endColumn)` do ShellCheck para
  *   offsets absolutos e `Decoration.mark` do CodeMirror.
- *
- * Contratos a preservar:
- * - Classes CSS `shell-diagnostic` (warning/info) e `shell-diagnostic-error`.
- * - Atributos `title` e `aria-label` com `finding.message`.
  * ============================================================================ */
 
 const setDiagnostics = StateEffect.define<DecorationSet>();
@@ -238,13 +416,6 @@ function buildDiagnosticDecorations(state: EditorState, findings: readonly Findi
  * O que mover:
  * - `setAutosuggestion`, `autosuggestionField`, `autosuggestionDecorations`,
  *   `AutosuggestionWidget` e `applyAutosuggestion`.
- * - Cria uma extensão self-contained (`shellAutosuggestionExtension()`) que
- *   pode ser testada e reutilizada sem conhecer o ciclo de vida do React.
- *
- * Contratos a preservar:
- * - Aceitação total via `Tab` ou toque (`pointerdown`) e parcial por palavra
- *   via `ArrowRight`.
- * - `userEvent: 'input.complete'` no dispatch da transação.
  * ============================================================================ */
 
 const setAutosuggestion = StateEffect.define<Autosuggestion | null>();
@@ -331,14 +502,7 @@ const autosuggestionDecorations = EditorView.decorations.compute([autosuggestion
  * [EXTRAIR PARA PROVEDORES CODEMIRROR: src/lib/codemirror-providers.ts]
  * ----------------------------------------------------------------------------
  * O que mover:
- * - `shellCompletionSource` (integra `activeShellCommand`, `cliCompletions`,
- *   `valueCompletions`, `contextualHintsFromActive` e `SNIPPETS`).
- * - `shellHoverTooltip` (renderiza o tooltip semântico ao passar o cursor).
- *
- * Contratos a preservar:
- * - `mvdan/sh` (`activeShellCommand`) permanece como única fonte de escopo
- *   de comando/subcomando; catálogos fornecem apenas metadados.
- * - Ordem de prioridade (`COMPLETION_BOOST`) e deduplicação por `label`.
+ * - `shellCompletionSource` e `shellHoverTooltip`.
  * ============================================================================ */
 
 async function shellCompletionSource(context: CompletionContext): Promise<CompletionResult | null> {
@@ -447,25 +611,8 @@ const shellHoverTooltip = hoverTooltip(
  * [EXTRAIR PARA TEMA: src/lib/codemirror-theme.ts]
  * ----------------------------------------------------------------------------
  * O que mover:
- * - `editorFontTheme` e `shellTheme`.
- * - Mantém toda a estilização visual do CodeMirror isolada da lógica de UI.
- *
- * Contratos a preservar:
- * - `fontSize: '16px'` + `zoom` proporcional no root (`&`) para impedir zoom
- *   automático no Safari do iPhone sem quebrar cálculo de coordenadas do cursor.
+ * - `shellTheme`.
  * ============================================================================ */
-
-// iOS Safari checks the editable element's computed font size on focus.
-// Keep it at 16px and scale the editor visually with CSS zoom instead of
-// transforming CodeMirror's content (which breaks caret coordinates).
-function editorFontTheme(fontSize: number) {
-  const clampedSize = Math.max(EDITOR_LIMITS.minFontSizePx, Math.min(EDITOR_LIMITS.maxFontSizePx, fontSize));
-  const basePx = `${EDITOR_LIMITS.iosSafariBaseFontSizePx}px`;
-  return EditorView.theme({
-    '&': { fontSize: basePx, zoom: String(clampedSize / EDITOR_LIMITS.iosSafariBaseFontSizePx) },
-    '.cm-content': { fontSize: basePx },
-  });
-}
 
 const shellTheme = EditorView.theme(
   {
@@ -524,6 +671,12 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
 ) {
   const node = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
+
+  const { safariNoZoomFontExtension } = usePreventPageZoom({
+    containerRef: node,
+    visualFontSize: fontSize,
+  });
+
   const fontCompartment = useRef(new Compartment());
   const wrapCompartment = useRef(new Compartment());
   const callbacks = useRef<EditorCallbacks>({ onChange, onCursor, onInspect, onSemanticInspect, onRun });
@@ -579,7 +732,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           autosuggestionField,
           autosuggestionDecorations,
           shellTheme,
-          fontCompartment.current.of(editorFontTheme(fontSize)),
+          fontCompartment.current.of(safariNoZoomFontExtension),
           wrapCompartment.current.of(wordWrap ? EditorView.lineWrapping : []),
           EditorState.tabSize.of(EDITOR_LIMITS.tabSizeSpaces),
           keymap.of([
@@ -678,9 +831,9 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
 
   useEffect(() => {
     editor.current?.dispatch({
-      effects: fontCompartment.current.reconfigure(editorFontTheme(fontSize)),
+      effects: fontCompartment.current.reconfigure(safariNoZoomFontExtension),
     });
-  }, [fontSize]);
+  }, [safariNoZoomFontExtension]);
 
   useEffect(() => {
     editor.current?.dispatch({
@@ -716,5 +869,13 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
     });
   }, [code]);
 
-  return <div ref={node} className={EDITOR_CSS_CLASSES.root} role="textbox" aria-label={EDITOR_COPY.ariaLabel} />;
+  return (
+    <div
+      ref={node}
+      className={EDITOR_CSS_CLASSES.root}
+      role="textbox"
+      aria-label={EDITOR_COPY.ariaLabel}
+      style={{ touchAction: TOUCH_ACTION_PAN_ONLY }}
+    />
+  );
 });
