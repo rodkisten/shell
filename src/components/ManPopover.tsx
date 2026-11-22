@@ -8,11 +8,16 @@ type ManData = {
   name: string;
   description: string;
   url: string;
+  section?: string | number;
   content?: { title: string; html: string }[];
   anchors?: { anchor: string; description: string }[];
 };
 const clean = (value = '') => {
   const doc = new DOMParser().parseFromString(value, 'text/html');
+  doc.body.querySelectorAll('br, p, div, li, dt, dd, h1, h2, h3, h4, tr').forEach(element => {
+    element.before(doc.createTextNode(' '));
+    element.after(doc.createTextNode(' '));
+  });
   return (doc.body.textContent || '').replace(/\s+/g, ' ').trim();
 };
 
@@ -48,7 +53,7 @@ export function ManPopover({ command, onClose, onInsert }: {
       </PopoverTrigger>
       <PopoverContent side="bottom" align="end" className="manual-popover">
         <div className="manual-head">
-          <div><span className="eyebrow">MAN PAGE / COMANDO</span><h3>{command} <span className="dim">{page ? '(' + (page as any).section + ')' : ''}</span></h3></div>
+          <div><span className="eyebrow">MAN PAGE / COMANDO</span><h3>{command} <span className="dim">{page ? '(' + page.section + ')' : ''}</span></h3></div>
           <div className="manual-buttons">
             {local && <Button size="icon" variant="ghost" title="Inserir exemplo" onClick={() => onInsert(local.example)}><Copy size={15} /></Button>}
             <a target="_blank" rel="noreferrer" href={page?.url || 'https://www.mankier.com/1/' + encodeURIComponent(command || '')} title="Abrir manual completo"><ExternalLink size={16} /></a>
