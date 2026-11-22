@@ -343,7 +343,7 @@ export function App() {
       if (revision !== analysisRevision.current) return;
       setAstNodes(overview.nodes);
       setAnalysisTokens(tokens);
-      setFlowResult(buildSemanticFlow(script, overview.nodes));
+      setFlowResult(buildSemanticFlow(snapshot));
       setFlowError(null);
       void analyzeShellWasm(script).then(result => {
         if (revision === analysisRevision.current && !overview.nodes.some(node => node.kind === 'BinaryCmd' || node.kind === 'IfClause' || node.kind === 'ForClause' || node.kind === 'WhileClause' || node.kind === 'CaseClause')) setFlowResult(result);
