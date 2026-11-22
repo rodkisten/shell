@@ -1,77 +1,124 @@
-import type { ShellAstNode } from './shell-ast';
+import type { ShellSnapshot } from './shell-parser';
 import type { WasmFlowResult } from './shell-flow-wasm';
 
+type Raw = Record<string, unknown>;
+type Frontier = { id: string; kind: string };
+const object = (value: unknown): Raw | null =>
+  value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Raw : null;
+const list = (value: unknown): Raw[] =>
+  Array.isArray(value) ? value.map(object).filter((node): node is Raw => node !== null) : [];
+
 /**
- * A conservative AST-based control-flow outline.
- * Edges describe possible control transfers, not observed execution.
- * Byte positions are required by the existing Go/WASM graph renderer.
+ * Build possible control transfers from the parser's named AST fields.
+ * Function declarations are separate subgraphs, never executed in source order.
+ * This is static analysis, not an interpreter.
  */
-export function buildSemanticFlow(source: string, ast: readonly ShellAstNode[]): WasmFlowResult {
-  const encoder = new TextEncoder();
-  const byteOffset = (offset: number) => encoder.encode(source.slice(0, offset)).length;
-  const eligible = new Set(['Stmt', 'BinaryCmd', 'IfClause', 'ForClause', 'WhileClause', 'CaseClause', 'FuncDecl']);
-  const selected = ast.filter(node => eligible.has(node.kind) && node.navigable && node.from !== undefined && node.to !== undefined);
-  const nodes = selected.map(node => ({ id: node.id, kind: node.kind, start: byteOffset(node.from!), end: byteOffset(node.to!) }));
-  const included = new Set(nodes.map(node => node.id));
+export function buildSemanticFlow(snapshot: ShellSnapshot): WasmFlowResult {
+  const nodes: WasmFlowResult['nodes'] = [];
   const edges: WasmFlowResult['edges'] = [];
   const seen = new Set<string>();
-  const add = (from: string, to: string, kind: string) => {
-    if (!included.has(from) || !included.has(to) || from === to) return;
-    const key = `${from}:${to}:${kind}`;
-    if (!seen.has(key)) { seen.add(key); edges.push({ from, to, kind }); }
+  const identifiers = new WeakMap<object, string>();
+  let nextId = 0;
+  const addNode = (raw: Raw, kind: string): string => {
+    const existing = identifiers.get(raw);
+    if (existing) return existing;
+    const id = String(++nextId);
+    identifiers.set(raw, id);
+    const entry = snapshot.byObject.get(raw);
+    nodes.push({ id, kind, start: typeof raw.start === 'number' ? raw.start : (entry?.from ?? 0), end: typeof raw.end === 'number' ? raw.end : (entry?.to ?? 0) });
+    return id;
   };
-  const closest = (parentId: string): ShellAstNode | undefined => {
-    let current = ast.find(node => node.id === parentId);
-    while (current && !included.has(current.id)) current = current.parentId ? ast.find(node => node.id === current!.parentId) : undefined;
-    return current;
+  const link = (from: string, to: string, kind: string) => {
+    const key = `${from}/${to}/${kind}`;
+    if (from !== to && !seen.has(key)) { seen.add(key); edges.push({ from, to, kind }); }
   };
-  // Source order is used only for sequential siblings, not across branches.
-  const groups = new Map<string, ShellAstNode[]>();
-  for (const node of selected) {
-    const owner = node.parentId ? closest(node.parentId)?.id ?? '__root__' : '__root__';
-    const group = groups.get(owner) ?? [];
-    group.push(node);
-    groups.set(owner, group);
-  }
-  for (const group of groups.values()) {
-    group.sort((a, b) => a.from! - b.from! || b.to! - a.to!);
-    for (let i = 1; i < group.length; i++) {
-      const previous = group[i - 1];
-      const next = group[i];
-      if (previous.to! <= next.from!) add(previous.id, next.id, 'next');
+  const connect = (frontier: Frontier[], id: string) => {
+    for (const previous of frontier) link(previous.id, id, previous.kind);
+  };
+  const terminal = (raw: Raw): boolean => {
+    const cmd = object(raw.cmd) ?? raw;
+    if (cmd.type !== 'CallExpr') return false;
+    const first = list(cmd.args)[0];
+    const lit = first ? list(first.parts).find(part => part.type === 'Lit') : undefined;
+    return lit?.value === 'return' || lit?.value === 'exit' || lit?.value === 'break' || lit?.value === 'continue';
+  };
+  const sequence = (items: Raw[], incoming: Frontier[]): Frontier[] => {
+    let frontier = incoming;
+    for (const item of items) frontier = visit(item, frontier);
+    return frontier;
+  };
+  const visit = (raw: Raw, incoming: Frontier[]): Frontier[] => {
+    const cmd = object(raw.cmd) ?? raw;
+    const kind = typeof cmd.type === 'string' ? cmd.type : 'Stmt';
+    if (kind === 'FuncDecl') {
+      // A declaration does not run its body; model it as a separate entry.
+      const id = addNode(raw, 'FuncDecl');
+      connect(incoming, id);
+      const body = object(cmd.body);
+      if (body) visit(body, [{ id, kind: 'declaration' }]);
+      return [{ id, kind: 'next' }];
     }
-  }
-  for (const node of selected) {
-    const descendants = (groups.get(node.id) ?? []).filter(child => child.from! >= node.from! && child.to! <= node.to!);
-    const first = descendants[0];
-    if (!first) continue;
-    if (node.kind === 'IfClause') {
-      add(node.id, first.id, 'true');
-      // A false branch is not inferred without identifying the actual else node.
-    } else if (node.kind === 'WhileClause' || node.kind === 'ForClause') {
-      add(node.id, first.id, 'loop');
-      const last = descendants[descendants.length - 1];
-      add(last.id, node.id, 'loop');
-    } else if (node.kind === 'CaseClause') {
-      add(node.id, first.id, 'conditional');
-    } else if (node.kind === 'BinaryCmd') {
-      const ordered = descendants.sort((a, b) => a.from! - b.from!);
-      const left = ordered[0];
-      const right = ordered.find(item => item.from! >= left.to!);
-      if (!right) continue;
-      const op = source.slice(left.to!, right.from!).trim();
-      const kind = op === '&&' ? 'true' : op === '||' ? 'false' : op === '|' || op === '|&' ? 'pipeline' : 'unknown';
-      add(left.id, right.id, kind);
-    } else {
-      add(node.id, first.id, 'next');
+    if (kind === 'Block' || kind === 'Subshell') {
+      return sequence(list(cmd.stmts), incoming);
     }
-  }
+    const id = addNode(raw, kind);
+    connect(incoming, id);
+    if (kind === 'IfClause') {
+      const cond = list(cmd.cond);
+      const then = list(cmd.then);
+      const elseClause = object(cmd.else);
+      const conditionEnds = cond.length ? sequence(cond, [{ id, kind: 'condition' }]) : [{ id, kind: 'next' }];
+      const yes = then.length ? sequence(then, conditionEnds.map(end => ({ id: end.id, kind: 'true' }))) : conditionEnds;
+      const no = elseClause
+        ? visit(elseClause, conditionEnds.map(end => ({ id: end.id, kind: 'false' })))
+        : conditionEnds.map(end => ({ id: end.id, kind: 'false' }));
+      return [...yes, ...no].map(end => ({ id: end.id, kind: 'next' }));
+    }
+    if (kind === 'WhileClause' || kind === 'ForClause') {
+      const cond = kind === 'WhileClause' ? list(cmd.cond) : [];
+      const conditionEnds = cond.length ? sequence(cond, [{ id, kind: 'condition' }]) : [{ id, kind: 'true' }];
+      const body = list(cmd.do);
+      const bodyEnds = body.length ? sequence(body, conditionEnds.map(end => ({ id: end.id, kind: 'true' }))) : conditionEnds;
+      for (const end of bodyEnds) link(end.id, id, 'loop');
+      return [{ id, kind: 'false' }];
+    }
+    if (kind === 'CaseClause') {
+      const arms = list(cmd.items);
+      const outputs: Frontier[] = [];
+      for (const arm of arms) {
+        const armId = addNode(arm, 'CaseItem');
+        link(id, armId, 'conditional');
+        outputs.push(...sequence(list(arm.stmts), [{ id: armId, kind: 'next' }]));
+      }
+      // An unmatched pattern can fall through unless a default arm is proven.
+      return [...outputs, { id, kind: 'false' }].map(end => ({ id: end.id, kind: 'next' }));
+    }
+    if (kind === 'BinaryCmd') {
+      const left = object(cmd.x);
+      const right = object(cmd.y);
+      if (!left || !right) return [{ id, kind: 'next' }];
+      const leftEnd = visit(left, [{ id, kind: 'next' }]);
+      const op = typeof cmd.op === 'number' ? cmd.op : -1;
+      const leftEntry = snapshot.byObject.get(left);
+      const rightEntry = snapshot.byObject.get(right);
+      const operator = leftEntry?.to !== undefined && rightEntry?.from !== undefined
+        ? snapshot.source.slice(leftEntry.to, rightEntry.from).trim() : '';
+      const edgeKind = operator === '&&' ? 'true' : operator === '||' ? 'false' : operator === '|' || operator === '|&' ? 'pipeline' : 'next';
+      void op;
+      const rightEnd = visit(right, leftEnd.map(end => ({ id: end.id, kind: edgeKind })));
+      return edgeKind === 'true' || edgeKind === 'false'
+        ? [...rightEnd, ...leftEnd.map(end => ({ id: end.id, kind: 'next' }))]
+        : rightEnd;
+    }
+    return terminal(raw) ? [] : [{ id, kind: 'next' }];
+  };
+  const root = object(snapshot.ast);
+  if (root) sequence(list(root.stmts), []);
   return {
-    nodes,
-    edges,
+    nodes, edges,
     warnings: [
-      'Análise estrutural: caminhos possíveis, nunca execução observada.',
-      'Ramos else/elif, break/continue e efeitos de funções ainda não são modelados integralmente.',
+      'Grafo estático: caminhos possíveis, não execução observada.',
+      'Chamadas de funções, expansão dinâmica e break/continue ainda exigem resolução de contexto.',
     ],
   };
 }
