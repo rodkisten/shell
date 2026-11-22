@@ -98,6 +98,8 @@ export function App() {
   const [sideBySide, setSideBySide] = useState(() => localStorage.getItem('shellconductor:side-by-side') === 'true');
   const [splitRatio, setSplitRatio] = useState(() => Number(localStorage.getItem('shellconductor:split-ratio')) || 50);
   const [autoRun, setAutoRun] = useState(() => localStorage.getItem('shellconductor:auto-run') === 'true');
+  const [autoCheck, setAutoCheck] = useState(() => localStorage.getItem('shellconductor:auto-check') === 'true');
+  const [autoFormat, setAutoFormat] = useState(() => localStorage.getItem('shellconductor:auto-format') === 'true');
   const [editorFontSize, setEditorFontSize] = useState(() => Math.max(9, Math.min(14, Number(localStorage.getItem('shellconductor:editor-font-size')) || 11)));
   const [editorWordWrap, setEditorWordWrap] = useState(() => localStorage.getItem('shellconductor:editor-word-wrap') !== 'false');
   const [editorHeight, setEditorHeight] = useState(() => Number(localStorage.getItem('shellconductor:editor-height')) || 390);
@@ -191,6 +193,31 @@ export function App() {
     } catch (error) { notify(error instanceof Error ? error.message : 'Erro no ShellCheck.'); }
     finally { setBusy(null); }
   };
+  useEffect(() => {
+    try { localStorage.setItem('shellconductor:auto-check', String(autoCheck)); localStorage.setItem('shellconductor:auto-format', String(autoFormat)); } catch { /* Safari private mode */ }
+  }, [autoCheck, autoFormat]);
+  useEffect(() => {
+    if (!autoCheck || !script.trim()) return;
+    let cancelled = false;
+    const revision = analysisRevision.current;
+    const timer = setTimeout(() => {
+      void checkShell(script).then(diagnostics => {
+        if (!cancelled && revision === analysisRevision.current) setFindings(diagnostics);
+      }).catch(() => { /* Keep manual validation available when WASM is unavailable. */ });
+    }, 900);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [script, autoCheck]);
+  useEffect(() => {
+    if (!autoFormat || !script.trim()) return;
+    let cancelled = false;
+    const revision = analysisRevision.current;
+    const timer = setTimeout(() => {
+      void formatShell(script, false).then(formatted => {
+        if (!cancelled && revision === analysisRevision.current && formatted && formatted !== script) change(formatted);
+      }).catch(() => { /* Do not modify incomplete or invalid shell input. */ });
+    }, 1500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [script, autoFormat]);
   const fix = () => {
     const result = applyAvailableFixes(script, findings);
     if (result.count) { change(result.code); notify(result.count + ' correção(ões) automática(s) aplicada(s). Valide novamente.'); }
@@ -389,9 +416,12 @@ export function App() {
                 <h1>Seu shell, <span>sob controle.</span></h1>
                 <p>Escreva, entenda e execute scripts. Tudo em um lugar, sem sair do navegador.</p>
               </div>
-              <label className="auto-run-toggle"><input type="checkbox" checked={autoRun} onChange={event => setAutoRun(event.target.checked)} /> Executar automaticamente <span>850 ms após parar de digitar</span></label>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
-                <Link to="/linux" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", color: "#ddd", fontSize: 12 }}><Terminal size={15}/> Alpine Linux</Link><button type="button" aria-pressed={sideBySide} onClick={() => setSideBySide(value => !value)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', border: '1px solid #34363d', borderRadius: 7, background: '#141519', color: '#ddd', fontSize: 12 }}><ArrowLeftRight size={15}/> {sideBySide ? 'Painéis empilhados' : 'Painéis lado a lado'}</button>
+              <div className="compact-workspace-controls" aria-label="Automação e visualização">
+                <label title="Executar após 850 ms sem digitar"><input type="checkbox" checked={autoRun} onChange={event => setAutoRun(event.target.checked)}/><Play size={15}/><span>Autoexecutar</span></label>
+                <label title="ShellCheck automático após 900 ms"><input type="checkbox" checked={autoCheck} onChange={event => setAutoCheck(event.target.checked)}/><ShieldCheck size={15}/><span>AutoCheck</span></label>
+                <label title="Formatar automaticamente após 1,5 s sem digitar"><input type="checkbox" checked={autoFormat} onChange={event => setAutoFormat(event.target.checked)}/><WandSparkles size={15}/><span>Autoformatar</span></label>
+                <Link to="/linux" className="compact-control-icon" title="Alpine Linux" aria-label="Alpine Linux"><Terminal size={16}/></Link>
+                <button type="button" className="compact-control-icon" aria-label={sideBySide ? 'Empilhar painéis' : 'Painéis lado a lado'} aria-pressed={sideBySide} title={sideBySide ? 'Empilhar painéis' : 'Painéis lado a lado'} onClick={() => setSideBySide(value => !value)}><ArrowLeftRight size={16}/></button>
               </div>
               <div className={cn("workspace-layout", sideBySide && "is-split")} style={sideBySide ? { "--editor-share": `${splitRatio}fr`, "--terminal-share": `${100 - splitRatio}fr` } as React.CSSProperties : undefined}>
                 <section className="editor-panel" style={sideBySide ? { gridColumn: 1, gridRow: 1 } : undefined}>
@@ -400,11 +430,11 @@ export function App() {
                     <div className="panel-header-actions"><label title="Tamanho da fonte do editor" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, flexShrink: 0 }}><span className="editor-font-label">Fonte</span><select aria-label="Tamanho da fonte" value={editorFontSize} onChange={event => setEditorFontSize(Number(event.target.value))} style={{ background: "#141519", color: "#eee", border: "1px solid #34363d", borderRadius: 5, padding: "4px 2px", fontSize: 16, maxWidth: 74 }}>{[9,10,11,12,13,14].map(size => <option key={size} value={size}>{size}px</option>)}</select></label><label title="Quebrar linhas longas" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}><input type="checkbox" checked={editorWordWrap} onChange={event => setEditorWordWrap(event.target.checked)} /> Wrap</label><span className="language-label">Zsh</span><button title="Colar texto" onClick={paste} aria-label="Colar"><Clipboard size={15}/></button><button title="Copiar script" onClick={() => void copy()} aria-label="Copiar"><Copy size={15}/></button><button title="Salvar script" onClick={save} aria-label="Salvar"><Bookmark size={15}/></button></div>
                   </div>
                   <nav className="editor-command-toolbar" aria-label="Ferramentas do editor">
-                    <button type="button" onClick={() => { void run(); }} disabled={!!busy}><Play size={15}/> Executar</button>
-                    <button type="button" onClick={() => void convert(false)} disabled={!!busy}><WandSparkles size={15}/> Formatar</button>
-                    <button type="button" onClick={() => void check()} disabled={!!busy}><ShieldCheck size={15}/> Validar</button>
-                    <button type="button" className="editor-command-primary" onClick={() => void explain()} disabled={!!busy}><BookOpen size={15}/> Explicar</button>
-                    <button type="button" onClick={() => { setExplorerTab('flow'); setExplorerOpen(true); if (!explanation) void explain(); }} disabled={!!busy}><Activity size={15}/> Fluxo</button>
+                    <button type="button" title="Executar" aria-label="Executar" onClick={() => { void run(); }} disabled={!!busy}><Play size={17}/><span className="command-label">Executar</span></button>
+                    <button type="button" title="Formatar" aria-label="Formatar" onClick={() => void convert(false)} disabled={!!busy}><WandSparkles size={17}/><span className="command-label">Formatar</span></button>
+                    <button type="button" title="ShellCheck" aria-label="ShellCheck" onClick={() => void check()} disabled={!!busy}><ShieldCheck size={17}/><span className="command-label">Validar</span></button>
+                    <button type="button" className="editor-command-primary" title="Explicar" aria-label="Explicar" onClick={() => void explain()} disabled={!!busy}><BookOpen size={17}/><span className="command-label">Explicar</span></button>
+                    <button type="button" title="Fluxo" aria-label="Fluxo" onClick={() => { setExplorerTab('flow'); setExplorerOpen(true); if (!explanation) void explain(); }} disabled={!!busy}><Activity size={17}/><span className="command-label">Fluxo</span></button>
                   </nav>
                   <div className="editor-inner" style={{ height: editorHeight }}><ShellEditor ref={editor} code={script} fontSize={editorFontSize} wordWrap={editorWordWrap} onChange={change} onCursor={setCursor} onInspect={setInspected} onSemanticInspect={setSemanticSelection} onRun={() => { void run(); }}/></div>
                   <CommandHelp help={quickHelp} onManual={setInspected}/>
