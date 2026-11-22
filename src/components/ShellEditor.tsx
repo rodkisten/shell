@@ -826,7 +826,6 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       editor.current = null;
     };
     // Editor must be created once. New values are synchronized by the effects below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
