@@ -920,7 +920,6 @@ export function App() {
     }, TIMINGS_MS.liveExplainDebounce);
     return () => window.clearTimeout(timer);
     // Recompute only when source changes while dock is open.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [script, explorerOpen]);
 
   const splitResize = (event: ReactPointerEvent<HTMLDivElement>) => {
