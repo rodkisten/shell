@@ -1,3 +1,4 @@
+import { buildSemanticFlow } from './lib/semantic-flow';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router';
 import {
@@ -340,10 +341,10 @@ export function App() {
       if (revision !== analysisRevision.current) return;
       setAstNodes(overview.nodes);
       setAnalysisTokens(tokens);
-      setFlowResult(null);
+      setFlowResult(buildSemanticFlow(script, overview.nodes));
       setFlowError(null);
       void analyzeShellWasm(script).then(result => {
-        if (revision === analysisRevision.current) setFlowResult(result);
+        if (revision === analysisRevision.current && !overview.nodes.some(node => node.kind === 'BinaryCmd' || node.kind === 'IfClause' || node.kind === 'ForClause' || node.kind === 'WhileClause' || node.kind === 'CaseClause')) setFlowResult(result);
       }).catch(error => {
         if (revision === analysisRevision.current) setFlowError(error instanceof Error ? error.message : String(error));
       });
