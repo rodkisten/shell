@@ -307,7 +307,9 @@ export function App() {
   const resize = (target: 'editor' | 'terminal', event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     const origin = event.clientY;
-    const initial = target === 'editor' ? editorHeight : terminalHeight;
+    const initial = target === 'editor'
+      ? (editorHeight ?? document.querySelector('.editor-inner')?.getBoundingClientRect().height ?? 52)
+      : terminalHeight;
     const element = event.currentTarget;
     element.setPointerCapture(event.pointerId);
     const move = (e: PointerEvent) => {
