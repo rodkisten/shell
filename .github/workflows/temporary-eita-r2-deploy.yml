@@ -32,7 +32,10 @@ jobs:
       - name: Build application
         run: npm run build
       - name: Verify R2 bucket exists
-        run: npx wrangler r2 bucket list --json | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{if(!JSON.parse(s).some(x=>x.name==="eita-previews"))process.exit(1)})'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler r2 bucket info eita-previews
       - name: Deploy Worker with R2 binding
         run: npx wrangler deploy
       - name: Verify artifact route does not fall back to SPA
