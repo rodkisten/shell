@@ -271,8 +271,12 @@ jobs:
           EOF
           # Update only the dashboard owned by this workflow, never an
           # unrelated comment. Paginate to avoid duplicates on busy PRs.
-          gh api --paginate "repos/$REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" > "$comments"
+          gh api --paginate --jq '.[]' "repos/$REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" | jq -s . > "$comments"
           comment_id="$(jq -r --arg marker "$marker" '[.[] | select(.user.login == "github-actions[bot]" and (.body | contains($marker))) | .id] | first // empty' "$comments")"
+          if [[ -z "$comment_id" ]]; then
+            # Migrate the previous bot-owned preview comment in place.
+            comment_id="$(jq -r '[.[] | select(.user.login == "github-actions[bot]" and (.body | contains("PR Preview:")) and (.body | contains("shell.preview.migos.club"))) | .id] | first // empty' "$comments")"
+          fi
           if [[ -n "$comment_id" ]]; then
             gh api --method PATCH "repos/$REPOSITORY/issues/comments/$comment_id" --raw-field body="$(cat "$body")" >/dev/null
             echo "Updated preview dashboard comment #$comment_id" >> "$GITHUB_STEP_SUMMARY"
