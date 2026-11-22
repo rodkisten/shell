@@ -1,5 +1,6 @@
+import { highlightFlowSource } from '../lib/flow-highlight';
 import { checkShell, type Finding } from '../lib/shellcheck';
-import { FLOW_COLORS, flowNodeColor, flowEdgeColor, tokenizeFlowLabel } from '../lib/flow-colors';
+import { FLOW_COLORS, flowNodeColor, flowEdgeColor } from '../lib/flow-colors';
 import { layoutShellFlow } from '../lib/flow-layout';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ShellAnalysis } from '../lib/shell-analysis';
@@ -260,7 +261,7 @@ export function ExecutionExplorer({
                       title={invalidRange ? 'Invalid source range' : finding?.message ?? (unknown ? 'Unrecognized AST node type' : `Focus ${node.kind} in editor`)}
                       onClick={() => { setSelectedFlowId(node.id); if (!invalidRange) onReveal?.(from, to); }}>
                       <strong style={{ color: nodeColor }}>{invalidRange ? 'Invalid range' : finding ? `${finding.level}: ${node.kind}` : unknown ? `Unknown: ${node.kind}` : node.kind}</strong>
-                      <code>{tokenizeFlowLabel(snippet.slice(0, 72) || node.id).map((token, index) => <span key={index} style={{ color: token.color }}>{token.text}</span>)}</code>
+                      <code className={styles.flowHighlighted} dangerouslySetInnerHTML={{ __html: highlightFlowSource(snippet.slice(0, 120) || node.id) }} />
                       <small>{finding?.message ?? (flow.edges.filter(edge => edge.from === node.id).map(edge => edge.kind).join(' · ') || 'fim')}</small>
                     </button>
                   );
