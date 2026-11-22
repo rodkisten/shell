@@ -35,12 +35,14 @@ export function buildSemanticFlow(snapshot: ShellSnapshot): WasmFlowResult {
   const connect = (frontier: Frontier[], id: string) => {
     for (const previous of frontier) link(previous.id, id, previous.kind);
   };
-  const terminal = (raw: Raw): boolean => {
+  const loopStack: Array<{ head: string; breaks: Frontier[] }> = [];
+  const terminal = (raw: Raw): string | null => {
     const cmd = object(raw.cmd) ?? raw;
-    if (cmd.type !== 'CallExpr') return false;
+    if (cmd.type !== 'CallExpr') return null;
     const first = list(cmd.args)[0];
     const lit = first ? list(first.parts).find(part => part.type === 'Lit') : undefined;
-    return lit?.value === 'return' || lit?.value === 'exit' || lit?.value === 'break' || lit?.value === 'continue';
+    const name = lit?.value;
+    return name === 'return' || name === 'exit' || name === 'break' || name === 'continue' ? name : null;
   };
   const sequence = (items: Raw[], incoming: Frontier[]): Frontier[] => {
     let frontier = incoming;
@@ -54,8 +56,8 @@ export function buildSemanticFlow(snapshot: ShellSnapshot): WasmFlowResult {
       // A declaration does not run its body; model it as a separate entry.
       const id = addNode(raw, 'FuncDecl');
       connect(incoming, id);
-      const body = object(cmd.body);
-      if (body) visit(body, [{ id, kind: 'declaration' }]);
+      // The function body is only entered by a call, which is not resolved here.
+      // Do not add a declaration-to-body execution edge.
       return [{ id, kind: 'next' }];
     }
     if (kind === 'Block' || kind === 'Subshell') {
@@ -78,9 +80,12 @@ export function buildSemanticFlow(snapshot: ShellSnapshot): WasmFlowResult {
       const cond = kind === 'WhileClause' ? list(cmd.cond) : [];
       const conditionEnds = cond.length ? sequence(cond, [{ id, kind: 'condition' }]) : [{ id, kind: 'true' }];
       const body = list(cmd.do);
+      const context = { head: id, breaks: [] as Frontier[] };
+      loopStack.push(context);
       const bodyEnds = body.length ? sequence(body, conditionEnds.map(end => ({ id: end.id, kind: 'true' }))) : conditionEnds;
+      loopStack.pop();
       for (const end of bodyEnds) link(end.id, id, 'loop');
-      return [{ id, kind: 'false' }];
+      return [{ id, kind: 'false' }, ...context.breaks];
     }
     if (kind === 'CaseClause') {
       const arms = list(cmd.items);
@@ -108,7 +113,16 @@ export function buildSemanticFlow(snapshot: ShellSnapshot): WasmFlowResult {
         ? [...rightEnd, ...leftEnd.map(end => ({ id: end.id, kind: 'next' }))]
         : rightEnd;
     }
-    return terminal(raw) ? [] : [{ id, kind: 'next' }];
+    const control = terminal(raw);
+    if (control === 'continue' && loopStack.length) {
+      link(id, loopStack[loopStack.length - 1].head, 'loop');
+      return [];
+    }
+    if (control === 'break' && loopStack.length) {
+      loopStack[loopStack.length - 1].breaks.push({ id, kind: 'next' });
+      return [];
+    }
+    return control ? [] : [{ id, kind: 'next' }];
   };
   const root = object(snapshot.ast);
   if (root) sequence(list(root.stmts), []);
@@ -116,7 +130,7 @@ export function buildSemanticFlow(snapshot: ShellSnapshot): WasmFlowResult {
     nodes, edges,
     warnings: [
       'Grafo estático: caminhos possíveis, não execução observada.',
-      'Chamadas de funções, expansão dinâmica e break/continue ainda exigem resolução de contexto.',
+      'Chamadas de funções, expansão dinâmica e comandos de controle com níveis explícitos ainda não são resolvidos.',
     ],
   };
 }
