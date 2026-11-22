@@ -318,3 +318,10 @@
 .flowLegend span{display:inline-flex;align-items:center;gap:5px;font-size:10px;color:#cbd5e1}
 .flowLegend i{display:inline-block;width:8px;height:8px;border-radius:3px;flex:none}
 @media(max-width:700px){.flowScroll{height:45dvh;max-height:none;touch-action:pan-x pan-y}.flowToolbar button{min-height:32px}}
+
+/* AST cards and explanations use the same token palette as flow nodes. */
+.blockCard .flowHighlighted{display:block;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
+.astMetadata{margin-top:12px;border-top:1px solid #64748b33;padding-top:10px}
+.astMetadata summary{cursor:pointer;color:#94a3b8;font-size:12px;list-style-position:inside}
+.astMetadata[open] summary{color:#c4b5fd}
+.explainCode .flowHighlighted{white-space:pre-wrap;overflow-wrap:anywhere}
