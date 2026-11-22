@@ -39,17 +39,10 @@ export function ExecutionExplorer({
   const [diagnostics, setDiagnostics] = useState<Finding[]>([]);
   const [simulationOpen, setSimulationOpen] = useState(false);
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
+  const [customVariableName, setCustomVariableName] = useState('');
   const simulatedValues = useMemo(() => Object.fromEntries(
     Object.entries(variableValues).filter(([, value]) => value.length > 0).map(([key, value]) => [key, parseSimulatedValue(value)])
   ), [variableValues]);
-  const branchDecisions = useMemo(() => {
-    const decisions = new Map<string, 'true' | 'false' | 'unknown'>();
-    for (const node of flow?.nodes ?? []) {
-      const code = source.slice(node.from ?? 0, node.to ?? 0);
-      decisions.set(node.id, evaluateFlowBranch(node.kind, code, simulatedValues));
-    }
-    return decisions;
-  }, [flow, source, simulatedValues]);
   const detectedVariables = useMemo(() => [...new Set(
     [...source.matchAll(/\$\{([A-Za-z_][\w]*)\}|\$([A-Za-z_][\w]*)/g)]
       .map(match => match[1] ?? match[2]).filter((name): name is string => Boolean(name))
@@ -136,6 +129,14 @@ export function ExecutionExplorer({
   const pinchDistance = (touches: React.TouchList) => Math.hypot(
     touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY,
   );
+  const branchDecisions = useMemo(() => {
+    const decisions = new Map<string, 'true' | 'false' | 'unknown'>();
+    for (const node of flow?.nodes ?? []) {
+      const code = source.slice(offset(node.start), offset(node.end));
+      decisions.set(node.id, evaluateFlowBranch(node.kind, code, simulatedValues));
+    }
+    return decisions;
+  }, [flow, source, simulatedValues]);
   const activeNode = flow?.nodes
     .filter(node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset < offset(node.end))
     .sort((a, b) => (offset(a.end) - offset(a.start)) - (offset(b.end) - offset(b.start)))[0];
@@ -309,11 +310,21 @@ export function ExecutionExplorer({
               </button>
               {simulationOpen && <div className={styles.simulationBody}>
                 <p>Informe valores para visualizar substituições e avaliar testes simples (-z, -n, =, != e comparações numéricas). Arrays podem ser informados como JSON, por exemplo [\"api\",\"web\"]. Comandos não são executados.</p>
-                {detectedVariables.length === 0 && <p>Nenhuma referência simples a variável encontrada.</p>}
-                {detectedVariables.map(name => <label key={name} className={styles.simulationField}>
+                {detectedVariables.length === 0 && Object.keys(variableValues).length === 0 && <p>Nenhuma referência simples encontrada. Adicione uma variável manualmente abaixo.</p>}
+                {[...new Set([...detectedVariables, ...Object.keys(variableValues)])].map(name => <label key={name} className={styles.simulationField}>
                   <span>${name}</span>
                   <input value={variableValues[name] ?? ''} placeholder="Valor de exemplo" onChange={event => setVariableValues(previous => ({ ...previous, [name]: event.target.value }))} />
                 </label>)}
+                <form className={styles.simulationField} onSubmit={event => {
+                  event.preventDefault();
+                  const name = customVariableName.trim();
+                  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return;
+                  setVariableValues(previous => ({ ...previous, [name]: previous[name] ?? '' }));
+                  setCustomVariableName('');
+                }}>
+                  <input aria-label="Nome da variável" value={customVariableName} placeholder="Nova variável" onChange={event => setCustomVariableName(event.target.value)} />
+                  <button type="submit">Adicionar variável</button>
+                </form>
                 <button type="button" onClick={() => setVariableValues({})}>Limpar valores</button>
               </div>}
             </div>
