@@ -1,3 +1,4 @@
+import { checkShell, type Finding } from '../lib/shellcheck';
 import { FLOW_COLORS, flowNodeColor, flowEdgeColor, tokenizeFlowLabel } from '../lib/flow-colors';
 import { layoutShellFlow } from '../lib/flow-layout';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -32,6 +33,17 @@ export function ExecutionExplorer({
 }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<Finding[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void checkShell(source).then(findings => { if (!cancelled) setDiagnostics(findings); });
+    return () => { cancelled = true; };
+  }, [source]);
+  const diagnosticOffsets = useMemo(() => diagnostics.map(finding => {
+    const lines = source.split('\n');
+    const from = lines.slice(0, Math.max(0, finding.line - 1)).reduce((sum, line) => sum + line.length + 1, 0) + Math.max(0, finding.column - 1);
+    return { ...finding, from };
+  }), [diagnostics, source]);
   const activeAstRef = useRef<HTMLDivElement | null>(null);
   const activeBlockRef = useRef<HTMLButtonElement | null>(null);
   const activeFlowRef = useRef<HTMLButtonElement | null>(null);
@@ -238,17 +250,18 @@ export function ExecutionExplorer({
                   const isSelected = selectedFlowId === node.id || (!selectedFlowId && activeNode?.id === node.id);
                   const snippet = source.slice(from, to).trim();
                   const invalidRange = from < 0 || to <= from || to > source.length;
-                  const nodeColor = invalidRange ? FLOW_COLORS.failure : flowNodeColor(node.kind, snippet);
+                  const finding = diagnosticOffsets.find(item => item.from >= from && item.from <= to);
+                  const nodeColor = invalidRange || finding?.level === 'error' ? FLOW_COLORS.failure : finding ? FLOW_COLORS.unknown : flowNodeColor(node.kind, snippet);
                   const unknown = !invalidRange && nodeColor === FLOW_COLORS.unknown;
                   return (
                     <button key={node.id} ref={isSelected ? activeFlowRef : undefined} type="button"
                       className={`${styles.flowNode} ${styles.flowNodePositioned} ${isSelected ? styles.isSelected : ''}`}
                       style={{ left: node.x, top: node.y, borderColor: nodeColor, '--flow-node-color': nodeColor } as React.CSSProperties} aria-pressed={isSelected}
-                      title={invalidRange ? 'Invalid source range' : unknown ? 'Unrecognized AST node type' : `Focus ${node.kind} in editor`}
+                      title={invalidRange ? 'Invalid source range' : finding?.message ?? (unknown ? 'Unrecognized AST node type' : `Focus ${node.kind} in editor`)}
                       onClick={() => { setSelectedFlowId(node.id); if (!invalidRange) onReveal?.(from, to); }}>
-                      <strong style={{ color: nodeColor }}>{invalidRange ? 'Invalid range' : unknown ? `Unknown: ${node.kind}` : node.kind}</strong>
+                      <strong style={{ color: nodeColor }}>{invalidRange ? 'Invalid range' : finding ? `${finding.level}: ${node.kind}` : unknown ? `Unknown: ${node.kind}` : node.kind}</strong>
                       <code>{tokenizeFlowLabel(snippet.slice(0, 72) || node.id).map((token, index) => <span key={index} style={{ color: token.color }}>{token.text}</span>)}</code>
-                      <small>{flow.edges.filter(edge => edge.from === node.id).map(edge => edge.kind).join(' · ') || 'fim'}</small>
+                      <small>{finding?.message ?? (flow.edges.filter(edge => edge.from === node.id).map(edge => edge.kind).join(' · ') || 'fim')}</small>
                     </button>
                   );
                 })}
