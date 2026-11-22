@@ -2637,3 +2637,9 @@ a {
  .manual-popover .manual-sections p{font-size:11px!important}
  .mobile-nav{z-index:85!important}
 }
+
+/* The editor starts at two lines and grows with script content. Explicit drag-resize overrides this. */
+.editor-inner.editor-auto-grow{min-height:0!important;max-height:65dvh;overflow:auto}
+.editor-auto-grow .code-editor,.editor-auto-grow .cm-editor{height:100%;min-height:0}
+.editor-auto-grow .cm-content{min-height:0!important}
+@media(max-width:700px){.editor-panel .editor-inner.editor-auto-grow{min-height:0!important;height:auto;max-height:60dvh}}
