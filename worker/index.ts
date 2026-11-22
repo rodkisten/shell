@@ -162,11 +162,11 @@ async function eitaPreview(request: Request, env: Env): Promise<Response> {
       'curl -fsSL ' + JSON.stringify('https://shell.migos.club' + base + '/artifact') + ' -o "$tmp/eita.tar.gz"',
       'printf "%s  %s\\n" ' + JSON.stringify(manifest.sha256) + ' "$tmp/eita.tar.gz" | sha256sum -c -',
       'mkdir -p "$HOME/.local/bin"',
-      'tar -xzf "$tmp/eita.tar.gz" -C "$tmp" eita',
+      'tar -xzf "$tmp/eita.tar.gz" -C "$tmp" ./eita',
       'install -m 0755 "$tmp/eita" "$HOME/.local/bin/eita"',
       'printf "Eita preview installed to %s\\n" "$HOME/.local/bin/eita"',
       '',
-    ].join('\\n');
+    ].join('\n');
     return new Response(request.method === 'HEAD' ? null : script, { headers: { 'Content-Type': 'text/x-shellscript; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
   }
   const headers = new Headers();
