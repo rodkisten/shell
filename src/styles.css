@@ -2618,3 +2618,22 @@ a {
   .explorer-tabs{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px!important}
   .explorer-tabs button{min-width:0;font-size:11px!important;padding:8px 3px!important}
 }
+
+
+/* Tight editor-first layout. Actions live in the toolbar, not a second toolbox. */
+@media(max-width:700px){
+ .compact-reference-panel{margin-top:10px!important;padding:10px!important}
+ .compact-reference-panel .toolbox-section-title{margin:0 0 8px!important}
+ .compact-reference-panel .snippet-toggle{margin-top:8px!important;padding:10px!important}
+ .editor-panel .editor-inner{min-height:250px}
+ .editor-panel .editor-footer{padding:5px 9px!important;min-height:28px!important}
+ .editor-panel .editor-keyboard{padding:5px 6px!important;gap:5px!important;overflow-x:auto;scrollbar-width:none}
+ .editor-panel .editor-keyboard button{flex:none;min-height:30px!important;padding:5px 10px!important}
+ .terminal-panel .terminal-heading{min-height:38px!important;padding:7px 10px!important}
+ .terminal-panel .terminal-bottom{padding:6px 10px!important}
+ .terminal-panel .terminal-bottom button{font-size:11px!important}
+ .manual-popover .manual-sections{max-width:100%;overflow-wrap:anywhere}
+ .manual-popover .manual-sections h4{font-size:11px}
+ .manual-popover .manual-sections p{font-size:11px!important}
+ .mobile-nav{z-index:85!important}
+}
