@@ -44,7 +44,7 @@ type LinuxBucket = {
     writeHttpMetadata(headers: Headers): void;
   } | null>;
 };
-type Env = { LINUX_ASSETS?: LinuxBucket; ASSETS: { fetch(request: Request): Promise<Response> } };
+type Env = { LINUX_ASSETS?: LinuxBucket; EITA_PREVIEWS?: LinuxBucket; ASSETS: { fetch(request: Request): Promise<Response> } };
 const linuxAssets = new Set(['libv86.js', 'v86.wasm', 'seabios.bin', 'vgabios.bin', 'alpine.iso']);
 
 async function linuxAsset(request: Request, env: Env): Promise<Response> {
@@ -136,6 +136,47 @@ async function debianInstaller(request: Request, path: string): Promise<Response
   }
 }
 
+
+// Preview artifacts are immutable within an upload, but the PR pointer moves.
+// The worker never executes uploaded scripts and never falls back to SPA HTML.
+async function eitaPreview(request: Request, env: Env): Promise<Response> {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405 });
+  if (!env.EITA_PREVIEWS) return new Response('Preview storage unavailable', { status: 503 });
+  const path = new URL(request.url).pathname;
+  const match = /^\/install\/eita\/(pr\/([1-9][0-9]*)|preview)(?:\/(artifact|checksum|manifest.json))?\/?$/.exec(path);
+  if (!match) return new Response('Unknown Eita preview route', { status: 404 });
+  const prefix = match[2] ? 'pr/' + match[2] : 'preview';
+  const target = match[3] ?? 'installer';
+  const archive = 'eita-x86_64-unknown-linux-gnu.tar.gz';
+  const key = prefix + '/' + (target === 'artifact' ? archive : target === 'checksum' ? archive + '.sha256' : 'manifest.json');
+  const object = await env.EITA_PREVIEWS.get(key);
+  if (!object) return new Response('Preview artifact not found', { status: 404, headers: { 'Cache-Control': 'no-store' } });
+  if (target === 'installer') {
+    const manifest = await new Response(object.body).json() as { sha256?: string };
+    if (!manifest.sha256 || !/^[a-f0-9]{64}$/.test(manifest.sha256)) return new Response('Invalid preview manifest', { status: 502 });
+    const base = path.replace(/\/$/, '');
+    const script = [
+      '#!/bin/sh', 'set -eu',
+      'tmp="$(mktemp -d)"',
+      'trap \'rm -rf "$tmp"\' EXIT',
+      'curl -fsSL ' + JSON.stringify('https://shell.migos.club' + base + '/artifact') + ' -o "$tmp/eita.tar.gz"',
+      'printf "%s  %s\\n" ' + JSON.stringify(manifest.sha256) + ' "$tmp/eita.tar.gz" | sha256sum -c -',
+      'mkdir -p "$HOME/.local/bin"',
+      'tar -xzf "$tmp/eita.tar.gz" -C "$tmp" eita',
+      'install -m 0755 "$tmp/eita" "$HOME/.local/bin/eita"',
+      'printf "Eita preview installed to %s\\n" "$HOME/.local/bin/eita"',
+      '',
+    ].join('\\n');
+    return new Response(request.method === 'HEAD' ? null : script, { headers: { 'Content-Type': 'text/x-shellscript; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
+  }
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set('Content-Type', target === 'artifact' ? 'application/gzip' : target === 'checksum' ? 'text/plain; charset=utf-8' : 'application/json; charset=utf-8');
+  headers.set('Cache-Control', 'no-store');
+  headers.set('X-Content-Type-Options', 'nosniff');
+  return new Response(request.method === 'HEAD' ? null : object.body, { headers });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -146,17 +187,9 @@ export default {
       return env.ASSETS.fetch(new Request(indexUrl, request));
     }
     if (url.pathname.startsWith('/debian/')) return debianInstaller(request, url.pathname);
-    // Artifact routes must never fall through to the SPA index.html.
-    // A dedicated artifact resolver will replace this explicit failure response.
+    if (url.pathname.startsWith('/install/eita/')) return eitaPreview(request, env);
     if (url.pathname === '/install' || url.pathname.startsWith('/install/')) {
-      return new Response('Installer artifact not found', {
-        status: 404,
-        headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Cache-Control': 'no-store',
-          'X-Content-Type-Options': 'nosniff',
-        },
-      });
+      return new Response('Installer artifact not found', { status: 404, headers: { 'Cache-Control': 'no-store' } });
     }
     if (url.pathname.startsWith('/v86/')) return linuxAsset(request, env);
     if (url.pathname.startsWith('/api/')) {
