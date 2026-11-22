@@ -103,6 +103,7 @@ export function App() {
   const [editorFontSize, setEditorFontSize] = useState(() => Math.max(9, Math.min(14, Number(localStorage.getItem('shellconductor:editor-font-size')) || 11)));
   const [editorWordWrap, setEditorWordWrap] = useState(() => localStorage.getItem('shellconductor:editor-word-wrap') !== 'false');
   const [editorHeight, setEditorHeight] = useState<number | null>(null);
+  const autoEditorLines = Math.max(2, script.split('\n').length);
   const [terminalHeight, setTerminalHeight] = useState(() => Number(localStorage.getItem('shellconductor:terminal-height')) || 260);
   const [runRevision, setRunRevision] = useState(0);
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -436,7 +437,7 @@ export function App() {
                     <button type="button" className="editor-command-primary" title="Explicar" aria-label="Explicar" onClick={() => void explain()} disabled={!!busy}><BookOpen size={17}/><span className="command-label">Explicar</span></button>
                     <button type="button" title="Fluxo" aria-label="Fluxo" onClick={() => { setExplorerTab('flow'); setExplorerOpen(true); if (!explanation) void explain(); }} disabled={!!busy}><Activity size={17}/><span className="command-label">Fluxo</span></button>
                   </nav>
-                  <div className="editor-inner editor-auto-grow" style={{ height: editorHeight ?? undefined }}><ShellEditor ref={editor} code={script} fontSize={editorFontSize} wordWrap={editorWordWrap} onChange={change} onCursor={setCursor} onInspect={setInspected} onSemanticInspect={setSemanticSelection} onRun={() => { void run(); }}/></div>
+                  <div className="editor-inner editor-auto-grow" style={{ height: editorHeight ?? `clamp(52px, ${autoEditorLines * 1.55 + 1.5}em, 65dvh)` }}><ShellEditor ref={editor} code={script} fontSize={editorFontSize} wordWrap={editorWordWrap} onChange={change} onCursor={setCursor} onInspect={setInspected} onSemanticInspect={setSemanticSelection} onRun={() => { void run(); }}/></div>
                   <CommandHelp help={quickHelp} onManual={setInspected}/>
                   {semanticSelection && <section className="semantic-selection-card" aria-label="Explicação do trecho selecionado" aria-live="polite">
                     <div className="semantic-selection-head">
