@@ -3,7 +3,7 @@
   "name": "shell",
   "main": "./worker/index.ts",
   "compatibility_date": "2026-11-09",
-  "r2_buckets": [{ "binding": "LINUX_ASSETS", "bucket_name": "shell-linux-assets" }],
+  "r2_buckets": [{ "binding": "LINUX_ASSETS", "bucket_name": "shell-linux-assets" }, { "binding": "EITA_PREVIEWS", "bucket_name": "eita-previews" }],
   "previews": {
     "r2_buckets": [{ "binding": "LINUX_ASSETS", "bucket_name": "shell-linux-assets-preview" }]
   },
