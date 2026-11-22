@@ -31,6 +31,7 @@ export function ExecutionExplorer({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const activeAstRef = useRef<HTMLDivElement | null>(null);
+  const activeBlockRef = useRef<HTMLButtonElement | null>(null);
   const activeFlowRef = useRef<HTMLButtonElement | null>(null);
   // Build a single UTF-8 byte -> UTF-16 offset map, including astral Unicode.
   // CodeMirror uses UTF-16 offsets; the Go/WASM parser reports UTF-8 bytes.
@@ -71,16 +72,16 @@ export function ExecutionExplorer({
     return matches;
   }, [analysis.astNodes, normalizedQuery]);
   useEffect(() => {
-    const target = view === 'flow' ? activeFlowRef.current : activeAstRef.current;
+    const target = view === 'flow' ? activeFlowRef.current : astMode === 'blocks' ? activeBlockRef.current : activeAstRef.current;
     if (!target) return;
-    const container = target.closest('[role="tree"], [aria-label="Grafo de fluxo de controle"]');
+    const container = target.closest('[role="tree"], [aria-label="Grafo de fluxo de controle"], [aria-label="Blocos explicativos do script"]');
     if (!container) return;
     const targetRect = target.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
     if (targetRect.top < containerRect.top || targetRect.bottom > containerRect.bottom) {
       target.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     }
-  }, [cursorOffset, view]);
+  }, [cursorOffset, view, astMode, selectedId]);
 
   const children = useMemo(() => {
     const map = new Map<string | undefined, typeof analysis.astNodes>();
@@ -95,7 +96,7 @@ export function ExecutionExplorer({
   const activeAstNode = analysis.astNodes
     .filter(node => cursorOffset !== undefined && node.from !== undefined && node.to !== undefined && node.from <= cursorOffset && cursorOffset < node.to)
     .sort((a, b) => ((a.to ?? 0) - (a.from ?? 0)) - ((b.to ?? 0) - (b.from ?? 0)))[0];
-  const selected = analysis.astNodes.find(node => node.id === (activeAstNode?.id ?? selectedId));
+  const selected = analysis.astNodes.find(node => node.id === (selectedId ?? activeAstNode?.id));
   const explanation = analysis.nodes.find(node => node.astId === selected?.id)?.explanation;
   const selectedParent = selected?.parentId ? analysis.astNodes.find(node => node.id === selected.parentId) : undefined;
   const selectedChildren = selected ? (children.get(selected.id) ?? []) : [];
@@ -117,8 +118,10 @@ export function ExecutionExplorer({
     if (node.navigable && node.from !== undefined && node.to !== undefined) onReveal?.(node.from, node.to);
   };
 
+  const blockRelations = useMemo(() => new Map(analysis.edges.map(edge => [`${edge.from}:${edge.to}`, edge.kind])), [analysis.edges]);
   const blockNodes = useMemo(() => analysis.astNodes.filter(node => node.navigable && node.from !== undefined && node.to !== undefined && (node.kind === 'Stmt' || node.kind === 'FuncDecl' || node.kind === 'IfClause' || node.kind === 'ForClause' || node.kind === 'WhileClause' || node.kind === 'CaseClause')).filter(node => !matchingIds || matchingIds.has(node.id)), [analysis.astNodes, matchingIds]);
 
+  const blockOrder = useMemo(() => [...blockNodes].sort((a, b) => (a.from ?? 0) - (b.from ?? 0) || (b.to ?? 0) - (a.to ?? 0)), [blockNodes]);
   const visible = useMemo(() => {
     const output: typeof analysis.astNodes = [];
     const visit = (parent: string | undefined) => {
@@ -244,15 +247,20 @@ export function ExecutionExplorer({
           </div>
           {matchingIds && <p className={styles.note} role="status">{analysis.astNodes.filter(node => matchingIds.has(node.id) && `${node.kind} ${node.label} ${node.description} ${node.id}`.toLocaleLowerCase().includes(normalizedQuery)).length} correspondências</p>}
           {astMode === "blocks" && <div className={styles.blockList} aria-label="Blocos explicativos do script">
-            {blockNodes.length === 0 && <p className={styles.note}>Nenhum bloco encontrado para este filtro.</p>}
-            {blockNodes.map((node, index) => {
+            {blockOrder.length === 0 && <p className={styles.note}>Nenhum bloco encontrado para este filtro.</p>}
+            {blockOrder.map((node, index) => {
               const code = source.slice(node.from!, node.to!);
               const parts = tokens.filter(token => token.from >= node.from! && token.to <= node.to!);
-              return <button key={node.id} type="button" className={`${styles.blockCard} ${selected?.id === node.id ? styles.blockCardActive : ""}`} aria-pressed={selected?.id === node.id} onClick={() => { selectAstNode(node); setFocusedToken(null); }}>
+              const previous = blockOrder[index - 1];
+              const relation = previous ? blockRelations.get(`${previous.id}:${node.id}`) : undefined;
+              const nested = previous && node.from! >= previous.from! && node.to! <= previous.to!;
+              return <div key={node.id} className={styles.blockEntry}>
+                {index > 0 && <div className={styles.blockRelation} aria-label="Relação estrutural">{nested ? "↳ Bloco interno" : relation ? `↓ Relação estática: ${relation}` : "↓ Próximo trecho no código"}</div>}
+                <button ref={selected?.id === node.id ? activeBlockRef : undefined} type="button" className={`${styles.blockCard} ${selected?.id === node.id ? styles.blockCardActive : ""}`} aria-pressed={selected?.id === node.id} onClick={() => { selectAstNode(node); setFocusedToken(null); }}>
                 <span className={styles.blockCardHeading}><strong>{index + 1}. {node.kind}</strong><small>{parts.length} partes explicáveis</small></span>
                 <code>{code.length > 180 ? `${code.slice(0, 180)}…` : code}</code>
                 <span className={styles.blockCardDescription}>{node.description}</span>
-              </button>;
+              </button></div>;
             })}
           </div>}
           {astMode === "tree" && <div role="tree" aria-label="Shell AST" className={styles.tree}>
