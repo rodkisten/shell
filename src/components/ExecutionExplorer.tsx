@@ -1,3 +1,4 @@
+import { layoutShellFlow } from '../lib/flow-layout';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ShellAnalysis } from '../lib/shell-analysis';
 import type { SemanticToken } from '../lib/semantic-shell';
@@ -47,6 +48,7 @@ export function ExecutionExplorer({
     return mapping;
   }, [source]);
   const offset = (position: number) => byteOffsets[Math.max(0, Math.min(byteOffsets.length - 1, position))] ?? 0;
+  const graph = useMemo(() => flow ? layoutShellFlow(flow) : null, [flow]);
   const activeNode = flow?.nodes
     .filter(node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset < offset(node.end))
     .sort((a, b) => (offset(a.end) - offset(a.start)) - (offset(b.end) - offset(b.start)))[0];
@@ -203,57 +205,48 @@ export function ExecutionExplorer({
               {flow.nodes.length} nós · {flow.edges.length} conexões · análise estática
             </div>
             <div className={styles.flowScroll}>
-              <svg
-                className={styles.flowLines}
-                width="100%"
-                height={Math.max(120, flow.nodes.length * 84)}
-                aria-hidden="true"
-              >
-                {flow.edges.map((edge, index) => {
-                  const from = flow.nodes.findIndex(node => node.id === edge.from);
-                  const to = flow.nodes.findIndex(node => node.id === edge.to);
-                  if (from < 0 || to < 0) return null;
-                  return (
-                    <path
-                      key={index}
-                      d={`M 130 ${from * 84 + 66} C 130 ${from * 84 + 96}, 130 ${to * 84 + 12}, 130 ${to * 84 + 24}`}
-                      fill="none"
-                      stroke={edge.kind === 'next' ? '#64748b' : '#a78bfa'}
-                      strokeWidth="2"
-                      strokeDasharray={edge.kind === 'next' ? undefined : '5 4'}
-                    />
-                  );
-                })}
-              </svg>
-              <div className={styles.flowNodes}>
-                {flow.nodes.map(node => {
+              {graph && <div className={styles.flowCanvas} style={{ width: graph.width, height: graph.height }}>
+                <svg className={styles.flowLines} width={graph.width} height={graph.height} viewBox={`0 0 ${graph.width} ${graph.height}`} aria-label="Conexões de fluxo">
+                  <defs>
+                    <marker id="flow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                      <path d="M0 0 L8 4 L0 8 Z" fill="#a78bfa" />
+                    </marker>
+                  </defs>
+                  {flow.edges.map((edge, index) => {
+                    const from = graph.nodes.find(node => node.id === edge.from);
+                    const to = graph.nodes.find(node => node.id === edge.to);
+                    if (!from || !to) return null;
+                    const back = to.y <= from.y;
+                    const x1 = from.x + 100;
+                    const x2 = to.x + 100;
+                    const y1 = from.y + 68;
+                    const y2 = to.y;
+                    const bend = back ? Math.max(x1, x2) + 135 : (x1 + x2) / 2;
+                    const d = back
+                      ? `M ${x1} ${y1} C ${bend} ${y1 + 35}, ${bend} ${y2 - 35}, ${x2} ${y2}`
+                      : `M ${x1} ${y1} C ${x1} ${(y1 + y2) / 2}, ${x2} ${(y1 + y2) / 2}, ${x2} ${y2}`;
+                    return <g key={index}>
+                      <path d={d} fill="none" stroke={edge.kind === 'next' ? '#64748b' : '#a78bfa'} strokeWidth="2" strokeDasharray={back ? '5 4' : undefined} markerEnd="url(#flow-arrow)" />
+                      {edge.kind !== 'next' && <text x={(x1 + x2) / 2 + (back ? 65 : 0)} y={(y1 + y2) / 2 - 5} fill="#ddd6fe" fontSize="11" textAnchor="middle">{edge.kind}</text>}
+                    </g>;
+                  })}
+                </svg>
+                {graph.nodes.map(node => {
                   const from = offset(node.start);
                   const to = offset(node.end);
                   const isSelected = activeNode ? activeNode.id === node.id : selectedFlowId === node.id;
                   return (
-                    <button
-                      key={node.id}
-                      ref={isSelected ? activeFlowRef : undefined}
-                      type="button"
-                      className={`${styles.flowNode} ${isSelected ? styles.isSelected : ''}`}
-                      aria-pressed={isSelected}
-                      onClick={() => {
-                        setSelectedFlowId(node.id);
-                        onReveal?.(from, to);
-                      }}
-                    >
+                    <button key={node.id} ref={isSelected ? activeFlowRef : undefined} type="button"
+                      className={`${styles.flowNode} ${styles.flowNodePositioned} ${isSelected ? styles.isSelected : ''}`}
+                      style={{ left: node.x, top: node.y }} aria-pressed={isSelected}
+                      onClick={() => { setSelectedFlowId(node.id); onReveal?.(from, to); }}>
                       <strong>{node.kind}</strong>
                       <code>{source.slice(from, to).trim().slice(0, 72) || node.id}</code>
-                      <small>
-                        {flow.edges
-                          .filter(edge => edge.from === node.id)
-                          .map(edge => edge.kind)
-                          .join(' · ') || 'fim'}
-                      </small>
+                      <small>{flow.edges.filter(edge => edge.from === node.id).map(edge => edge.kind).join(' · ') || 'fim'}</small>
                     </button>
                   );
                 })}
-              </div>
+              </div>}
             </div>
             <p className={styles.note}>
               As conexões são aproximações estáticas. Não representam execução observada.
