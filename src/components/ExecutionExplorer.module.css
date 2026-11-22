@@ -287,3 +287,22 @@
 .flowNodePositioned.isSelected{outline:2px solid var(--flow-node-color,#a78bfa);outline-offset:2px}
 .flowNodePositioned code{white-space:pre;overflow:hidden;text-overflow:ellipsis}
 .flowNodePositioned:focus-visible{outline:3px solid var(--flow-node-color,#a78bfa);outline-offset:3px}
+
+/* Highlight.js Bash tokens mapped to CodeMirror One Dark's dark palette. */
+.flowHighlighted { color: #abb2bf; font-family: inherit; }
+.flowHighlighted :global(.hljs-keyword),
+.flowHighlighted :global(.hljs-built_in),
+.flowHighlighted :global(.hljs-selector-tag) { color: #c678dd; }
+.flowHighlighted :global(.hljs-string),
+.flowHighlighted :global(.hljs-quote) { color: #98c379; }
+.flowHighlighted :global(.hljs-variable),
+.flowHighlighted :global(.hljs-template-variable),
+.flowHighlighted :global(.hljs-attr) { color: #e06c75; }
+.flowHighlighted :global(.hljs-number),
+.flowHighlighted :global(.hljs-literal) { color: #d19a66; }
+.flowHighlighted :global(.hljs-title),
+.flowHighlighted :global(.hljs-function),
+.flowHighlighted :global(.hljs-name) { color: #61afef; }
+.flowHighlighted :global(.hljs-comment) { color: #7f848e; font-style: italic; }
+.flowHighlighted :global(.hljs-operator),
+.flowHighlighted :global(.hljs-meta) { color: #56b6c2; }
