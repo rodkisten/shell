@@ -65,6 +65,7 @@ export function ExecutionExplorer({
   const graph = useMemo(() => flow ? layoutShellFlow(flow) : null, [flow]);
   const flowViewport = useRef<HTMLDivElement | null>(null);
   const pinch = useRef<{ distance: number; scale: number } | null>(null);
+  const scaleRef = useRef(1);
   const zoomAnchor = useRef<{ x: number; y: number; ratio: number } | null>(null);
   const [flowScale, setFlowScale] = useState(1);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
@@ -72,7 +73,9 @@ export function ExecutionExplorer({
     const viewport = flowViewport.current;
     if (!viewport || !graph) return;
     zoomAnchor.current = null;
-    setFlowScale(Math.max(0.08, Math.min(1, (viewport.clientWidth - 16) / graph.width, (viewport.clientHeight - 16) / graph.height)));
+    const nextScale = Math.max(0.08, Math.min(1, (viewport.clientWidth - 16) / graph.width, (viewport.clientHeight - 16) / graph.height));
+    scaleRef.current = nextScale;
+    setFlowScale(nextScale);
     viewport.scrollTo({ left: 0, top: 0 });
   };
   useEffect(() => {
@@ -86,18 +89,22 @@ export function ExecutionExplorer({
   useEffect(() => {
     if (!graph || !viewportSize.width || !viewportSize.height || view !== 'flow') return;
     zoomAnchor.current = null;
-    setFlowScale(Math.max(0.08, Math.min(1, (viewportSize.width - 16) / graph.width, (viewportSize.height - 16) / graph.height)));
+    const nextScale = Math.max(0.08, Math.min(1, (viewportSize.width - 16) / graph.width, (viewportSize.height - 16) / graph.height));
+    scaleRef.current = nextScale;
+    setFlowScale(nextScale);
     flowViewport.current?.scrollTo({ left: 0, top: 0 });
   }, [graph, viewportSize.width, viewportSize.height, view]);
   const zoomFlow = (next: number, clientX?: number, clientY?: number) => {
     const viewport = flowViewport.current;
     const scale = Math.max(0.08, Math.min(3, next));
+    if (Math.abs(scale - scaleRef.current) < 0.0001) return;
     if (viewport) {
       const rect = viewport.getBoundingClientRect();
       const x = (clientX ?? rect.left + rect.width / 2) - rect.left;
       const y = (clientY ?? rect.top + rect.height / 2) - rect.top;
-      zoomAnchor.current = { x: viewport.scrollLeft + x, y: viewport.scrollTop + y, ratio: scale / flowScale };
+      zoomAnchor.current = { x: viewport.scrollLeft + x, y: viewport.scrollTop + y, ratio: scale / scaleRef.current };
     }
+    scaleRef.current = scale;
     setFlowScale(scale);
   };
   useEffect(() => {
@@ -292,7 +299,8 @@ export function ExecutionExplorer({
                   zoomFlow(pinch.current.scale * pinchDistance(event.touches) / Math.max(1, pinch.current.distance), centerX, centerY);
                 }
               }}
-              onTouchEnd={event => { if (event.touches.length < 2) pinch.current = null; }}>
+              onTouchEnd={event => { if (event.touches.length < 2) pinch.current = null; }}
+              onTouchCancel={() => { pinch.current = null; }}>
               {graph && <div className={styles.flowStage} style={{ width: graph.width * flowScale, height: graph.height * flowScale }}><div className={styles.flowCanvas} style={{ width: graph.width, height: graph.height, transform: 'scale(' + flowScale + ')' }}>
                 <svg className={styles.flowLines} width={graph.width} height={graph.height} viewBox={`0 0 ${graph.width} ${graph.height}`} aria-label="Conexões de fluxo">
                   <defs>
