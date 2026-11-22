@@ -38,6 +38,12 @@ jobs:
           npx wrangler r2 bucket info eita-previews
       - name: Deploy Worker with R2 binding
         run: npx wrangler deploy
+      - name: Verify deployed R2 binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/shell/settings")"
+          printf '%s' "$response" | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const j=JSON.parse(s);if(!j.success||!j.result?.bindings?.some(b=>b.name==="EITA_PREVIEWS"&&b.type==="r2_bucket")){console.error("Missing EITA_PREVIEWS binding");process.exit(1)}console.log("EITA_PREVIEWS binding active")})'
       - name: Verify artifact route does not fall back to SPA
         shell: bash
         run: |
