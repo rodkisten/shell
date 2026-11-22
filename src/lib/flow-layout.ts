@@ -43,16 +43,18 @@ export function layoutShellFlow(flow: WasmFlowResult): FlowLayout {
     }
   }
   // Keep independent statements from overlapping when AST ancestry hides edges.
-  let previousRank = -1;
+  const occupied = new Set<string>();
   for (const node of ordered) {
-    const next = Math.max(rank.get(node.id) ?? 0, previousRank + 1);
-    rank.set(node.id, next);
-    previousRank = next;
+    let level = rank.get(node.id) ?? 0;
+    const column = lane.get(node.id) ?? 0;
+    while (occupied.has(`${column}:${level}`)) level++;
+    rank.set(node.id, level);
+    occupied.add(`${column}:${level}`);
   }
   const positions = ordered.map(node => ({
     ...node,
     x: 340 + (lane.get(node.id) ?? 0) * 250,
     y: 32 + (rank.get(node.id) ?? 0) * 110,
   }));
-  return { nodes: positions, width: 900, height: Math.max(180, 60 + ordered.length * 110) };
+  return { nodes: positions, width: 900, height: Math.max(180, 160 + Math.max(0, ...positions.map(node => node.y))) };
 }
