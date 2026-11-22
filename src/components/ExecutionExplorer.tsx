@@ -53,6 +53,7 @@ export function ExecutionExplorer({
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState('');
   const [astMode, setAstMode] = useState<'blocks' | 'tree'>('blocks');
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
   const [focusedToken, setFocusedToken] = useState<SemanticToken | null>(null);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matchingIds = useMemo(() => {
@@ -122,6 +123,14 @@ export function ExecutionExplorer({
   const blockNodes = useMemo(() => analysis.astNodes.filter(node => node.navigable && node.from !== undefined && node.to !== undefined && (node.kind === 'Stmt' || node.kind === 'FuncDecl' || node.kind === 'IfClause' || node.kind === 'ForClause' || node.kind === 'WhileClause' || node.kind === 'CaseClause')).filter(node => !matchingIds || matchingIds.has(node.id)), [analysis.astNodes, matchingIds]);
 
   const blockOrder = useMemo(() => [...blockNodes].sort((a, b) => (a.from ?? 0) - (b.from ?? 0) || (b.to ?? 0) - (a.to ?? 0)), [blockNodes]);
+  const pathDetails = (node: typeof analysis.astNodes[number]) => {
+    const code = source.slice(node.from ?? 0, node.to ?? 0);
+    if (node.kind === 'IfClause') return { label: 'Condição', branches: [{ label: '✓ Condição verdadeira', detail: 'O ramo then pode ser executado.' }, { label: '✕ Condição falsa', detail: 'O ramo else/elif pode ser avaliado, quando existir.' }] };
+    if (node.kind === 'WhileClause' || node.kind === 'ForClause') return { label: 'Repetição', branches: [{ label: '↻ Próxima iteração', detail: 'O corpo pode executar novamente conforme a condição ou os itens restantes.' }, { label: '→ Saída do laço', detail: 'A execução pode continuar após o laço.' }] };
+    if (node.kind === 'CaseClause') return { label: 'Seleção', branches: [{ label: '◇ Padrão correspondente', detail: 'Um ramo pode ser escolhido conforme o padrão.' }, { label: '→ Próxima instrução', detail: 'O comportamento depende dos padrões e terminadores do case.' }] };
+    if (node.kind === 'Stmt' && /\|\||&&|\|&|\|/.test(code)) return { label: 'Composição', branches: [{ label: '│ Pipeline', detail: 'Um pipe conecta streams entre processos; && e || dependem do status de saída.' }, { label: '→ Continuação', detail: 'A continuação depende dos operadores presentes no trecho.' }] };
+    return null;
+  };
   const visible = useMemo(() => {
     const output: typeof analysis.astNodes = [];
     const visit = (parent: string | undefined) => {
@@ -254,13 +263,20 @@ export function ExecutionExplorer({
               const previous = blockOrder[index - 1];
               const relation = previous ? blockRelations.get(`${previous.id}:${node.id}`) : undefined;
               const nested = previous && node.from! >= previous.from! && node.to! <= previous.to!;
+              const paths = pathDetails(node);
+              const isExpanded = expandedPaths.has(node.id);
               return <div key={node.id} className={styles.blockEntry}>
                 {index > 0 && <div className={styles.blockRelation} aria-label="Relação estrutural">{nested ? "↳ Bloco interno" : relation ? `↓ Relação estática: ${relation}` : "↓ Próximo trecho no código"}</div>}
                 <button ref={selected?.id === node.id ? activeBlockRef : undefined} type="button" className={`${styles.blockCard} ${selected?.id === node.id ? styles.blockCardActive : ""}`} aria-pressed={selected?.id === node.id} onClick={() => { selectAstNode(node); setFocusedToken(null); }}>
                 <span className={styles.blockCardHeading}><strong>{index + 1}. {node.kind}</strong><small>{parts.length} partes explicáveis</small></span>
                 <code>{code.length > 180 ? `${code.slice(0, 180)}…` : code}</code>
                 <span className={styles.blockCardDescription}>{node.description}</span>
-              </button></div>;
+              </button>
+                {paths && <div className={styles.pathPanel}>
+                  <button type="button" className={styles.pathToggle} aria-expanded={isExpanded} onClick={() => setExpandedPaths(current => { const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; })}>{isExpanded ? '▾' : '▸'} {paths.label}: caminhos possíveis</button>
+                  {isExpanded && <div className={styles.pathBranches}>{paths.branches.map(branch => <div key={branch.label} className={styles.pathBranch}><strong>{branch.label}</strong><span>{branch.detail}</span></div>)}</div>}
+                </div>}
+              </div>;
             })}
           </div>}
           {astMode === "tree" && <div role="tree" aria-label="Shell AST" className={styles.tree}>
