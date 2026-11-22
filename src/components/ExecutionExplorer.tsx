@@ -51,6 +51,7 @@ export function ExecutionExplorer({
     .sort((a, b) => (offset(a.end) - offset(a.start)) - (offset(b.end) - offset(b.start)))[0];
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState('');
+  const [astMode, setAstMode] = useState<'blocks' | 'tree'>('blocks');
   const [focusedToken, setFocusedToken] = useState<SemanticToken | null>(null);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matchingIds = useMemo(() => {
@@ -115,6 +116,8 @@ export function ExecutionExplorer({
     setSelectedId(node.id);
     if (node.navigable && node.from !== undefined && node.to !== undefined) onReveal?.(node.from, node.to);
   };
+
+  const blockNodes = useMemo(() => analysis.astNodes.filter(node => node.navigable && node.from !== undefined && node.to !== undefined && (node.kind === 'Stmt' || node.kind === 'FuncDecl' || node.kind === 'IfClause' || node.kind === 'ForClause' || node.kind === 'WhileClause' || node.kind === 'CaseClause')).filter(node => !matchingIds || matchingIds.has(node.id)), [analysis.astNodes, matchingIds]);
 
   const visible = useMemo(() => {
     const output: typeof analysis.astNodes = [];
@@ -235,11 +238,24 @@ export function ExecutionExplorer({
         <>
           <div className={styles.astTools}>
             <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar tipo, comando ou nó…" aria-label="Buscar nós AST" />
-            <button type="button" onClick={() => setCollapsed(new Set())} disabled={collapsed.size === 0}>Expandir</button>
-            <button type="button" onClick={() => setCollapsed(new Set(analysis.astNodes.filter(node => (children.get(node.id)?.length ?? 0) > 0).map(node => node.id)))}>Recolher</button>
+<div className={styles.modeSwitch} role="group" aria-label="Modo de exploração"><button type="button" aria-pressed={astMode === "blocks"} onClick={() => setAstMode("blocks")}>Blocos</button><button type="button" aria-pressed={astMode === "tree"} onClick={() => setAstMode("tree")}>Árvore</button></div>
+            {astMode === "tree" && <button type="button" onClick={() => setCollapsed(new Set())} disabled={collapsed.size === 0}>Expandir</button>}
+            {astMode === "tree" && <button type="button" onClick={() => setCollapsed(new Set(analysis.astNodes.filter(node => (children.get(node.id)?.length ?? 0) > 0).map(node => node.id)))}>Recolher</button>}
           </div>
           {matchingIds && <p className={styles.note} role="status">{analysis.astNodes.filter(node => matchingIds.has(node.id) && `${node.kind} ${node.label} ${node.description} ${node.id}`.toLocaleLowerCase().includes(normalizedQuery)).length} correspondências</p>}
-          <div role="tree" aria-label="Shell AST" className={styles.tree}>
+          {astMode === "blocks" && <div className={styles.blockList} aria-label="Blocos explicativos do script">
+            {blockNodes.length === 0 && <p className={styles.note}>Nenhum bloco encontrado para este filtro.</p>}
+            {blockNodes.map((node, index) => {
+              const code = source.slice(node.from!, node.to!);
+              const parts = tokens.filter(token => token.from >= node.from! && token.to <= node.to!);
+              return <button key={node.id} type="button" className={`${styles.blockCard} ${selected?.id === node.id ? styles.blockCardActive : ""}`} aria-pressed={selected?.id === node.id} onClick={() => { selectAstNode(node); setFocusedToken(null); }}>
+                <span className={styles.blockCardHeading}><strong>{index + 1}. {node.kind}</strong><small>{parts.length} partes explicáveis</small></span>
+                <code>{code.length > 180 ? `${code.slice(0, 180)}…` : code}</code>
+                <span className={styles.blockCardDescription}>{node.description}</span>
+              </button>;
+            })}
+          </div>}
+          {astMode === "tree" && <div role="tree" aria-label="Shell AST" className={styles.tree}>
             {visible.map(node => {
               const hasChildren = (children.get(node.id)?.length ?? 0) > 0;
               const isCollapsed = !matchingIds && collapsed.has(node.id);
@@ -286,7 +302,7 @@ export function ExecutionExplorer({
                 </div>
               );
             })}
-          </div>
+          </div>}
           {selected && (
             <aside className={styles.details} aria-live="polite">
               <strong>{selected.kind}</strong>
