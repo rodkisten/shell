@@ -1,3 +1,4 @@
+import { FLOW_COLORS } from '../lib/flow-colors';
 import * as React from 'react';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Compartment, EditorState, StateEffect, StateField } from '@codemirror/state';
@@ -168,8 +169,8 @@ const shellTheme = EditorView.theme({
   '.cm-completionDetail': { fontStyle: 'normal', color: '#a1a1aa', paddingLeft: '14px' },
   '.cm-tooltip.cm-completionInfo': { background: '#17181c', border: '1px solid #34363e', maxWidth: '280px', whiteSpace: 'pre-wrap' },
   '.cm-focused': { outline: 'none' },
-  '.shell-diagnostic': { textDecoration: 'underline wavy #f59e0b', textUnderlineOffset: '3px' },
-  '.shell-diagnostic-error': { textDecorationColor: '#fb7185' },
+  '.shell-diagnostic': { textDecoration: `underline wavy ${FLOW_COLORS.condition}`, textUnderlineOffset: '3px' },
+  '.shell-diagnostic-error': { textDecorationColor: FLOW_COLORS.failure },
 }, { dark: true });
 
 export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEditor(
