@@ -98,13 +98,11 @@ export function buildSemanticFlow(snapshot: ShellSnapshot): WasmFlowResult {
       const right = object(cmd.y);
       if (!left || !right) return [{ id, kind: 'next' }];
       const leftEnd = visit(left, [{ id, kind: 'next' }]);
-      const op = typeof cmd.op === 'number' ? cmd.op : -1;
       const leftEntry = snapshot.byObject.get(left);
       const rightEntry = snapshot.byObject.get(right);
       const operator = leftEntry?.to !== undefined && rightEntry?.from !== undefined
         ? snapshot.source.slice(leftEntry.to, rightEntry.from).trim() : '';
       const edgeKind = operator === '&&' ? 'true' : operator === '||' ? 'false' : operator === '|' || operator === '|&' ? 'pipeline' : 'next';
-      void op;
       const rightEnd = visit(right, leftEnd.map(end => ({ id: end.id, kind: edgeKind })));
       return edgeKind === 'true' || edgeKind === 'false'
         ? [...rightEnd, ...leftEnd.map(end => ({ id: end.id, kind: 'next' }))]
