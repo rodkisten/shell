@@ -1,25 +1,151 @@
-import { FLOW_COLORS } from '../lib/flow-colors';
-import * as React from 'react';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { Compartment, EditorState, StateEffect, StateField } from '@codemirror/state';
-import { Decoration, WidgetType, type DecorationSet } from '@codemirror/view';
-import { checkShell } from '../lib/shellcheck';
-import { embeddedShellHighlight } from '../lib/highlight';
-import { EditorView, keymap, placeholder } from '@codemirror/view';
-import { basicSetup } from 'codemirror';
+import { autocompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 import { indentWithTab } from '@codemirror/commands';
-import { autocompletion, type CompletionContext } from '@codemirror/autocomplete';
-import { shell } from '@codincod/codemirror-lang-shell';
 import { syntaxTree } from '@codemirror/language';
+import { Compartment, EditorState, StateEffect, StateField } from '@codemirror/state';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { contextualHintsFromActive } from '../lib/suggestions';
-import { cliCompletions, cliValueRequest } from '../lib/cli-completions';
-import { valueCompletions } from '../lib/completion-values';
-import { activeShellCommand } from '../lib/shell-command-ast';
-import { explainKnownShellTokens, type SemanticToken } from '../lib/semantic-shell';
-import { hoverTooltip } from '@codemirror/view';
-import { byName, SNIPPETS } from '../lib/commands';
+import { Decoration, EditorView, WidgetType, hoverTooltip, keymap, placeholder, type DecorationSet } from '@codemirror/view';
+import { shell } from '@codincod/codemirror-lang-shell';
+import { basicSetup } from 'codemirror';
+
 import { shellAutosuggestion, type Autosuggestion } from '../lib/autosuggest';
+import { cliCompletions, cliValueRequest } from '../lib/cli-completions';
+import { byName, SNIPPETS } from '../lib/commands';
+import { valueCompletions } from '../lib/completion-values';
+import { FLOW_COLORS } from '../lib/flow-colors';
+import { embeddedShellHighlight } from '../lib/highlight';
+import { explainKnownShellTokens, type SemanticToken } from '../lib/semantic-shell';
+import { activeShellCommand } from '../lib/shell-command-ast';
+import { checkShell, type Finding } from '../lib/shellcheck';
+import { contextualHintsFromActive } from '../lib/suggestions';
+
+/* ============================================================================
+ * [EXTRAIR PARA CONSTANTES: src/constants/editor-config.ts]
+ * ----------------------------------------------------------------------------
+ * O que mover:
+ * - Constantes de comportamento, limites numéricos, regexes de tokenização,
+ *   prioridades (`boost`) do autocomplete, paleta visual do tema CodeMirror,
+ *   classes CSS de decoração e textos de acessibilidade/placeholder.
+ *
+ * Contratos a preservar:
+ * - Classes CSS `.cm-autosuggestion`, `.shell-diagnostic`,
+ *   `.shell-diagnostic-error`, `.shell-semantic-tooltip` e `.code-editor`.
+ * - Tamanho base `16px` no elemento editável para evitar auto-zoom no iOS Safari.
+ * ============================================================================ */
+
+type AutosuggestionApplyMode = 'all' | 'word';
+
+type EditorCallbacks = {
+  onChange(value: string): void;
+  onCursor(value: number): void;
+  onInspect(command: string): void;
+  onSemanticInspect(token: SemanticToken): void;
+  onRun(): void;
+};
+
+export type ShellEditorHandle = {
+  insert(text: string): void;
+  focus(): void;
+  reveal(from: number, to: number): void;
+};
+
+type Props = {
+  code: string;
+  fontSize: number;
+  wordWrap: boolean;
+  onChange(value: string): void;
+  onCursor(value: number): void;
+  onInspect(command: string): void;
+  onSemanticInspect(token: SemanticToken): void;
+  onRun(): void;
+};
+
+const EDITOR_LIMITS = {
+  minFontSizePx: 8,
+  maxFontSizePx: 32,
+  iosSafariBaseFontSizePx: 16,
+  tabSizeSpaces: 2,
+  maxSyntaxBreadcrumbs: 8,
+  maxAutocompleteOptions: 8,
+  hoverTooltipDelayMs: 250,
+  diagnosticsDebounceMs: 450,
+} as const;
+
+const COMPLETION_BOOST = {
+  value: 120,
+  subcommand: 90,
+  commandHint: 80,
+  flagOption: 40,
+  flagHint: 30,
+  snippet: 10,
+} as const;
+
+const COMPLETION_TOKEN_BEFORE_REGEX = /[\w.+-]*/;
+const COMPLETION_VALID_FOR_REGEX = /^[\w.+-]*$/;
+const WHITESPACE_CHAR_REGEX = /\s/;
+const SYNTAX_ERROR_NODE_NAME = '⚠';
+const SYNTAX_BREADCRUMB_SEPARATOR = ' › ';
+
+const EDITOR_KEYBINDS = {
+  acceptAutosuggestionAll: 'Tab',
+  acceptAutosuggestionWord: 'ArrowRight',
+  runScript: 'Mod-Enter',
+} as const;
+
+const EDITOR_COPY = {
+  placeholder: 'Cole um script do ChatGPT ou comece a escrever…',
+  ariaLabel: 'Editor de shell',
+  autosuggestionTitle: 'Autosuggestion · toque para aceitar · Tab aceita tudo',
+  autosuggestionAriaPrefix: 'Sugestão: ',
+  syntaxBreadcrumbPrefix: '\n\nEstrutura sintática (CodeMirror): ',
+  takesValueNotice: '\n\nEsta opção espera um valor.',
+  examplePrefix: '\n\nExemplo: ',
+} as const;
+
+const EDITOR_CSS_CLASSES = {
+  root: 'code-editor',
+  autosuggestionBase: 'cm-autosuggestion',
+  autosuggestionSourcePrefix: 'cm-autosuggestion-',
+  semanticTooltip: 'shell-semantic-tooltip',
+  diagnosticWarning: 'shell-diagnostic',
+  diagnosticError: 'shell-diagnostic shell-diagnostic-error',
+} as const;
+
+const EDITOR_THEME_PALETTE = {
+  bgPrimary: '#090b0f',
+  bgActiveLine: '#15181e',
+  bgSurface: '#17181c',
+  bgSelectedOption: '#303641',
+  bgSelection: '#334155',
+  borderSubtle: '#1e222a',
+  borderElevated: '#34363e',
+  textPrimary: '#f5f5f5',
+  textCaret: '#f4f4f5',
+  textCursor: '#ffffff',
+  textMuted: '#a1a1aa',
+  textGutter: '#4b5563',
+  textCodeAccent: '#a5b4fc',
+  shadowOverlay: '#0008',
+  fontFamilyMono: "'SFMono-Regular', 'SF Mono', Menlo, Consolas, monospace",
+} as const;
+
+const TOOLTIP_INLINE_STYLES = {
+  container: `max-width:min(85vw,360px);padding:10px 12px;white-space:normal;background:${EDITOR_THEME_PALETTE.bgSurface};color:${EDITOR_THEME_PALETTE.textPrimary};border:1px solid ${EDITOR_THEME_PALETTE.borderElevated};border-radius:10px;line-height:1.5`,
+  exampleCode: `display:block;margin-top:6px;white-space:pre-wrap;color:${EDITOR_THEME_PALETTE.textCodeAccent}`,
+} as const;
+
+/* ============================================================================
+ * [EXTRAIR PARA UTILITÁRIO: src/lib/codemirror-syntax-context.ts]
+ * ----------------------------------------------------------------------------
+ * O que mover:
+ * - `withSyntaxContext` e helpers de resolução de AST do Lezer.
+ * - Responsabilidade única: enriquecer `SemanticToken` com a trilha estrutural
+ *   do parser incremental do CodeMirror sem acoplar ao React.
+ *
+ * Contratos a preservar:
+ * - Assinatura `(token: SemanticToken, state: EditorState) => SemanticToken`.
+ * - Ignorar nós anônimos e nós de erro (`⚠`), limitando a 8 níveis.
+ * ============================================================================ */
 
 /**
  * Lezer supplies structural context for the shell editor. This is a syntax
@@ -28,45 +154,114 @@ import { shellAutosuggestion, type Autosuggestion } from '../lib/autosuggest';
 function withSyntaxContext(token: SemanticToken, state: EditorState): SemanticToken {
   const root = syntaxTree(state);
   if (token.from >= root.length) return token;
+
   let node: ReturnType<typeof root.resolveInner> | null = root.resolveInner(token.from, 1);
   const names: string[] = [];
-  while (node && names.length < 8) {
-    if (!node.type.isAnonymous && node.name && node.name !== '⚠') names.push(node.name);
+
+  while (node && names.length < EDITOR_LIMITS.maxSyntaxBreadcrumbs) {
+    if (!node.type.isAnonymous && node.name && node.name !== SYNTAX_ERROR_NODE_NAME) {
+      names.push(node.name);
+    }
     node = node.parent;
   }
-  const path = names.reverse().join(' › ');
+
+  const path = names.reverse().join(SYNTAX_BREADCRUMB_SEPARATOR);
   if (!path) return token;
+
   return {
     ...token,
-    description: token.description + '\\n\\nEstrutura sintática (CodeMirror): ' + path,
+    description: `${token.description}${EDITOR_COPY.syntaxBreadcrumbPrefix}${path}`,
   };
 }
 
+function findTokenAtOffset(tokens: readonly SemanticToken[], pos: number): SemanticToken | undefined {
+  return tokens.find((item) => item.from <= pos && pos < item.to);
+}
+
+/* ============================================================================
+ * [EXTRAIR PARA EXTENSÃO CODEMIRROR: src/lib/codemirror-diagnostics.ts]
+ * ----------------------------------------------------------------------------
+ * O que mover:
+ * - `setDiagnostics`, `diagnosticsField` e `buildDiagnosticDecorations(state, findings)`.
+ * - Encapsula toda a tradução de `(line, column, endColumn)` do ShellCheck para
+ *   offsets absolutos e `Decoration.mark` do CodeMirror.
+ *
+ * Contratos a preservar:
+ * - Classes CSS `shell-diagnostic` (warning/info) e `shell-diagnostic-error`.
+ * - Atributos `title` e `aria-label` com `finding.message`.
+ * ============================================================================ */
+
 const setDiagnostics = StateEffect.define<DecorationSet>();
+
 const diagnosticsField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
   update(value, transaction) {
-    value = value.map(transaction.changes);
-    for (const effect of transaction.effects) if (effect.is(setDiagnostics)) value = effect.value;
-    return value;
+    let next = value.map(transaction.changes);
+    for (const effect of transaction.effects) {
+      if (effect.is(setDiagnostics)) next = effect.value;
+    }
+    return next;
   },
-  provide: field => EditorView.decorations.from(field),
+  provide: (field) => EditorView.decorations.from(field),
 });
+
+function buildDiagnosticDecorations(state: EditorState, findings: readonly Finding[]): DecorationSet {
+  const marks = findings.flatMap((finding) => {
+    const clampedLine = Math.max(1, Math.min(finding.line, state.doc.lines));
+    const line = state.doc.line(clampedLine);
+    const from = Math.min(line.to, line.from + Math.max(0, finding.column - 1));
+    const rawEndColumn = finding.endColumn ?? finding.column + 1;
+    const to = Math.min(line.to, Math.max(from + 1, line.from + rawEndColumn - 1));
+
+    if (from >= to) return [];
+
+    return [
+      Decoration.mark({
+        class:
+          finding.level === 'error'
+            ? EDITOR_CSS_CLASSES.diagnosticError
+            : EDITOR_CSS_CLASSES.diagnosticWarning,
+        attributes: {
+          title: finding.message,
+          'aria-label': finding.message,
+        },
+      }).range(from, to),
+    ];
+  });
+
+  return Decoration.set(marks, true);
+}
+
+/* ============================================================================
+ * [EXTRAIR PARA EXTENSÃO CODEMIRROR: src/lib/codemirror-autosuggest.ts]
+ * ----------------------------------------------------------------------------
+ * O que mover:
+ * - `setAutosuggestion`, `autosuggestionField`, `autosuggestionDecorations`,
+ *   `AutosuggestionWidget` e `applyAutosuggestion`.
+ * - Cria uma extensão self-contained (`shellAutosuggestionExtension()`) que
+ *   pode ser testada e reutilizada sem conhecer o ciclo de vida do React.
+ *
+ * Contratos a preservar:
+ * - Aceitação total via `Tab` ou toque (`pointerdown`) e parcial por palavra
+ *   via `ArrowRight`.
+ * - `userEvent: 'input.complete'` no dispatch da transação.
+ * ============================================================================ */
 
 const setAutosuggestion = StateEffect.define<Autosuggestion | null>();
 
-function applyAutosuggestion(view: EditorView, mode: 'all' | 'word'): boolean {
+function extractNextWordSlice(text: string): string {
+  let end = 0;
+  while (end < text.length && WHITESPACE_CHAR_REGEX.test(text[end])) end++;
+  while (end < text.length && !WHITESPACE_CHAR_REGEX.test(text[end])) end++;
+  return text.slice(0, Math.max(1, end));
+}
+
+function applyAutosuggestion(view: EditorView, mode: AutosuggestionApplyMode): boolean {
   const suggestion = view.state.field(autosuggestionField, false);
   const selection = view.state.selection.main;
   if (!suggestion || !selection.empty || selection.head !== suggestion.from) return false;
 
-  let insert = suggestion.insert;
-  if (mode === 'word') {
-    let end = 0;
-    while (end < insert.length && /\s/.test(insert[end])) end++;
-    while (end < insert.length && !/\s/.test(insert[end])) end++;
-    insert = insert.slice(0, Math.max(1, end));
-  }
+  const insert = mode === 'word' ? extractNextWordSlice(suggestion.insert) : suggestion.insert;
   if (!insert) return false;
 
   view.dispatch({
@@ -79,20 +274,24 @@ function applyAutosuggestion(view: EditorView, mode: 'all' | 'word'): boolean {
 }
 
 class AutosuggestionWidget extends WidgetType {
-  constructor(readonly suggestion: Autosuggestion) { super(); }
-
-  eq(other: AutosuggestionWidget) {
-    return other.suggestion.insert === this.suggestion.insert
-      && other.suggestion.source === this.suggestion.source;
+  constructor(readonly suggestion: Autosuggestion) {
+    super();
   }
 
-  toDOM(view: EditorView) {
+  eq(other: AutosuggestionWidget): boolean {
+    return (
+      other.suggestion.insert === this.suggestion.insert &&
+      other.suggestion.source === this.suggestion.source
+    );
+  }
+
+  toDOM(view: EditorView): HTMLElement {
     const dom = document.createElement('span');
-    dom.className = 'cm-autosuggestion cm-autosuggestion-' + this.suggestion.source;
+    dom.className = `${EDITOR_CSS_CLASSES.autosuggestionBase} ${EDITOR_CSS_CLASSES.autosuggestionSourcePrefix}${this.suggestion.source}`;
     dom.textContent = this.suggestion.insert;
-    dom.title = 'Autosuggestion · toque para aceitar · Tab aceita tudo';
-    dom.setAttribute('aria-label', 'Sugestão: ' + this.suggestion.insert);
-    dom.addEventListener('pointerdown', event => {
+    dom.title = EDITOR_COPY.autosuggestionTitle;
+    dom.setAttribute('aria-label', `${EDITOR_COPY.autosuggestionAriaPrefix}${this.suggestion.insert}`);
+    dom.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       event.stopPropagation();
       applyAutosuggestion(view, 'all');
@@ -101,174 +300,271 @@ class AutosuggestionWidget extends WidgetType {
     return dom;
   }
 
-  ignoreEvent() { return false; }
+  ignoreEvent(): boolean {
+    return false;
+  }
 }
 
 const autosuggestionField = StateField.define<Autosuggestion | null>({
   create: () => null,
   update(value, transaction) {
-    if (transaction.docChanged || transaction.selection) value = null;
+    let next = transaction.docChanged || transaction.selection ? null : value;
     for (const effect of transaction.effects) {
-      if (effect.is(setAutosuggestion)) value = effect.value;
+      if (effect.is(setAutosuggestion)) next = effect.value;
     }
-    return value;
+    return next;
   },
 });
 
-const autosuggestionDecorations = EditorView.decorations.compute(
-  [autosuggestionField],
-  state => {
-    const suggestion = state.field(autosuggestionField);
-    if (!suggestion || suggestion.from < 0 || suggestion.from > state.doc.length) return Decoration.none;
-    return Decoration.set([
-      Decoration.widget({
-        widget: new AutosuggestionWidget(suggestion),
-        side: 1,
-      }).range(suggestion.from),
-    ]);
+const autosuggestionDecorations = EditorView.decorations.compute([autosuggestionField], (state) => {
+  const suggestion = state.field(autosuggestionField);
+  if (!suggestion || suggestion.from < 0 || suggestion.from > state.doc.length) return Decoration.none;
+  return Decoration.set([
+    Decoration.widget({
+      widget: new AutosuggestionWidget(suggestion),
+      side: 1,
+    }).range(suggestion.from),
+  ]);
+});
+
+/* ============================================================================
+ * [EXTRAIR PARA PROVEDORES CODEMIRROR: src/lib/codemirror-providers.ts]
+ * ----------------------------------------------------------------------------
+ * O que mover:
+ * - `shellCompletionSource` (integra `activeShellCommand`, `cliCompletions`,
+ *   `valueCompletions`, `contextualHintsFromActive` e `SNIPPETS`).
+ * - `shellHoverTooltip` (renderiza o tooltip semântico ao passar o cursor).
+ *
+ * Contratos a preservar:
+ * - `mvdan/sh` (`activeShellCommand`) permanece como única fonte de escopo
+ *   de comando/subcomando; catálogos fornecem apenas metadados.
+ * - Ordem de prioridade (`COMPLETION_BOOST`) e deduplicação por `label`.
+ * ============================================================================ */
+
+async function shellCompletionSource(context: CompletionContext): Promise<CompletionResult | null> {
+  const before = context.matchBefore(COMPLETION_TOKEN_BEFORE_REGEX);
+  if (!before) return null;
+
+  const source = context.state.doc.toString();
+  // mvdan/sh owns command/subcommand scope. Fig and the curated local specs
+  // are metadata sources only and never re-parse shell text.
+  const active = await activeShellCommand(source, context.pos);
+  const cliItems = cliCompletions(active, context.pos);
+  const valueItems = await valueCompletions(cliValueRequest(active, context.pos));
+  const editingCommand = !active || context.pos <= active.executableTo;
+  const hints = editingCommand ? contextualHintsFromActive(active, context.pos) : [];
+  const snippets =
+    editingCommand && before.text ? SNIPPETS.filter((snippet) => snippet.id.startsWith(before.text)) : [];
+
+  if (!context.explicit && before.from === before.to && !cliItems.length && !valueItems.length) {
+    return null;
+  }
+
+  const seen = new Set<string>();
+  const rawOptions: Completion[] = [
+    ...valueItems.map((item) => ({
+      label: item.label,
+      type: 'variable',
+      detail: item.detail,
+      info: item.info,
+      apply: item.label,
+      boost: COMPLETION_BOOST.value,
+    })),
+    ...cliItems.map((item) => ({
+      label: item.label,
+      type: item.kind === 'subcommand' ? 'keyword' : 'property',
+      detail: item.detail,
+      info: `${item.description}${item.takesValue ? EDITOR_COPY.takesValueNotice : ''}`,
+      apply: item.label,
+      boost: item.kind === 'subcommand' ? COMPLETION_BOOST.subcommand : COMPLETION_BOOST.flagOption,
+    })),
+    ...hints.map((hint) => ({
+      label: hint.label,
+      type: hint.kind === 'flag' ? 'property' : 'function',
+      detail: hint.title,
+      info: `${hint.description}${EDITOR_COPY.examplePrefix}${hint.example}`,
+      apply: hint.label,
+      boost: hint.kind === 'command' ? COMPLETION_BOOST.commandHint : COMPLETION_BOOST.flagHint,
+    })),
+    ...snippets.map((snippet) => ({
+      label: snippet.id,
+      type: 'keyword',
+      detail: snippet.subtitle,
+      info: snippet.code,
+      apply: snippet.code,
+      boost: COMPLETION_BOOST.snippet,
+    })),
+  ];
+
+  const options = rawOptions.filter((item) => {
+    if (seen.has(item.label)) return false;
+    seen.add(item.label);
+    return true;
+  });
+
+  return options.length ? { from: before.from, options, validFor: COMPLETION_VALID_FOR_REGEX } : null;
+}
+
+const shellHoverTooltip = hoverTooltip(
+  async (view, pos) => {
+    const source = view.state.doc.toString();
+    const match = findTokenAtOffset(await explainKnownShellTokens(source), pos);
+    if (view.state.doc.toString() !== source || !match) return null;
+
+    const token = withSyntaxContext(match, view.state);
+    return {
+      pos: token.from,
+      end: token.to,
+      above: true,
+      create() {
+        const dom = document.createElement('div');
+        dom.className = EDITOR_CSS_CLASSES.semanticTooltip;
+        dom.style.cssText = TOOLTIP_INLINE_STYLES.container;
+
+        const title = document.createElement('strong');
+        title.textContent = token.title;
+
+        const detail = document.createElement('div');
+        detail.textContent = token.description;
+
+        dom.append(title, detail);
+
+        if (token.example) {
+          const example = document.createElement('code');
+          example.textContent = token.example;
+          example.style.cssText = TOOLTIP_INLINE_STYLES.exampleCode;
+          dom.append(example);
+        }
+
+        return { dom };
+      },
+    };
   },
+  { hoverTime: EDITOR_LIMITS.hoverTooltipDelayMs },
 );
 
-export type ShellEditorHandle = { insert(text: string): void; focus(): void; reveal(from: number, to: number): void };
-type Props = {
-  code: string;
-  fontSize: number;
-  wordWrap: boolean;
-  onChange(value: string): void;
-  onCursor(value: number): void;
-  onInspect(command: string): void;
-  onSemanticInspect(token: SemanticToken): void;
-  onRun(): void;
-};
+/* ============================================================================
+ * [EXTRAIR PARA TEMA: src/lib/codemirror-theme.ts]
+ * ----------------------------------------------------------------------------
+ * O que mover:
+ * - `editorFontTheme` e `shellTheme`.
+ * - Mantém toda a estilização visual do CodeMirror isolada da lógica de UI.
+ *
+ * Contratos a preservar:
+ * - `fontSize: '16px'` + `zoom` proporcional no root (`&`) para impedir zoom
+ *   automático no Safari do iPhone sem quebrar cálculo de coordenadas do cursor.
+ * ============================================================================ */
 
 // iOS Safari checks the editable element's computed font size on focus.
- // Keep it at 16px and scale the editor visually with CSS zoom instead of
- // transforming CodeMirror's content (which breaks caret coordinates).
+// Keep it at 16px and scale the editor visually with CSS zoom instead of
+// transforming CodeMirror's content (which breaks caret coordinates).
 function editorFontTheme(fontSize: number) {
-  const size = Math.max(8, Math.min(32, fontSize));
+  const clampedSize = Math.max(EDITOR_LIMITS.minFontSizePx, Math.min(EDITOR_LIMITS.maxFontSizePx, fontSize));
+  const basePx = `${EDITOR_LIMITS.iosSafariBaseFontSizePx}px`;
   return EditorView.theme({
-    '&': { fontSize: '16px', zoom: String(size / 16) },
-    '.cm-content': { fontSize: '16px' },
+    '&': { fontSize: basePx, zoom: String(clampedSize / EDITOR_LIMITS.iosSafariBaseFontSizePx) },
+    '.cm-content': { fontSize: basePx },
   });
 }
 
-const shellTheme = EditorView.theme({
-  '&': { minHeight: '0', background: '#090b0f' },
-  '.cm-scroller': { fontFamily: "'SFMono-Regular', 'SF Mono', Menlo, Consolas, monospace", overflow: 'auto' },
-  '.cm-content': { minHeight: '0', padding: '8px 3px 10px', caretColor: '#f4f4f5' },
-  '.cm-line': { padding: '0 4px' },
-  '.cm-gutters': { background: '#090b0f', borderRight: '1px solid #1e222a', color: '#4b5563' },
-  '.cm-activeLine': { background: '#15181e' },
-  '.cm-activeLineGutter': { background: '#15181e' },
-  '.cm-cursor': { borderLeftColor: '#fff' },
-  '.cm-selectionBackground': { background: '#334155 !important' },
-  '.cm-tooltip-autocomplete': { background: '#17181c', color: '#f5f5f5', border: '1px solid #34363e', borderRadius: '10px', overflow: 'hidden', maxWidth: 'min(92vw, 440px)', boxShadow: '0 12px 40px #0008' },
-  '.cm-tooltip-autocomplete ul': { fontFamily: 'inherit', maxHeight: '220px' },
-  '.cm-tooltip-autocomplete ul li': { padding: '7px 11px', lineHeight: '1.6' },
-  '.cm-tooltip-autocomplete ul li[aria-selected]': { background: '#303641', color: '#fff' },
-  '.cm-completionDetail': { fontStyle: 'normal', color: '#a1a1aa', paddingLeft: '14px' },
-  '.cm-tooltip.cm-completionInfo': { background: '#17181c', border: '1px solid #34363e', maxWidth: '280px', whiteSpace: 'pre-wrap' },
-  '.cm-focused': { outline: 'none' },
-  '.shell-diagnostic': { textDecoration: `underline wavy ${FLOW_COLORS.condition}`, textUnderlineOffset: '3px' },
-  '.shell-diagnostic-error': { textDecorationColor: FLOW_COLORS.failure },
-}, { dark: true });
+const shellTheme = EditorView.theme(
+  {
+    '&': { minHeight: '0', background: EDITOR_THEME_PALETTE.bgPrimary },
+    '.cm-scroller': { fontFamily: EDITOR_THEME_PALETTE.fontFamilyMono, overflow: 'auto' },
+    '.cm-content': { minHeight: '0', padding: '8px 3px 10px', caretColor: EDITOR_THEME_PALETTE.textCaret },
+    '.cm-line': { padding: '0 4px' },
+    '.cm-gutters': {
+      background: EDITOR_THEME_PALETTE.bgPrimary,
+      borderRight: `1px solid ${EDITOR_THEME_PALETTE.borderSubtle}`,
+      color: EDITOR_THEME_PALETTE.textGutter,
+    },
+    '.cm-activeLine': { background: EDITOR_THEME_PALETTE.bgActiveLine },
+    '.cm-activeLineGutter': { background: EDITOR_THEME_PALETTE.bgActiveLine },
+    '.cm-cursor': { borderLeftColor: EDITOR_THEME_PALETTE.textCursor },
+    '.cm-selectionBackground': { background: `${EDITOR_THEME_PALETTE.bgSelection} !important` },
+    '.cm-tooltip-autocomplete': {
+      background: EDITOR_THEME_PALETTE.bgSurface,
+      color: EDITOR_THEME_PALETTE.textPrimary,
+      border: `1px solid ${EDITOR_THEME_PALETTE.borderElevated}`,
+      borderRadius: '10px',
+      overflow: 'hidden',
+      maxWidth: 'min(92vw, 440px)',
+      boxShadow: `0 12px 40px ${EDITOR_THEME_PALETTE.shadowOverlay}`,
+    },
+    '.cm-tooltip-autocomplete ul': { fontFamily: 'inherit', maxHeight: '220px' },
+    '.cm-tooltip-autocomplete ul li': { padding: '7px 11px', lineHeight: '1.6' },
+    '.cm-tooltip-autocomplete ul li[aria-selected]': {
+      background: EDITOR_THEME_PALETTE.bgSelectedOption,
+      color: EDITOR_THEME_PALETTE.textCursor,
+    },
+    '.cm-completionDetail': { fontStyle: 'normal', color: EDITOR_THEME_PALETTE.textMuted, paddingLeft: '14px' },
+    '.cm-tooltip.cm-completionInfo': {
+      background: EDITOR_THEME_PALETTE.bgSurface,
+      border: `1px solid ${EDITOR_THEME_PALETTE.borderElevated}`,
+      maxWidth: '280px',
+      whiteSpace: 'pre-wrap',
+    },
+    '.cm-focused': { outline: 'none' },
+    [`.${EDITOR_CSS_CLASSES.diagnosticWarning}`]: {
+      textDecoration: `underline wavy ${FLOW_COLORS.condition}`,
+      textUnderlineOffset: '3px',
+    },
+    '.shell-diagnostic-error': { textDecorationColor: FLOW_COLORS.failure },
+  },
+  { dark: true },
+);
+
+/* ============================================================================
+ * COMPONENTE PRINCIPAL: ShellEditor
+ * ============================================================================ */
 
 export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEditor(
-  { code, fontSize, wordWrap, onChange, onCursor, onInspect, onSemanticInspect, onRun }, ref,
+  { code, fontSize, wordWrap, onChange, onCursor, onInspect, onSemanticInspect, onRun },
+  ref,
 ) {
   const node = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
   const fontCompartment = useRef(new Compartment());
   const wrapCompartment = useRef(new Compartment());
-  const callbacks = useRef({ onChange, onCursor, onInspect, onSemanticInspect, onRun });
+  const callbacks = useRef<EditorCallbacks>({ onChange, onCursor, onInspect, onSemanticInspect, onRun });
   callbacks.current = { onChange, onCursor, onInspect, onSemanticInspect, onRun };
 
-  useImperativeHandle(ref, () => ({
-    insert(text) {
-      const view = editor.current;
-      if (!view) return;
-      const { from, to } = view.state.selection.main;
-      view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length } });
-      view.focus();
-    },
-    focus() { editor.current?.focus(); },
-    reveal(from, to) {
-      const view = editor.current;
-      if (!view) return;
-      if (from < 0 || to < from || to > view.state.doc.length) return;
-      view.dispatch({ selection: { anchor: from, head: to }, effects: EditorView.scrollIntoView(from, { y: 'center' }), scrollIntoView: true });
-      node.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      view.focus();
-    },
-  }), []);
+  useImperativeHandle(
+    ref,
+    () => ({
+      insert(text) {
+        const view = editor.current;
+        if (!view) return;
+        const { from, to } = view.state.selection.main;
+        view.dispatch({
+          changes: { from, to, insert: text },
+          selection: { anchor: from + text.length },
+        });
+        view.focus();
+      },
+      focus() {
+        editor.current?.focus();
+      },
+      reveal(from, to) {
+        const view = editor.current;
+        if (!view) return;
+        if (from < 0 || to < from || to > view.state.doc.length) return;
+        view.dispatch({
+          selection: { anchor: from, head: to },
+          effects: EditorView.scrollIntoView(from, { y: 'center' }),
+          scrollIntoView: true,
+        });
+        node.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        view.focus();
+      },
+    }),
+    [],
+  );
 
   useEffect(() => {
     if (!node.current) return;
     let autosuggestRequest = 0;
-    const complete = async (context: CompletionContext) => {
-      const before = context.matchBefore(/[\w.+-]*/);
-      if (!before) return null;
-      const source = context.state.doc.toString();
-      // mvdan/sh owns command/subcommand scope. Fig and the curated local specs
-      // are metadata sources only and never re-parse shell text.
-      const active = await activeShellCommand(source, context.pos);
-      const cliItems = cliCompletions(active, context.pos);
-      const valueItems = await valueCompletions(cliValueRequest(active, context.pos));
-      const hints = active && context.pos > active.executableTo
-        ? []
-        : contextualHintsFromActive(active, context.pos);
-      const editingCommand = !active || context.pos <= active.executableTo;
-      const snippets = editingCommand && before.text
-        ? SNIPPETS.filter(s => s.id.startsWith(before.text))
-        : [];
 
-      if (!context.explicit && before.from === before.to && !cliItems.length && !valueItems.length) return null;
-
-      const seen = new Set<string>();
-      const options = [
-        ...valueItems.map(item => ({
-          label: item.label,
-          type: 'variable',
-          detail: item.detail,
-          info: item.info,
-          apply: item.label,
-          boost: 120,
-        })),
-        ...cliItems.map(item => ({
-          label: item.label,
-          type: item.kind === 'subcommand' ? 'keyword' : 'property',
-          detail: item.detail,
-          info: item.description + (item.takesValue ? '\n\nEsta opção espera um valor.' : ''),
-          apply: item.label,
-          boost: item.kind === 'subcommand' ? 90 : 40,
-        })),
-        ...hints.map(h => ({
-          label: h.label,
-          type: h.kind === 'flag' ? 'property' : 'function',
-          detail: h.title,
-          info: h.description + '\n\nExemplo: ' + h.example,
-          apply: h.label,
-          boost: h.kind === 'command' ? 80 : 30,
-        })),
-        ...snippets.map(s => ({
-          label: s.id,
-          type: 'keyword',
-          detail: s.subtitle,
-          info: s.code,
-          apply: s.code,
-          boost: 10,
-        })),
-      ].filter(item => {
-        const key = item.label;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-
-      return options.length
-        ? { from: before.from, options, validFor: /^[\w.+-]*$/ }
-        : null;
-    };
     const view = new EditorView({
       parent: node.current,
       state: EditorState.create({
@@ -278,82 +574,72 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           oneDark,
           shell(),
           embeddedShellHighlight,
-          hoverTooltip(async (view, pos) => {
-            const source = view.state.doc.toString();
-            const match = (await explainKnownShellTokens(source))
-              .find((item) => item.from <= pos && pos < item.to);
-            if (view.state.doc.toString() !== source) return null;
-            if (!match) return null;
-            const token = withSyntaxContext(match, view.state);
-            return {
-              pos: token.from,
-              end: token.to,
-              above: true,
-              create() {
-                const dom = document.createElement('div');
-                dom.className = 'shell-semantic-tooltip';
-                dom.style.cssText = 'max-width:min(85vw,360px);padding:10px 12px;white-space:normal;background:#17181c;color:#f5f5f5;border:1px solid #34363e;border-radius:10px;line-height:1.5';
-                const title = document.createElement('strong');
-                title.textContent = token.title;
-                const detail = document.createElement('div');
-                detail.textContent = token.description;
-                dom.append(title, detail);
-                if (token.example) {
-                  const example = document.createElement('code');
-                  example.textContent = token.example;
-                  example.style.cssText = 'display:block;margin-top:6px;white-space:pre-wrap;color:#a5b4fc';
-                  dom.append(example);
-                }
-                return { dom };
-              },
-            };
-          }, { hoverTime: 250 }),
+          shellHoverTooltip,
           diagnosticsField,
           autosuggestionField,
           autosuggestionDecorations,
           shellTheme,
           fontCompartment.current.of(editorFontTheme(fontSize)),
           wrapCompartment.current.of(wordWrap ? EditorView.lineWrapping : []),
-          EditorState.tabSize.of(2),
+          EditorState.tabSize.of(EDITOR_LIMITS.tabSizeSpaces),
           keymap.of([
-            { key: 'Tab', run: view => applyAutosuggestion(view, 'all') },
-            { key: 'ArrowRight', run: view => applyAutosuggestion(view, 'word') },
+            { key: EDITOR_KEYBINDS.acceptAutosuggestionAll, run: (v) => applyAutosuggestion(v, 'all') },
+            { key: EDITOR_KEYBINDS.acceptAutosuggestionWord, run: (v) => applyAutosuggestion(v, 'word') },
             indentWithTab,
-            { key: 'Mod-Enter', run() { callbacks.current.onRun(); return true; } },
+            {
+              key: EDITOR_KEYBINDS.runScript,
+              run() {
+                callbacks.current.onRun();
+                return true;
+              },
+            },
           ]),
-          autocompletion({ override: [complete], activateOnTyping: true, maxRenderedOptions: 8, closeOnBlur: false }),
-          placeholder('Cole um script do ChatGPT ou comece a escrever…'),
+          autocompletion({
+            override: [shellCompletionSource],
+            activateOnTyping: true,
+            maxRenderedOptions: EDITOR_LIMITS.maxAutocompleteOptions,
+            closeOnBlur: false,
+          }),
+          placeholder(EDITOR_COPY.placeholder),
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) callbacks.current.onChange(update.state.doc.toString());
+            if (update.docChanged) {
+              callbacks.current.onChange(update.state.doc.toString());
+            }
+
             if (update.docChanged || update.selectionSet) {
-              const pos = update.state.selection.main.head;
+              const selection = update.state.selection.main;
+              const pos = selection.head;
+              const source = update.state.doc.toString();
               callbacks.current.onCursor(pos);
 
-              const selection = update.state.selection.main;
-              const source = update.state.doc.toString();
               const request = ++autosuggestRequest;
               if (selection.empty) {
-                void shellAutosuggestion(source, pos).then(suggestion => {
+                void shellAutosuggestion(source, pos).then((suggestion) => {
                   const current = editor.current;
                   if (
-                    request !== autosuggestRequest
-                    || !current
-                    || current.state.doc.toString() !== source
-                    || !current.state.selection.main.empty
-                    || current.state.selection.main.head !== pos
-                  ) return;
+                    request !== autosuggestRequest ||
+                    !current ||
+                    current.state.doc.toString() !== source ||
+                    !current.state.selection.main.empty ||
+                    current.state.selection.main.head !== pos
+                  ) {
+                    return;
+                  }
                   current.dispatch({ effects: setAutosuggestion.of(suggestion) });
                 });
               }
 
               // Keyboard navigation and iOS caret movement use the same
               // semantic selection as pointer interaction.
-
-              void explainKnownShellTokens(source).then(tokens => {
+              void explainKnownShellTokens(source).then((tokens) => {
                 const current = editor.current;
-                if (!current || current.state.doc.toString() !== source || current.state.selection.main.head !== pos) return;
-                const token = tokens.find(item => item.from <= pos && pos < item.to);
-                if (token) callbacks.current.onSemanticInspect(withSyntaxContext(token, current.state));
+                if (!current || current.state.doc.toString() !== source || current.state.selection.main.head !== pos) {
+                  return;
+                }
+                const token = findTokenAtOffset(tokens, pos);
+                if (token) {
+                  callbacks.current.onSemanticInspect(withSyntaxContext(token, current.state));
+                }
               });
             }
           }),
@@ -362,31 +648,44 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
               const pos = instance.posAtCoords({ x: event.clientX, y: event.clientY });
               if (pos == null) return false;
               const source = instance.state.doc.toString();
-              void explainKnownShellTokens(source).then(tokens => {
+
+              void explainKnownShellTokens(source).then((tokens) => {
                 const current = editor.current;
                 if (!current || current.state.doc.toString() !== source) return;
-                const token = tokens.find(item => item.from <= pos && pos < item.to);
+                const token = findTokenAtOffset(tokens, pos);
                 if (!token) return;
                 callbacks.current.onSemanticInspect(withSyntaxContext(token, current.state));
-                if (token.kind === 'command' && byName.has(token.text)) callbacks.current.onInspect(token.text);
+                if (token.kind === 'command' && byName.has(token.text)) {
+                  callbacks.current.onInspect(token.text);
+                }
               });
+
               return false;
             },
           }),
         ],
       }),
     });
+
     editor.current = view;
-    return () => { view.destroy(); editor.current = null; };
-  // Editor must be created once. New values are synchronized by the effect below.
+    return () => {
+      view.destroy();
+      editor.current = null;
+    };
+    // Editor must be created once. New values are synchronized by the effects below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    editor.current?.dispatch({ effects: fontCompartment.current.reconfigure(editorFontTheme(fontSize)) });
+    editor.current?.dispatch({
+      effects: fontCompartment.current.reconfigure(editorFontTheme(fontSize)),
+    });
   }, [fontSize]);
 
   useEffect(() => {
-    editor.current?.dispatch({ effects: wrapCompartment.current.reconfigure(wordWrap ? EditorView.lineWrapping : []) });
+    editor.current?.dispatch({
+      effects: wrapCompartment.current.reconfigure(wordWrap ? EditorView.lineWrapping : []),
+    });
   }, [wordWrap]);
 
   useEffect(() => {
@@ -397,22 +696,25 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
       const source = view.state.doc.toString();
       const findings = await checkShell(source).catch(() => []);
       if (cancelled || editor.current !== view || view.state.doc.toString() !== source) return;
-      const marks = findings.flatMap(finding => {
-        const line = view.state.doc.line(Math.max(1, Math.min(finding.line, view.state.doc.lines)));
-        const from = Math.min(line.to, line.from + Math.max(0, finding.column - 1));
-        const to = Math.min(line.to, Math.max(from + 1, line.from + (finding.endColumn ?? finding.column + 1) - 1));
-        return from < to ? [Decoration.mark({ class: finding.level === 'error' ? 'shell-diagnostic shell-diagnostic-error' : 'shell-diagnostic', attributes: { title: finding.message, 'aria-label': finding.message } }).range(from, to)] : [];
+
+      view.dispatch({
+        effects: setDiagnostics.of(buildDiagnosticDecorations(view.state, findings)),
       });
-      view.dispatch({ effects: setDiagnostics.of(Decoration.set(marks, true)) });
-    }, 450);
-    return () => { cancelled = true; clearTimeout(timer); };
+    }, EDITOR_LIMITS.diagnosticsDebounceMs);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [code]);
 
   useEffect(() => {
     const view = editor.current;
     if (!view || view.state.doc.toString() === code) return;
-    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: code } });
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: code },
+    });
   }, [code]);
 
-  return <div ref={node} className="code-editor" role="textbox" aria-label="Editor de shell" />;
+  return <div ref={node} className={EDITOR_CSS_CLASSES.root} role="textbox" aria-label={EDITOR_COPY.ariaLabel} />;
 });
