@@ -441,3 +441,5 @@ The contextual inspector shows the selected node's parent, child count, depth, n
 ### Interactive Bash Explain inspector
 
 Selecting an AST node opens a syntax-aware source breakdown: known commands, subcommands, options, positional arguments, and shell operators become clickable spans. Clicking one shows its explanation, provenance and example when available, and reveals the corresponding source range in CodeMirror. The selected AST block remains pinned while inspecting its parts; **Follow cursor** returns to automatic selection. Explanations come from the existing shell parser, command catalog and CLI specifications, not remote AI or executed commands. Unknown tokens remain plain text rather than receiving invented explanations.
+
+The inspector now defaults to a **Blocks** view with selectable cards for statements, conditionals, loops, functions and case clauses. Cards show a bounded source excerpt, parser-derived explanation and count of recognized semantic parts. Select a card to inspect clickable tokens; switch to **Tree** for the full low-level AST. Cards are static analysis, not observed execution, and may overlap for nested shell constructs.
