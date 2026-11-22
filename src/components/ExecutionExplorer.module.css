@@ -281,3 +281,9 @@
 .flowNodePositioned code{font-size:10px}
 .flowLines{z-index:0}
 @media(max-width:700px){.flowVisual{padding:8px 4px}.flowScroll{max-height:48dvh;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}.flowNodePositioned{touch-action:manipulation}}
+
+/* Semantic graph colors match the editor's dark syntax palette. */
+.flowNodePositioned{border-width:1.5px;box-shadow:inset 3px 0 var(--flow-node-color,#94a3b8),0 4px 16px #0006}
+.flowNodePositioned.isSelected{outline:2px solid var(--flow-node-color,#a78bfa);outline-offset:2px}
+.flowNodePositioned code{white-space:pre;overflow:hidden;text-overflow:ellipsis}
+.flowNodePositioned:focus-visible{outline:3px solid var(--flow-node-color,#a78bfa);outline-offset:3px}
