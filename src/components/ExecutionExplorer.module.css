@@ -273,3 +273,11 @@
 .pathBranch strong{font-size:11px;color:#ddd6fe}
 .pathBranch span{font-size:11px;line-height:1.5;color:var(--_text-secondary)}
 @media(max-width:700px){.pathBranches{grid-template-columns:1fr}.pathBranch{padding:9px}}
+
+/* Spatial flow graph: nodes and edges share a single scrollable coordinate plane. */
+.flowCanvas{position:relative;min-width:900px}
+.flowNodePositioned{position:absolute;width:200px;height:68px;min-height:68px;padding:6px 8px;z-index:1}
+.flowNodePositioned strong{font-size:12px}
+.flowNodePositioned code{font-size:10px}
+.flowLines{z-index:0}
+@media(max-width:700px){.flowVisual{padding:8px 4px}.flowScroll{max-height:48dvh;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}.flowNodePositioned{touch-action:manipulation}}
