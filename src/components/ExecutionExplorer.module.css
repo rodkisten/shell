@@ -264,3 +264,12 @@
 .blockEntry{min-width:0}
 .blockRelation{font-size:10px;line-height:1.5;color:var(--_text-muted);padding:3px 10px 7px;border-left:1px dashed #a78bfa77;margin-left:12px}
 .blockCard[aria-pressed=true]{border-color:#c4b5fd;box-shadow:0 0 0 1px #a78bfa55}
+
+.pathPanel{margin:4px 3px 10px 18px;border-left:2px solid #a78bfa77;padding-left:10px}
+.pathToggle{font:inherit;font-size:11px;font-weight:600;cursor:pointer;border:0;background:transparent;color:#ddd6fe;padding:7px 4px;text-align:left}
+.pathToggle:focus-visible{outline:2px solid #c4b5fd;outline-offset:2px}
+.pathBranches{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:7px;padding:5px 0}
+.pathBranch{display:grid;gap:5px;padding:10px;border:1px dashed #a78bfa66;border-radius:8px;background:#a78bfa0d}
+.pathBranch strong{font-size:11px;color:#ddd6fe}
+.pathBranch span{font-size:11px;line-height:1.5;color:var(--_text-secondary)}
+@media(max-width:700px){.pathBranches{grid-template-columns:1fr}.pathBranch{padding:9px}}
