@@ -189,8 +189,8 @@ export function App() {
     try {
       const diagnostics = await checkShell(script);
       setFindings(diagnostics);
-      notify(diagnostics.length ? diagnostics.length + ' apontamento(s) do ShellCheck.' : 'Nenhum problema encontrado pelo ShellCheck.');
-    } catch (error) { notify(error instanceof Error ? error.message : 'Erro no ShellCheck.'); }
+      notify(diagnostics.length ? diagnostics.length + ' aviso(s) de sintaxe.' : 'Parser Zsh: nenhum problema sintático encontrado.');
+    } catch (error) { notify(error instanceof Error ? error.message : 'Erro no parser Zsh.'); }
     finally { setBusy(null); }
   };
   useEffect(() => {
@@ -418,7 +418,7 @@ export function App() {
               </div>
               <div className="compact-workspace-controls" aria-label="Automação e visualização">
                 <label title="Executar após 850 ms sem digitar"><input type="checkbox" checked={autoRun} onChange={event => setAutoRun(event.target.checked)}/><Play size={15}/><span>Autoexecutar</span></label>
-                <label title="ShellCheck automático após 900 ms"><input type="checkbox" checked={autoCheck} onChange={event => setAutoCheck(event.target.checked)}/><ShieldCheck size={15}/><span>AutoCheck</span></label>
+                <label title="Validação sintática automática após 900 ms"><input type="checkbox" checked={autoCheck} onChange={event => setAutoCheck(event.target.checked)}/><ShieldCheck size={15}/><span>Auto sintaxe</span></label>
                 <label title="Formatar automaticamente após 1,5 s sem digitar"><input type="checkbox" checked={autoFormat} onChange={event => setAutoFormat(event.target.checked)}/><WandSparkles size={15}/><span>Autoformatar</span></label>
                 <Link to="/linux" className="compact-control-icon" title="Alpine Linux" aria-label="Alpine Linux"><Terminal size={16}/></Link>
                 <button type="button" className="compact-control-icon" aria-label={sideBySide ? 'Empilhar painéis' : 'Painéis lado a lado'} aria-pressed={sideBySide} title={sideBySide ? 'Empilhar painéis' : 'Painéis lado a lado'} onClick={() => setSideBySide(value => !value)}><ArrowLeftRight size={16}/></button>
@@ -432,7 +432,7 @@ export function App() {
                   <nav className="editor-command-toolbar" aria-label="Ferramentas do editor">
                     <button type="button" title="Executar" aria-label="Executar" onClick={() => { void run(); }} disabled={!!busy}><Play size={17}/><span className="command-label">Executar</span></button>
                     <button type="button" title="Formatar" aria-label="Formatar" onClick={() => void convert(false)} disabled={!!busy}><WandSparkles size={17}/><span className="command-label">Formatar</span></button>
-                    <button type="button" title="ShellCheck" aria-label="ShellCheck" onClick={() => void check()} disabled={!!busy}><ShieldCheck size={17}/><span className="command-label">Validar</span></button>
+                    <button type="button" title="Validar sintaxe Zsh" aria-label="Validar sintaxe Zsh" onClick={() => void check()} disabled={!!busy}><ShieldCheck size={17}/><span className="command-label">Validar</span></button>
                     <button type="button" className="editor-command-primary" title="Explicar" aria-label="Explicar" onClick={() => void explain()} disabled={!!busy}><BookOpen size={17}/><span className="command-label">Explicar</span></button>
                     <button type="button" title="Fluxo" aria-label="Fluxo" onClick={() => { setExplorerTab('flow'); setExplorerOpen(true); if (!explanation) void explain(); }} disabled={!!busy}><Activity size={17}/><span className="command-label">Fluxo</span></button>
                   </nav>
@@ -461,31 +461,16 @@ export function App() {
                   <div className="pane-resizer" role="separator" aria-label="Redimensionar terminal" aria-orientation="horizontal" onPointerDown={event => resize('terminal', event)} />
                   <div className="terminal-bottom"><span><ShieldCheck size={13}/> Ambiente isolado</span><div><button onClick={async () => { try { await resetShell(); notify('Sandbox zerado.'); } catch { notify('Não foi possível reiniciar.'); } }}><RotateCcw size={13}/> Reiniciar</button><button onClick={() => setOutput([])}><Trash2 size={13}/> Limpar saída</button></div></div></>}
               </section>
-                <section className="actions-panel" style={sideBySide ? { gridColumn: '1 / -1', gridRow: 2 } : undefined}>
-                  <div className="toolbox-title"><span className="eyebrow">FERRAMENTAS</span><h3>Ações rápidas <Sparkles size={15}/></h3></div>
-                  <div className="tool-primary">
-                    <Button onClick={() => { void run(); }} disabled={!!busy} className="run-button">{busy === 'run' ? <LoaderCircle className="spin" size={16}/> : <Play size={16} fill="currentColor" />} Executar no sandbox</Button>
-                    {busy === 'run' && <Button onClick={() => { cancelShell(); setBusy(null); }} variant="outline" size="sm"><Square size={13}/> Interromper</Button>}
-                  </div>
-                  <div className="tool-group">
-                    <button className="tool-action" onClick={() => void convert(false)} disabled={!!busy}><span className="tool-icon"><WandSparkles size={17}/></span><span><strong>Formatar script</strong><small>sh-syntax • Zsh experimental</small></span><span className="tool-kbd">⌘ ⇧ F</span></button>
-                    <button className="tool-action" onClick={() => void check()} disabled={!!busy}><span className="tool-icon"><ShieldCheck size={17}/></span><span><strong>Validar e diagnosticar</strong><small>sh-syntax • análise sintática</small></span><span className="arrow-small">↗</span></button>
-                    <button className="tool-action" onClick={() => void explain()} disabled={!!busy}><span className="tool-icon"><BookOpen size={17}/></span><span><strong>Explicar comando</strong><small>Passo a passo local · sem IA</small></span><span className="arrow-small">↗</span></button>
-                  </div>
-                  <div className="toolbox-divider"/>
-                  <span className="eyebrow">CONVERSOR</span>
-                  <div className="convert-buttons"><Button variant="outline" size="sm" onClick={() => void convert(true)} disabled={!!busy}><ArrowLeftRight size={14}/> Uma linha</Button><Button variant="outline" size="sm" onClick={() => void convert(false)} disabled={!!busy}><Menu size={14}/> Multilinha</Button></div>
-                  <div className="toolbox-divider"/>
-                  <div className="toolbox-section-title"><span className="eyebrow">SUGESTÕES CONTEXTUAIS</span><Activity size={15}/></div>
+                <section className="actions-panel compact-reference-panel" style={sideBySide ? { gridColumn: '1 / -1', gridRow: 2 } : undefined}>
+                  <div className="toolbox-section-title"><span className="eyebrow">SUGESTÕES</span><Activity size={15}/></div>
                   <div className="suggestions-list">{hints.length ? hints.slice(0, 4).map((hint,i) => <button key={hint.label+i} className="hint-item" onMouseDown={e => e.preventDefault()} onClick={() => { if (hint.kind === 'command') setInspected(hint.label); insert(hint.example); }}>
                     <div className="hint-head"><code>{hint.label}</code><span>{hint.title}</span></div><p>{hint.description}</p><small>{hint.example}</small></button>) : <p className="muted">Digite um comando para ver exemplos e opções.</p>}</div>
-                  <div className="toolbox-divider"/>
-                  <button className="snippet-toggle" onClick={() => setShowSnippets(v => !v)}><span><Code2 size={15}/> Blocos prontos</span><ChevronDown className={cn(showSnippets && 'rotate')} size={15}/></button>
-                  {showSnippets && <div className="snippet-compact">{SNIPPETS.slice(0, 8).map(s => <button key={s.id} onClick={() => insert(s.code)}>{s.name}<span>+</span></button>)}</div>}
+                  <button className="snippet-toggle" onClick={() => setShowSnippets(v => !v)} aria-expanded={showSnippets}><span><Code2 size={15}/> Blocos prontos</span><ChevronDown className={cn(showSnippets && 'rotate')} size={15}/></button>
+                  {showSnippets && <div className="snippet-compact">{SNIPPETS.slice(0, 8).map(item => <button key={item.id} onClick={() => insert(item.code)}>{item.name}<span>+</span></button>)}</div>}
                 </section>
               </div>
 
-              {busy === 'check' && <p className="inline-status"><LoaderCircle className="spin" size={14}/> Analisando com ShellCheck…</p>}
+              {busy === 'check' && <p className="inline-status"><LoaderCircle className="spin" size={14}/> Validando sintaxe Zsh…</p>}
               {!!findings.length && <section className="diagnostic-panel">
                 <div className="subpanel-heading"><h3><CircleAlert size={17}/> Diagnósticos <span className="count-pill">{findings.length}</span></h3><Button variant="outline" size="sm" onClick={fix}><WandSparkles size={14}/> Aplicar correções possíveis</Button></div>
                 {findings.map((finding,i) => <div className="diagnostic-item" key={i}><span className={cn('severity',finding.level)}>{finding.level}</span><div><strong>SC{finding.code} <span>L{finding.line}:{finding.column}</span></strong><p>{finding.message}</p><a href={'https://www.shellcheck.net/wiki/SC'+finding.code} target="_blank" rel="noreferrer">Entenda esse diagnóstico ↗</a></div></div>)}
