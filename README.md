@@ -447,3 +447,7 @@ The inspector now defaults to a **Blocks** view with selectable cards for statem
 Block cards are ordered by source position and show structural relationships: nested blocks, known static-analysis edges, or textual succession. These labels are deliberately not runtime traces. A clicked card remains selected until **Follow cursor** is enabled; the active card scrolls into view within the inspector.
 
 Expandable path panels in **Blocks** describe possible true/false branches for conditionals, repeat/exit paths for loops, case matching, and command composition. These are explanatory structural scenarios, not a computed or observed execution trace; pipe and conditional-operator details should be confirmed against the source and CFG view.
+
+### ☁️ PR preview deployment dashboard
+
+The existing Cloudflare PR Preview workflow updates **one persistent bot comment** after deployment, both preview smoke checks, and stable redirect verification. The dashboard links to the PR-specific preview and latest-successful redirect, identifies the exact PR head SHA, links to the workflow run, and records the verification time in UTC. The workflow migrates its previous preview comment in place and locates future updates using a hidden marker. A failed deployment leaves the previous verified SHA and timestamp intact; it must never claim that an unverified commit was deployed.
