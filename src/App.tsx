@@ -76,6 +76,9 @@ export function App() {
     try { return Math.max(25, Math.min(80, Number(localStorage.getItem('shellconductor:dock-size')) || 47)); }
     catch { return 47; }
   });
+  const [dockCollapsed, setDockCollapsed] = useState(() => { try { return localStorage.getItem('shellconductor:dock-collapsed') === 'true'; } catch { return false; } });
+  const [dockPosition, setDockPosition] = useState<'left' | 'right'>(() => { try { return localStorage.getItem('shellconductor:dock-position') === 'left' ? 'left' : 'right'; } catch { return 'right'; } });
+  useEffect(() => { try { localStorage.setItem('shellconductor:dock-collapsed', String(dockCollapsed)); localStorage.setItem('shellconductor:dock-position', dockPosition); } catch { /* Storage can be unavailable in private mode. */ } }, [dockCollapsed, dockPosition]);
   const dockDrag = useRef<{ pointerId: number; start: number; size: number; mobile: boolean } | null>(null);
   const [astNodes, setAstNodes] = useState<ShellAstNode[]>([]);
   const [analysisTokens, setAnalysisTokens] = useState<SemanticToken[]>([]);
@@ -95,6 +98,8 @@ export function App() {
   const [sideBySide, setSideBySide] = useState(() => localStorage.getItem('shellconductor:side-by-side') === 'true');
   const [splitRatio, setSplitRatio] = useState(() => Number(localStorage.getItem('shellconductor:split-ratio')) || 50);
   const [autoRun, setAutoRun] = useState(() => localStorage.getItem('shellconductor:auto-run') === 'true');
+  const [autoCheck, setAutoCheck] = useState(() => localStorage.getItem('shellconductor:auto-check') === 'true');
+  const [autoFormat, setAutoFormat] = useState(() => localStorage.getItem('shellconductor:auto-format') === 'true');
   const [editorFontSize, setEditorFontSize] = useState(() => Math.max(9, Math.min(14, Number(localStorage.getItem('shellconductor:editor-font-size')) || 11)));
   const [editorWordWrap, setEditorWordWrap] = useState(() => localStorage.getItem('shellconductor:editor-word-wrap') !== 'false');
   const [editorHeight, setEditorHeight] = useState(() => Number(localStorage.getItem('shellconductor:editor-height')) || 390);
@@ -184,10 +189,35 @@ export function App() {
     try {
       const diagnostics = await checkShell(script);
       setFindings(diagnostics);
-      notify(diagnostics.length ? diagnostics.length + ' apontamento(s) do ShellCheck.' : 'Nenhum problema encontrado pelo ShellCheck.');
-    } catch (error) { notify(error instanceof Error ? error.message : 'Erro no ShellCheck.'); }
+      notify(diagnostics.length ? diagnostics.length + ' aviso(s) de sintaxe.' : 'Parser Zsh: nenhum problema sintático encontrado.');
+    } catch (error) { notify(error instanceof Error ? error.message : 'Erro no parser Zsh.'); }
     finally { setBusy(null); }
   };
+  useEffect(() => {
+    try { localStorage.setItem('shellconductor:auto-check', String(autoCheck)); localStorage.setItem('shellconductor:auto-format', String(autoFormat)); } catch { /* Safari private mode */ }
+  }, [autoCheck, autoFormat]);
+  useEffect(() => {
+    if (!autoCheck || !script.trim()) return;
+    let cancelled = false;
+    const revision = analysisRevision.current;
+    const timer = setTimeout(() => {
+      void checkShell(script).then(diagnostics => {
+        if (!cancelled && revision === analysisRevision.current) setFindings(diagnostics);
+      }).catch(() => { /* Keep manual validation available when WASM is unavailable. */ });
+    }, 900);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [script, autoCheck]);
+  useEffect(() => {
+    if (!autoFormat || !script.trim()) return;
+    let cancelled = false;
+    const revision = analysisRevision.current;
+    const timer = setTimeout(() => {
+      void formatShell(script, false).then(formatted => {
+        if (!cancelled && revision === analysisRevision.current && formatted && formatted !== script) change(formatted);
+      }).catch(() => { /* Do not modify incomplete or invalid shell input. */ });
+    }, 1500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [script, autoFormat]);
   const fix = () => {
     const result = applyAvailableFixes(script, findings);
     if (result.count) { change(result.code); notify(result.count + ' correção(ões) automática(s) aplicada(s). Valide novamente.'); }
@@ -348,7 +378,8 @@ export function App() {
     const drag = dockDrag.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     const dimension = drag.mobile ? window.visualViewport?.height ?? window.innerHeight : window.innerWidth;
-    const delta = (drag.start - (drag.mobile ? event.clientY : event.clientX)) / Math.max(1, dimension) * 100;
+    const direction = drag.mobile || dockPosition === 'right' ? 1 : -1;
+    const delta = direction * (drag.start - (drag.mobile ? event.clientY : event.clientX)) / Math.max(1, dimension) * 100;
     setDockSize(Math.max(25, Math.min(80, drag.size + delta)));
   };
   useEffect(() => {
@@ -372,7 +403,7 @@ export function App() {
         <div className="side-bottom"><a href="https://github.com/rodkisten/shell" target="_blank" rel="noreferrer"><Github size={16}/> GitHub</a><span>v0.1</span></div>
       </aside>
 
-      <div className={cn("main-column", explorerOpen && "with-explorer-dock")} style={explorerOpen ? { "--dock-size": `${dockSize}%`, "--explorer-reserved-width": `${dockSize}vw` } as React.CSSProperties : undefined}>
+      <div className={cn("main-column", explorerOpen && !dockCollapsed && "with-explorer-dock", explorerOpen && !dockCollapsed && `dock-${dockPosition}`)} style={explorerOpen ? { "--dock-size": `${dockSize}%`, "--explorer-reserved-width": `${dockSize}vw` } as React.CSSProperties : undefined}>
         <header className="topbar">
           <div className="breadcrumbs"><button className="mobile-menu-button" aria-label="Abrir menu" onClick={() => setMobileMenu(v=>!v)}><Menu size={20}/></button><span>Workspace</span><span className="slash">/</span><strong>{location.pathname === '/historico' ? 'Histórico' : location.pathname === '/biblioteca' ? 'Biblioteca' : location.pathname === '/linux' ? 'Alpine Linux' : 'Editor'}</strong></div>
           <div className="topbar-right"><span className="privacy-label"><span className="status-light"/> Armazenamento local</span><ManPopover command={inspected} onClose={() => setInspected(null)} onInsert={insert}/><a className="github-small" href="https://github.com/rodkisten/shell" target="_blank" rel="noreferrer" aria-label="GitHub"><Github size={17}/></a></div>
@@ -385,9 +416,12 @@ export function App() {
                 <h1>Seu shell, <span>sob controle.</span></h1>
                 <p>Escreva, entenda e execute scripts. Tudo em um lugar, sem sair do navegador.</p>
               </div>
-              <label className="auto-run-toggle"><input type="checkbox" checked={autoRun} onChange={event => setAutoRun(event.target.checked)} /> Executar automaticamente <span>850 ms após parar de digitar</span></label>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
-                <Link to="/linux" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", color: "#ddd", fontSize: 12 }}><Terminal size={15}/> Alpine Linux</Link><button type="button" aria-pressed={sideBySide} onClick={() => setSideBySide(value => !value)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', border: '1px solid #34363d', borderRadius: 7, background: '#141519', color: '#ddd', fontSize: 12 }}><ArrowLeftRight size={15}/> {sideBySide ? 'Painéis empilhados' : 'Painéis lado a lado'}</button>
+              <div className="compact-workspace-controls" aria-label="Automação e visualização">
+                <label title="Executar após 850 ms sem digitar"><input type="checkbox" checked={autoRun} onChange={event => setAutoRun(event.target.checked)}/><Play size={15}/><span>Autoexecutar</span></label>
+                <label title="Validação sintática automática após 900 ms"><input type="checkbox" checked={autoCheck} onChange={event => setAutoCheck(event.target.checked)}/><ShieldCheck size={15}/><span>Auto sintaxe</span></label>
+                <label title="Formatar automaticamente após 1,5 s sem digitar"><input type="checkbox" checked={autoFormat} onChange={event => setAutoFormat(event.target.checked)}/><WandSparkles size={15}/><span>Autoformatar</span></label>
+                <Link to="/linux" className="compact-control-icon" title="Alpine Linux" aria-label="Alpine Linux"><Terminal size={16}/></Link>
+                <button type="button" className="compact-control-icon" aria-label={sideBySide ? 'Empilhar painéis' : 'Painéis lado a lado'} aria-pressed={sideBySide} title={sideBySide ? 'Empilhar painéis' : 'Painéis lado a lado'} onClick={() => setSideBySide(value => !value)}><ArrowLeftRight size={16}/></button>
               </div>
               <div className={cn("workspace-layout", sideBySide && "is-split")} style={sideBySide ? { "--editor-share": `${splitRatio}fr`, "--terminal-share": `${100 - splitRatio}fr` } as React.CSSProperties : undefined}>
                 <section className="editor-panel" style={sideBySide ? { gridColumn: 1, gridRow: 1 } : undefined}>
@@ -396,11 +430,11 @@ export function App() {
                     <div className="panel-header-actions"><label title="Tamanho da fonte do editor" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, flexShrink: 0 }}><span className="editor-font-label">Fonte</span><select aria-label="Tamanho da fonte" value={editorFontSize} onChange={event => setEditorFontSize(Number(event.target.value))} style={{ background: "#141519", color: "#eee", border: "1px solid #34363d", borderRadius: 5, padding: "4px 2px", fontSize: 16, maxWidth: 74 }}>{[9,10,11,12,13,14].map(size => <option key={size} value={size}>{size}px</option>)}</select></label><label title="Quebrar linhas longas" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}><input type="checkbox" checked={editorWordWrap} onChange={event => setEditorWordWrap(event.target.checked)} /> Wrap</label><span className="language-label">Zsh</span><button title="Colar texto" onClick={paste} aria-label="Colar"><Clipboard size={15}/></button><button title="Copiar script" onClick={() => void copy()} aria-label="Copiar"><Copy size={15}/></button><button title="Salvar script" onClick={save} aria-label="Salvar"><Bookmark size={15}/></button></div>
                   </div>
                   <nav className="editor-command-toolbar" aria-label="Ferramentas do editor">
-                    <button type="button" onClick={() => { void run(); }} disabled={!!busy}><Play size={15}/> Executar</button>
-                    <button type="button" onClick={() => void convert(false)} disabled={!!busy}><WandSparkles size={15}/> Formatar</button>
-                    <button type="button" onClick={() => void check()} disabled={!!busy}><ShieldCheck size={15}/> Validar</button>
-                    <button type="button" className="editor-command-primary" onClick={() => void explain()} disabled={!!busy}><BookOpen size={15}/> Explicar</button>
-                    <button type="button" onClick={() => { setExplorerTab('flow'); setExplorerOpen(true); if (!explanation) void explain(); }} disabled={!!busy}><Activity size={15}/> Fluxo</button>
+                    <button type="button" title="Executar" aria-label="Executar" onClick={() => { void run(); }} disabled={!!busy}><Play size={17}/><span className="command-label">Executar</span></button>
+                    <button type="button" title="Formatar" aria-label="Formatar" onClick={() => void convert(false)} disabled={!!busy}><WandSparkles size={17}/><span className="command-label">Formatar</span></button>
+                    <button type="button" title="Validar sintaxe Zsh" aria-label="Validar sintaxe Zsh" onClick={() => void check()} disabled={!!busy}><ShieldCheck size={17}/><span className="command-label">Validar</span></button>
+                    <button type="button" className="editor-command-primary" title="Explicar" aria-label="Explicar" onClick={() => void explain()} disabled={!!busy}><BookOpen size={17}/><span className="command-label">Explicar</span></button>
+                    <button type="button" title="Fluxo" aria-label="Fluxo" onClick={() => { setExplorerTab('flow'); setExplorerOpen(true); if (!explanation) void explain(); }} disabled={!!busy}><Activity size={17}/><span className="command-label">Fluxo</span></button>
                   </nav>
                   <div className="editor-inner" style={{ height: editorHeight }}><ShellEditor ref={editor} code={script} fontSize={editorFontSize} wordWrap={editorWordWrap} onChange={change} onCursor={setCursor} onInspect={setInspected} onSemanticInspect={setSemanticSelection} onRun={() => { void run(); }}/></div>
                   <CommandHelp help={quickHelp} onManual={setInspected}/>
@@ -427,31 +461,16 @@ export function App() {
                   <div className="pane-resizer" role="separator" aria-label="Redimensionar terminal" aria-orientation="horizontal" onPointerDown={event => resize('terminal', event)} />
                   <div className="terminal-bottom"><span><ShieldCheck size={13}/> Ambiente isolado</span><div><button onClick={async () => { try { await resetShell(); notify('Sandbox zerado.'); } catch { notify('Não foi possível reiniciar.'); } }}><RotateCcw size={13}/> Reiniciar</button><button onClick={() => setOutput([])}><Trash2 size={13}/> Limpar saída</button></div></div></>}
               </section>
-                <section className="actions-panel" style={sideBySide ? { gridColumn: '1 / -1', gridRow: 2 } : undefined}>
-                  <div className="toolbox-title"><span className="eyebrow">FERRAMENTAS</span><h3>Ações rápidas <Sparkles size={15}/></h3></div>
-                  <div className="tool-primary">
-                    <Button onClick={() => { void run(); }} disabled={!!busy} className="run-button">{busy === 'run' ? <LoaderCircle className="spin" size={16}/> : <Play size={16} fill="currentColor" />} Executar no sandbox</Button>
-                    {busy === 'run' && <Button onClick={() => { cancelShell(); setBusy(null); }} variant="outline" size="sm"><Square size={13}/> Interromper</Button>}
-                  </div>
-                  <div className="tool-group">
-                    <button className="tool-action" onClick={() => void convert(false)} disabled={!!busy}><span className="tool-icon"><WandSparkles size={17}/></span><span><strong>Formatar script</strong><small>sh-syntax • Zsh experimental</small></span><span className="tool-kbd">⌘ ⇧ F</span></button>
-                    <button className="tool-action" onClick={() => void check()} disabled={!!busy}><span className="tool-icon"><ShieldCheck size={17}/></span><span><strong>Validar e diagnosticar</strong><small>sh-syntax • análise sintática</small></span><span className="arrow-small">↗</span></button>
-                    <button className="tool-action" onClick={() => void explain()} disabled={!!busy}><span className="tool-icon"><BookOpen size={17}/></span><span><strong>Explicar comando</strong><small>Passo a passo local · sem IA</small></span><span className="arrow-small">↗</span></button>
-                  </div>
-                  <div className="toolbox-divider"/>
-                  <span className="eyebrow">CONVERSOR</span>
-                  <div className="convert-buttons"><Button variant="outline" size="sm" onClick={() => void convert(true)} disabled={!!busy}><ArrowLeftRight size={14}/> Uma linha</Button><Button variant="outline" size="sm" onClick={() => void convert(false)} disabled={!!busy}><Menu size={14}/> Multilinha</Button></div>
-                  <div className="toolbox-divider"/>
-                  <div className="toolbox-section-title"><span className="eyebrow">SUGESTÕES CONTEXTUAIS</span><Activity size={15}/></div>
+                <section className="actions-panel compact-reference-panel" style={sideBySide ? { gridColumn: '1 / -1', gridRow: 2 } : undefined}>
+                  <div className="toolbox-section-title"><span className="eyebrow">SUGESTÕES</span><Activity size={15}/></div>
                   <div className="suggestions-list">{hints.length ? hints.slice(0, 4).map((hint,i) => <button key={hint.label+i} className="hint-item" onMouseDown={e => e.preventDefault()} onClick={() => { if (hint.kind === 'command') setInspected(hint.label); insert(hint.example); }}>
                     <div className="hint-head"><code>{hint.label}</code><span>{hint.title}</span></div><p>{hint.description}</p><small>{hint.example}</small></button>) : <p className="muted">Digite um comando para ver exemplos e opções.</p>}</div>
-                  <div className="toolbox-divider"/>
-                  <button className="snippet-toggle" onClick={() => setShowSnippets(v => !v)}><span><Code2 size={15}/> Blocos prontos</span><ChevronDown className={cn(showSnippets && 'rotate')} size={15}/></button>
-                  {showSnippets && <div className="snippet-compact">{SNIPPETS.slice(0, 8).map(s => <button key={s.id} onClick={() => insert(s.code)}>{s.name}<span>+</span></button>)}</div>}
+                  <button className="snippet-toggle" onClick={() => setShowSnippets(v => !v)} aria-expanded={showSnippets}><span><Code2 size={15}/> Blocos prontos</span><ChevronDown className={cn(showSnippets && 'rotate')} size={15}/></button>
+                  {showSnippets && <div className="snippet-compact">{SNIPPETS.slice(0, 8).map(item => <button key={item.id} onClick={() => insert(item.code)}>{item.name}<span>+</span></button>)}</div>}
                 </section>
               </div>
 
-              {busy === 'check' && <p className="inline-status"><LoaderCircle className="spin" size={14}/> Analisando com ShellCheck…</p>}
+              {busy === 'check' && <p className="inline-status"><LoaderCircle className="spin" size={14}/> Validando sintaxe Zsh…</p>}
               {!!findings.length && <section className="diagnostic-panel">
                 <div className="subpanel-heading"><h3><CircleAlert size={17}/> Diagnósticos <span className="count-pill">{findings.length}</span></h3><Button variant="outline" size="sm" onClick={fix}><WandSparkles size={14}/> Aplicar correções possíveis</Button></div>
                 {findings.map((finding,i) => <div className="diagnostic-item" key={i}><span className={cn('severity',finding.level)}>{finding.level}</span><div><strong>SC{finding.code} <span>L{finding.line}:{finding.column}</span></strong><p>{finding.message}</p><a href={'https://www.shellcheck.net/wiki/SC'+finding.code} target="_blank" rel="noreferrer">Entenda esse diagnóstico ↗</a></div></div>)}
@@ -474,11 +493,11 @@ export function App() {
         <NavLink to="/historico" className={({isActive}) => cn(isActive && 'active')}><Clock3 size={20}/><span>Histórico</span></NavLink>
       </nav>
       {toast && <div role="status" className="toast"><CircleCheck size={16}/> {toast}<button onClick={() => setToast('')} aria-label="Fechar aviso"><X size={14}/></button></div>}
-              {explorerOpen && <section className="explain-panel explorer-dock" role="dialog" aria-label="Explorador de análise" aria-modal="false" style={{ "--dock-size": `${dockSize}%`, "--dock-height": `${dockSize}dvh` } as React.CSSProperties}><div className="explorer-dock-resizer" role="separator" aria-label="Redimensionar explorador" aria-orientation={typeof window !== "undefined" && window.matchMedia("(max-width: 700px)").matches ? "horizontal" : "vertical"} aria-valuemin={25} aria-valuemax={80} aria-valuenow={dockSize} tabIndex={0} onPointerDown={resizeDock} onPointerMove={moveDock} onPointerUp={finishDock} onPointerCancel={finishDock} onKeyDown={event => { if (event.key === "Home") { event.preventDefault(); setDockSize(25); } else if (event.key === "End") { event.preventDefault(); setDockSize(80); } else if (event.key === "ArrowUp" || event.key === "ArrowRight") { event.preventDefault(); setDockSize(v => Math.min(80,v+5)); } else if (event.key === "ArrowDown" || event.key === "ArrowLeft") { event.preventDefault(); setDockSize(v => Math.max(25,v-5)); } }} /><div className="subpanel-heading"><h3><BookOpen size={15}/> Explorador</h3><div className="dock-header-actions"><button type="button" className="subtle-icon" onClick={() => setDockSize(47)} title="Restaurar tamanho" aria-label="Restaurar tamanho"><ArrowLeftRight size={15}/></button><button className="subtle-icon" onClick={() => setExplorerOpen(false)} title="Fechar" aria-label="Fechar explorador"><X size={16}/></button></div></div><div className="explorer-tabs" role="tablist" aria-label="Visualização da análise">
+              {explorerOpen && <section className={cn("explain-panel explorer-dock", `dock-${dockPosition}`, dockCollapsed && "dock-collapsed")} role="dialog" aria-label="Explorador de análise" aria-modal="false" style={{ "--dock-size": `${dockSize}%`, "--dock-height": `${dockSize}dvh` } as React.CSSProperties}><div className="explorer-dock-resizer" role="separator" aria-label="Redimensionar explorador" aria-orientation={typeof window !== "undefined" && window.matchMedia("(max-width: 700px)").matches ? "horizontal" : "vertical"} aria-valuemin={25} aria-valuemax={80} aria-valuenow={dockSize} aria-disabled={dockCollapsed} tabIndex={dockCollapsed ? -1 : 0} onPointerDown={dockCollapsed ? undefined : resizeDock} onPointerMove={moveDock} onPointerUp={finishDock} onPointerCancel={finishDock} onKeyDown={event => { if (dockCollapsed) return; if (event.key === "Home") { event.preventDefault(); setDockSize(25); } else if (event.key === "End") { event.preventDefault(); setDockSize(80); } else if (event.key === "ArrowUp" || event.key === "ArrowRight") { event.preventDefault(); setDockSize(v => Math.min(80,v+5)); } else if (event.key === "ArrowDown" || event.key === "ArrowLeft") { event.preventDefault(); setDockSize(v => Math.max(25,v-5)); } }} /><div className="subpanel-heading"><h3><BookOpen size={15}/> Explorador</h3><div className="dock-header-actions"><button type="button" className="subtle-icon" onClick={() => setDockPosition(value => value === "left" ? "right" : "left")} title="Alternar lado do Dock" aria-label="Alternar lado do Dock"><ArrowLeftRight size={15}/></button><button type="button" className="subtle-icon" onClick={() => setDockCollapsed(value => !value)} title={dockCollapsed ? "Expandir Dock" : "Recolher Dock"} aria-label={dockCollapsed ? "Expandir Dock" : "Recolher Dock"}>{dockCollapsed ? "+" : "−"}</button>{!dockCollapsed && <div className="dock-size-presets" role="group" aria-label="Tamanho do Dock">{([35, 50, 70] as const).map(size => <button key={size} type="button" className={dockSize === size ? "active" : ""} onClick={() => setDockSize(size)} aria-pressed={dockSize === size} title={`Dock ${size}%`}>{size}%</button>)}</div>}<button type="button" className="subtle-icon" onClick={() => setDockSize(47)} title="Restaurar tamanho" aria-label="Restaurar tamanho"><ArrowLeftRight size={15}/></button><button className="subtle-icon" onClick={() => setExplorerOpen(false)} title="Fechar" aria-label="Fechar explorador"><X size={16}/></button></div></div>{!dockCollapsed && <><div className="explorer-tabs" role="tablist" aria-label="Visualização da análise">
                 {(['flow','ast','explanation'] as const).map(tab => <button key={tab} type="button" role="tab" aria-selected={explorerTab === tab} onClick={() => setExplorerTab(tab)}>{tab === 'flow' ? 'Fluxo' : tab === 'ast' ? 'AST' : 'Explicação'}</button>)}
               </div>
-              {explorerTab !== 'explanation' && astNodes.length > 0 && <ExecutionExplorer cursorOffset={cursor} view={explorerTab} analysis={analyzeShell(script, astNodes, analysisTokens)} flow={flowResult} flowStatus={flowStatus} flowError={flowError} source={script} onReveal={(from, to) => editor.current?.reveal(from, to)} />}
-              {explorerTab === 'explanation' && <pre className="explorer-explanation-text">{explanation?.replace(/\\\\n/g, '\n') ?? 'Analisando…'}</pre>}<p>Fonte: catálogo local e parser sh-syntax. Nenhum código é enviado para análise remota.</p></section>}
+              {explorerTab !== 'explanation' && astNodes.length > 0 && <ExecutionExplorer cursorOffset={cursor} view={explorerTab} analysis={analyzeShell(script, astNodes, analysisTokens)} flow={flowResult} flowStatus={flowStatus} flowError={flowError} source={script} tokens={analysisTokens} onReveal={(from, to) => editor.current?.reveal(from, to)} />}
+              {explorerTab === 'explanation' && <pre className="explorer-explanation-text">{explanation?.replace(/\\\\n/g, '\n') ?? 'Analisando…'}</pre>}<p>Fonte: catálogo local e parser sh-syntax. Nenhum código é enviado para análise remota.</p></>}</section>}
     </div>
   );
 }

@@ -425,3 +425,31 @@ Quando a seleção do cursor muda, o explorador tenta manter o nó AST/Fluxo ati
 ### CI e módulos ESM externos
 
 A página Debian carrega Highlight.js, Marked e DOMPurify sob demanda pelo `esm.sh`. Os endereços são constantes passadas a `import(/* @vite-ignore */ url)` para evitar que o TypeScript tente resolver URLs HTTP como módulos locais durante o build. Se o CDN estiver indisponível, a interface preserva o texto original sem realce.
+
+### Workbench 3.0: Dock layouts
+
+The analysis Dock can be placed on either desktop edge and collapsed to a compact header without losing its selected tab. Position and collapsed state are persisted independently from the existing Dock size in local storage; mobile retains the bottom-sheet layout and safe-area spacing.
+
+Dock sizing offers 35%, 50% and 70% presets, plus the existing draggable separator and reset control. Resizing respects the selected desktop edge: dragging inward grows the pane, regardless of whether it is docked left or right. When collapsed, the resize separator is removed from keyboard navigation.
+
+### AST explorer navigation
+
+The AST tree supports incremental search by node kind, label, description and ID. Search preserves ancestor paths and temporarily reveals matching descendants without changing the user's collapsed state. Expand/reduce controls let users quickly navigate large syntax trees. The contextual explanation follows the node under the CodeMirror cursor when available.
+
+The contextual inspector shows the selected node's parent, child count, depth, navigability and source range. It includes a bounded source preview, a copy-source action, editor reveal, and parent navigation. All inspection is static and does not execute shell commands.
+
+### Interactive Bash Explain inspector
+
+Selecting an AST node opens a syntax-aware source breakdown: known commands, subcommands, options, positional arguments, and shell operators become clickable spans. Clicking one shows its explanation, provenance and example when available, and reveals the corresponding source range in CodeMirror. The selected AST block remains pinned while inspecting its parts; **Follow cursor** returns to automatic selection. Explanations come from the existing shell parser, command catalog and CLI specifications, not remote AI or executed commands. Unknown tokens remain plain text rather than receiving invented explanations.
+
+The inspector now defaults to a **Blocks** view with selectable cards for statements, conditionals, loops, functions and case clauses. Cards show a bounded source excerpt, parser-derived explanation and count of recognized semantic parts. Select a card to inspect clickable tokens; switch to **Tree** for the full low-level AST. Cards are static analysis, not observed execution, and may overlap for nested shell constructs.
+
+Block cards are ordered by source position and show structural relationships: nested blocks, known static-analysis edges, or textual succession. These labels are deliberately not runtime traces. A clicked card remains selected until **Follow cursor** is enabled; the active card scrolls into view within the inspector.
+
+Expandable path panels in **Blocks** describe possible true/false branches for conditionals, repeat/exit paths for loops, case matching, and command composition. These are explanatory structural scenarios, not a computed or observed execution trace; pipe and conditional-operator details should be confirmed against the source and CFG view.
+
+### ☁️ PR preview deployment dashboard
+
+The existing Cloudflare PR Preview workflow updates **one persistent bot comment** after deployment, both preview smoke checks, and stable redirect verification. The dashboard links to the PR-specific preview and latest-successful redirect, identifies the exact PR head SHA, links to the workflow run, and records the verification time in UTC. The workflow migrates its previous preview comment in place and locates future updates using a hidden marker. A failed deployment leaves the previous verified SHA and timestamp intact; it must never claim that an unverified commit was deployed.
+
+The Bash Explain block view now distinguishes binary command operators using the gap between **AST operand ranges**, rather than matching arbitrary text inside statements. This enables operator-specific explanations for `&&`, `||`, `|`, and `|&` while leaving unrecognized or ambiguous structures without fabricated paths. The preview dashboard displays the source commit's short SHA as a link after successful verification.

@@ -136,3 +136,39 @@
     min-height:min(25dvh,200px);
   }
 }
+
+/* Workbench 3.0: persistent dock placement and compact collapsed rail. */
+@media(min-width:701px){
+  .main-column.with-explorer-dock.dock-left{padding-right:0;padding-left:min(var(--explorer-reserved-width,47vw),calc(100vw - 360px))}
+  .explorer-dock.dock-left{right:auto;left:0;border-radius:0 12px 0 0}
+  .explorer-dock.dock-left .explorer-dock-resizer{left:auto;right:0}
+  .explorer-dock.dock-collapsed{top:70px;bottom:auto;width:auto;max-width:min(360px,90vw);height:auto;min-height:0}
+  .explorer-dock.dock-collapsed.dock-left{left:0;right:auto}
+}
+.explorer-dock.dock-collapsed .explorer-dock-resizer{display:none}
+.explorer-dock.dock-collapsed .subpanel-heading{margin:0}
+@media(max-width:700px){
+  .explorer-dock.dock-collapsed{height:auto;min-height:0;max-height:none;bottom:calc(56px + env(safe-area-inset-bottom,0px));border-radius:14px 14px 0 0}
+}
+
+.explorer-dock .dock-size-presets{display:flex;align-items:center;gap:3px}
+.explorer-dock .dock-size-presets button{font:inherit;font-size:10px;padding:4px 5px;border:1px solid transparent;border-radius:5px;background:transparent;color:inherit;cursor:pointer}
+.explorer-dock .dock-size-presets button.active,.explorer-dock .dock-size-presets button[aria-pressed=true]{border-color:#a78bfa;background:#a78bfa22}
+@media(max-width:700px){.explorer-dock .dock-size-presets button{padding:6px 4px;font-size:10px}}
+
+
+/* Mobile inspector: a bounded bottom sheet, not a floating full-page panel. */
+@media(max-width:700px){
+ .explorer-dock{position:fixed!important;inset:auto 0 calc(60px + env(safe-area-inset-bottom,0px))!important;width:100vw!important;max-width:100vw!important;min-width:0!important;height:min(var(--dock-height,47dvh),calc(100dvh - 145px - env(safe-area-inset-bottom,0px)))!important;max-height:calc(100dvh - 145px - env(safe-area-inset-bottom,0px))!important;min-height:180px!important;overflow:hidden!important;border-radius:14px 14px 0 0!important;box-sizing:border-box!important}
+ .explorer-dock .subpanel-heading{padding:18px 8px 4px!important;min-height:42px!important;box-sizing:border-box}
+ .explorer-dock .dock-header-actions{gap:2px!important;flex:0 0 auto}
+ .explorer-dock .subpanel-heading .subtle-icon{width:30px!important;min-width:30px!important;height:30px!important;padding:4px!important}
+ .explorer-dock .execution-explorer{overflow:auto!important;min-height:0!important;flex:1 1 auto!important}
+ .explorer-dock .flow-visual{padding:6px!important}
+ .explorer-dock .flow-visual-scroll{max-height:calc(var(--dock-height,47dvh) - 170px)!important;min-height:100px}
+ .explorer-dock-resizer{z-index:5!important}
+ .explorer-dock .execution-explorer-header{padding:8px 10px}
+ .explorer-dock .execution-explorer-details{padding:10px}
+ .explorer-dock .execution-explorer-tree{max-height:none}
+ .explorer-dock > p{display:none}
+}

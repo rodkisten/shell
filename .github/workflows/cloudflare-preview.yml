@@ -230,17 +230,61 @@ jobs:
           echo "Native fallback: $NATIVE_PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
           echo "Stable preview: https://shell.preview.migos.club" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Comment stable preview URLs on PR
+      - name: Publish or update the PR preview dashboard
         env:
           GH_TOKEN: ${{ github.token }}
           PREVIEW_URL: ${{ steps.custom_preview.outputs.url }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          DEPLOYED_SHA: ${{ github.event.pull_request.head.sha }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
-          gh pr comment "$PR_NUMBER" --edit-last --create-if-none --body "☁️ **PR Preview:** $PREVIEW_URL
+          set -euo pipefail
+          # The workflow checks out the PR merge ref, but deploy attribution
+          # must always refer to the actual source head commit.
+          deployed_at="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          short_sha="${DEPLOYED_SHA:0:7}"
+          marker='<!-- shell-pr-preview-dashboard:v1 -->'
+          body="$(mktemp)"
+          comments="$(mktemp)"
+          trap 'rm -f "$body" "$comments"' EXIT
+          cat > "$body" <<EOF
+          $marker
+          ## ☁️ Shell Workbench · Live PR Preview
 
-          🧭 **Latest successful preview:** https://shell.preview.migos.club
+          **🚀 [Open interactive preview]($PREVIEW_URL)**
 
-          The fixed URL is updated only after the PR preview passes both smoke tests."
+          | Deployment | Details |
+          | :-- | :-- |
+          | 🟢 Status | **Deployed and smoke-tested** |
+          | 🧩 Pull request | **#$PR_NUMBER** |
+          | 🪪 Source commit | [$short_sha](https://github.com/$REPOSITORY/commit/$DEPLOYED_SHA) |
+          | 🕒 Verified at | **$deployed_at** |
+          | 🧪 Workflow | [Run #$RUN_ID · attempt $RUN_ATTEMPT](https://github.com/$REPOSITORY/actions/runs/$RUN_ID) |
+          | 🧭 Latest successful preview | [shell.preview.migos.club](https://shell.preview.migos.club) |
+
+          > ✅ Both preview endpoints and the stable redirect were checked before this comment was updated.
+          > This dashboard records the **last verified deployment**, not necessarily the newest commit on the PR.
+
+          <sub>🔄 Automatically refreshed after each successful preview deployment. One persistent comment per PR.</sub>
+          EOF
+          # Update only the dashboard owned by this workflow, never an
+          # unrelated comment. Paginate to avoid duplicates on busy PRs.
+          gh api --paginate --jq '.[]' "repos/$REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" | jq -s . > "$comments"
+          comment_id="$(jq -r --arg marker "$marker" '[.[] | select(.user.login == "github-actions[bot]" and (.body | contains($marker))) | .id] | first // empty' "$comments")"
+          if [[ -z "$comment_id" ]]; then
+            # Migrate the previous bot-owned preview comment in place.
+            comment_id="$(jq -r '[.[] | select(.user.login == "github-actions[bot]" and (.body | contains("PR Preview:")) and (.body | contains("shell.preview.migos.club"))) | .id] | first // empty' "$comments")"
+          fi
+          if [[ -n "$comment_id" ]]; then
+            gh api --method PATCH "repos/$REPOSITORY/issues/comments/$comment_id" --raw-field body="$(cat "$body")" >/dev/null
+            echo "Updated preview dashboard comment #$comment_id" >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh api --method POST "repos/$REPOSITORY/issues/$PR_NUMBER/comments" --raw-field body="$(cat "$body")" >/dev/null
+            echo "Created preview dashboard comment" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "Verified source commit: $DEPLOYED_SHA at $deployed_at" >> "$GITHUB_STEP_SUMMARY"
 
   cleanup:
     environment: production
