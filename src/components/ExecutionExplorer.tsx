@@ -63,6 +63,34 @@ export function ExecutionExplorer({
   }, [source]);
   const offset = (position: number) => byteOffsets[Math.max(0, Math.min(byteOffsets.length - 1, position))] ?? 0;
   const graph = useMemo(() => flow ? layoutShellFlow(flow) : null, [flow]);
+  const flowViewport = useRef<HTMLDivElement | null>(null);
+  const pinch = useRef<{ distance: number; scale: number } | null>(null);
+  const [flowScale, setFlowScale] = useState(1);
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+  const fitFlow = () => {
+    const viewport = flowViewport.current;
+    if (!viewport || !graph) return;
+    setFlowScale(Math.max(0.12, Math.min(1, (viewport.clientWidth - 16) / graph.width, (viewport.clientHeight - 16) / graph.height)));
+    viewport.scrollTo({ left: 0, top: 0 });
+  };
+  useEffect(() => {
+    const viewport = flowViewport.current;
+    if (!viewport || view !== 'flow') return;
+    const observer = new ResizeObserver(() => setViewportSize({ width: viewport.clientWidth, height: viewport.clientHeight }));
+    observer.observe(viewport);
+    setViewportSize({ width: viewport.clientWidth, height: viewport.clientHeight });
+    return () => observer.disconnect();
+  }, [view, graph]);
+  useEffect(() => {
+    if (!graph || !viewportSize.width || !viewportSize.height || view !== 'flow') return;
+    setFlowScale(Math.max(0.12, Math.min(1, (viewportSize.width - 16) / graph.width, (viewportSize.height - 16) / graph.height)));
+    flowViewport.current?.scrollTo({ left: 0, top: 0 });
+  }, [graph, viewportSize.width, viewportSize.height, view]);
+  const zoomFlow = (next: number) => setFlowScale(Math.max(0.12, Math.min(3, next)));
+  const pinchDistance = (touches: React.TouchList) => Math.hypot(
+    touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY,
+  );
+
   const activeNode = flow?.nodes
     .filter(node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset < offset(node.end))
     .sort((a, b) => (offset(a.end) - offset(a.start)) - (offset(b.end) - offset(b.start)))[0];
@@ -218,8 +246,31 @@ export function ExecutionExplorer({
             <div className={styles.flowSummary}>
               {flow.nodes.length} nós · {flow.edges.length} conexões · análise estática
             </div>
-            <div className={styles.flowScroll}>
-              {graph && <div className={styles.flowCanvas} style={{ width: graph.width, height: graph.height }}>
+            <div className={styles.flowToolbar} role="toolbar" aria-label="Zoom do grafo">
+              <button type="button" onClick={() => zoomFlow(flowScale / 1.25)} aria-label="Diminuir zoom">−</button>
+              <button type="button" onClick={fitFlow}>Enquadrar</button>
+              <span aria-live="polite">{Math.round(flowScale * 100)}%</span>
+              <button type="button" onClick={() => zoomFlow(flowScale * 1.25)} aria-label="Aumentar zoom">+</button>
+              <button type="button" onClick={() => zoomFlow(1)} aria-label="Zoom real">1:1</button>
+            </div>
+            <div className={styles.flowLegend} aria-label="Legenda das cores semânticas">
+              {([
+                ['Comando', FLOW_COLORS.command], ['Condição', FLOW_COLORS.condition],
+                ['Laço', FLOW_COLORS.loop], ['Função', FLOW_COLORS.function],
+                ['Alternativa', FLOW_COLORS.branch], ['Pipeline', FLOW_COLORS.pipeline],
+                ['Verdadeiro', FLOW_COLORS.success], ['Falso', FLOW_COLORS.failure],
+                ['Desconhecido', FLOW_COLORS.unknown], ['Erro', FLOW_COLORS.failure],
+              ] as const).map(([label, color]) => <span key={label}><i style={{ backgroundColor: color }} />{label}</span>)}
+            </div>
+            <div className={styles.flowScroll} ref={flowViewport}
+              onTouchStart={event => {
+                if (event.touches.length === 2) pinch.current = { distance: pinchDistance(event.touches), scale: flowScale };
+              }}
+              onTouchMove={event => {
+                if (event.touches.length === 2 && pinch.current) zoomFlow(pinch.current.scale * pinchDistance(event.touches) / Math.max(1, pinch.current.distance));
+              }}
+              onTouchEnd={event => { if (event.touches.length < 2) pinch.current = null; }}>
+              {graph && <div className={styles.flowStage} style={{ width: graph.width * flowScale, height: graph.height * flowScale }}><div className={styles.flowCanvas} style={{ width: graph.width, height: graph.height, transform: 'scale(' + flowScale + ')' }}>
                 <svg className={styles.flowLines} width={graph.width} height={graph.height} viewBox={`0 0 ${graph.width} ${graph.height}`} aria-label="Conexões de fluxo">
                   <defs>
                     <marker id="flow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
@@ -266,7 +317,7 @@ export function ExecutionExplorer({
                     </button>
                   );
                 })}
-              </div>}
+              </div></div>}
             </div>
             <p className={styles.note}>
               As conexões são aproximações estáticas. Não representam execução observada.
