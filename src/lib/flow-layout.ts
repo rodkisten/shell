@@ -3,58 +3,122 @@ import type { WasmFlowResult } from './shell-flow-wasm';
 export type PositionedFlowNode = WasmFlowResult['nodes'][number] & { x: number; y: number };
 export type FlowLayout = { nodes: PositionedFlowNode[]; width: number; height: number };
 
+const NODE_WIDTH = 200;
+const COLUMN_GAP = 72;
+const ROW_GAP = 112;
+const MARGIN = 64;
+
 /**
- * Layered graph layout. Back edges are drawn separately; they do not affect
- * ranking. Branches occupy different lanes rather than a single vertical rail.
+ * Layout control-flow branches as a directed graph.
+ *
+ * Forward edges establish depth; back edges (loops) are routed by the renderer.
+ * Success/failure successors get distinct columns, while converging successors
+ * are placed near the midpoint of their predecessors.
+ *
+ * This does not infer missing control-flow edges: it only lays out those
+ * explicitly provided by the semantic CFG.
  */
 export function layoutShellFlow(flow: WasmFlowResult): FlowLayout {
-  const nodes = flow.nodes;
-  const byId = new Map(nodes.map((node, index) => [node.id, index]));
+  const byId = new Map(flow.nodes.map(node => [node.id, node]));
   const outgoing = new Map<string, WasmFlowResult['edges']>();
+  const incoming = new Map<string, WasmFlowResult['edges']>();
   for (const edge of flow.edges) {
     if (!byId.has(edge.from) || !byId.has(edge.to)) continue;
-    const group = outgoing.get(edge.from) ?? [];
-    group.push(edge);
-    outgoing.set(edge.from, group);
+    const out = outgoing.get(edge.from) ?? [];
+    out.push(edge);
+    outgoing.set(edge.from, out);
+    const inc = incoming.get(edge.to) ?? [];
+    inc.push(edge);
+    incoming.set(edge.to, inc);
   }
-  const rank = new Map<string, number>();
-  const lane = new Map<string, number>();
-  const ordered = [...nodes].sort((a, b) => a.start - b.start || b.end - a.end);
-  for (const node of ordered) {
-    rank.set(node.id, 0);
-    lane.set(node.id, 0);
+
+  // Edges to an ancestor or to an earlier source position are loop backs.
+  const forward = flow.edges.filter(edge => {
+    const from = byId.get(edge.from);
+    const to = byId.get(edge.to);
+    return from && to && edge.kind !== 'loop' && to.start >= from.start && edge.from !== edge.to;
+  });
+  const forwardOutgoing = new Map<string, typeof forward>();
+  const forwardIncoming = new Map<string, typeof forward>();
+  for (const edge of forward) {
+    const out = forwardOutgoing.get(edge.from) ?? [];
+    out.push(edge);
+    forwardOutgoing.set(edge.from, out);
+    const inc = forwardIncoming.get(edge.to) ?? [];
+    inc.push(edge);
+    forwardIncoming.set(edge.to, inc);
   }
-  for (const node of ordered) {
-    const fromIndex = byId.get(node.id) ?? 0;
-    const edges = (outgoing.get(node.id) ?? []).filter(edge => (byId.get(edge.to) ?? 0) > fromIndex);
-    const alternatives = edges.filter(edge => edge.kind === 'true' || edge.kind === 'false' || edge.kind === 'conditional');
-    for (const edge of edges) {
-      rank.set(edge.to, Math.max(rank.get(edge.to) ?? 0, (rank.get(node.id) ?? 0) + 1));
-      if (alternatives.length > 1) {
-        const index = alternatives.indexOf(edge);
-        lane.set(edge.to, index === 0 ? -1 : 1);
-      } else if (edge.kind === 'true') {
-        lane.set(edge.to, -1);
-      } else if (edge.kind === 'false') {
-        lane.set(edge.to, 1);
-      } else {
-        lane.set(edge.to, lane.get(node.id) ?? 0);
+
+  const order = [...flow.nodes].sort((a, b) => a.start - b.start || b.end - a.end);
+  const ranks = new Map<string, number>();
+  // Longest-path layering, bounded to protect against malformed cyclic inputs.
+  for (const node of order) {
+    const parents = forwardIncoming.get(node.id) ?? [];
+    const depth = parents.reduce((max, edge) => Math.max(max, (ranks.get(edge.from) ?? -1) + 1), 0);
+    ranks.set(node.id, depth);
+  }
+
+  const lanes = new Map<string, number>();
+  const branchChildren = new Map<string, Set<string>>();
+  for (const edge of forward) {
+    if (edge.kind !== 'true' && edge.kind !== 'false' && edge.kind !== 'conditional') continue;
+    const children = branchChildren.get(edge.from) ?? new Set<string>();
+    children.add(edge.to);
+    branchChildren.set(edge.from, children);
+  }
+  const groups = new Map<number, typeof order>();
+  for (const node of order) {
+    const depth = ranks.get(node.id) ?? 0;
+    const group = groups.get(depth) ?? [];
+    group.push(node);
+    groups.set(depth, group);
+  }
+
+  for (const depth of [...groups.keys()].sort((a, b) => a - b)) {
+    const group = groups.get(depth) ?? [];
+    const preferred = new Map<string, number>();
+    for (const node of group) {
+      const parents = forwardIncoming.get(node.id) ?? [];
+      const positions = parents.map(edge => {
+        const parentLane = lanes.get(edge.from) ?? 0;
+        const siblings = [...(branchChildren.get(edge.from) ?? [])];
+        if (siblings.length < 2) {
+          if (edge.kind === 'true') return parentLane - 1;
+          if (edge.kind === 'false') return parentLane + 1;
+          return parentLane;
+        }
+        const index = siblings.indexOf(node.id);
+        return parentLane + (index - (siblings.length - 1) / 2) * 2;
+      });
+      preferred.set(node.id, positions.length ? positions.reduce((a, b) => a + b, 0) / positions.length : 0);
+    }
+    group.sort((a, b) => (preferred.get(a.id) ?? 0) - (preferred.get(b.id) ?? 0) || a.start - b.start);
+    const used = new Set<number>();
+    for (const node of group) {
+      const desired = Math.round(preferred.get(node.id) ?? 0);
+      let column = desired;
+      if (used.has(column)) {
+        for (let distance = 1; ; distance++) {
+          if (!used.has(desired - distance)) { column = desired - distance; break; }
+          if (!used.has(desired + distance)) { column = desired + distance; break; }
+        }
       }
+      used.add(column);
+      lanes.set(node.id, column);
     }
   }
-  // Keep independent statements from overlapping when AST ancestry hides edges.
-  const occupied = new Set<string>();
-  for (const node of ordered) {
-    let level = rank.get(node.id) ?? 0;
-    const column = lane.get(node.id) ?? 0;
-    while (occupied.has(`${column}:${level}`)) level++;
-    rank.set(node.id, level);
-    occupied.add(`${column}:${level}`);
-  }
-  const positions = ordered.map(node => ({
+
+  const minLane = Math.min(0, ...lanes.values());
+  const maxLane = Math.max(0, ...lanes.values());
+  const positioned = order.map(node => ({
     ...node,
-    x: 340 + (lane.get(node.id) ?? 0) * 250,
-    y: 32 + (rank.get(node.id) ?? 0) * 110,
+    x: MARGIN + ((lanes.get(node.id) ?? 0) - minLane) * (NODE_WIDTH + COLUMN_GAP),
+    y: MARGIN + (ranks.get(node.id) ?? 0) * ROW_GAP,
   }));
-  return { nodes: positions, width: 900, height: Math.max(180, 160 + Math.max(0, ...positions.map(node => node.y))) };
+  const maxDepth = Math.max(0, ...ranks.values());
+  return {
+    nodes: positioned,
+    width: Math.max(420, MARGIN * 2 + (maxLane - minLane) * (NODE_WIDTH + COLUMN_GAP) + NODE_WIDTH),
+    height: Math.max(200, MARGIN * 2 + maxDepth * ROW_GAP + 80),
+  };
 }
