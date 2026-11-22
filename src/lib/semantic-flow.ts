@@ -9,13 +9,6 @@ import type { WasmFlowResult } from './shell-flow-wasm';
 export function buildSemanticFlow(source: string, ast: readonly ShellAstNode[]): WasmFlowResult {
   const encoder = new TextEncoder();
   const byteOffset = (offset: number) => encoder.encode(source.slice(0, offset)).length;
-  const children = new Map<string, ShellAstNode[]>();
-  for (const node of ast) {
-    const key = node.parentId ?? '__root__';
-    const group = children.get(key) ?? [];
-    group.push(node);
-    children.set(key, group);
-  }
   const eligible = new Set(['Stmt', 'BinaryCmd', 'IfClause', 'ForClause', 'WhileClause', 'CaseClause', 'FuncDecl']);
   const selected = ast.filter(node => eligible.has(node.kind) && node.navigable && node.from !== undefined && node.to !== undefined);
   const nodes = selected.map(node => ({ id: node.id, kind: node.kind, start: byteOffset(node.from!), end: byteOffset(node.to!) }));
