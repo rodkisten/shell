@@ -1,3 +1,4 @@
+import { FLOW_COLORS, flowNodeColor, flowEdgeColor, tokenizeFlowLabel } from '../lib/flow-colors';
 import { layoutShellFlow } from '../lib/flow-layout';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ShellAnalysis } from '../lib/shell-analysis';
@@ -209,7 +210,7 @@ export function ExecutionExplorer({
                 <svg className={styles.flowLines} width={graph.width} height={graph.height} viewBox={`0 0 ${graph.width} ${graph.height}`} aria-label="Conexões de fluxo">
                   <defs>
                     <marker id="flow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-                      <path d="M0 0 L8 4 L0 8 Z" fill="#a78bfa" />
+                      <path d="M0 0 L8 4 L0 8 Z" fill={FLOW_COLORS.neutral} />
                     </marker>
                   </defs>
                   {flow.edges.map((edge, index) => {
@@ -226,22 +227,27 @@ export function ExecutionExplorer({
                       ? `M ${x1} ${y1} C ${bend} ${y1 + 35}, ${bend} ${y2 - 35}, ${x2} ${y2}`
                       : `M ${x1} ${y1} C ${x1} ${(y1 + y2) / 2}, ${x2} ${(y1 + y2) / 2}, ${x2} ${y2}`;
                     return <g key={index}>
-                      <path d={d} fill="none" stroke={edge.kind === 'next' ? '#64748b' : '#a78bfa'} strokeWidth="2" strokeDasharray={back ? '5 4' : undefined} markerEnd="url(#flow-arrow)" />
-                      {edge.kind !== 'next' && <text x={(x1 + x2) / 2 + (back ? 65 : 0)} y={(y1 + y2) / 2 - 5} fill="#ddd6fe" fontSize="11" textAnchor="middle">{edge.kind}</text>}
+                      <path d={d} fill="none" stroke={flowEdgeColor(edge.kind)} strokeWidth="2" strokeDasharray={back ? '5 4' : undefined} markerEnd="url(#flow-arrow)" />
+                      {edge.kind !== 'next' && <text x={(x1 + x2) / 2 + (back ? 65 : 0)} y={(y1 + y2) / 2 - 5} fill={flowEdgeColor(edge.kind)} fontSize="11" textAnchor="middle">{edge.kind}</text>}
                     </g>;
                   })}
                 </svg>
                 {graph.nodes.map(node => {
                   const from = offset(node.start);
                   const to = offset(node.end);
-                  const isSelected = activeNode ? activeNode.id === node.id : selectedFlowId === node.id;
+                  const isSelected = selectedFlowId === node.id || (!selectedFlowId && activeNode?.id === node.id);
+                  const snippet = source.slice(from, to).trim();
+                  const invalidRange = from < 0 || to <= from || to > source.length;
+                  const nodeColor = invalidRange ? FLOW_COLORS.failure : flowNodeColor(node.kind, snippet);
+                  const unknown = !invalidRange && nodeColor === FLOW_COLORS.unknown;
                   return (
                     <button key={node.id} ref={isSelected ? activeFlowRef : undefined} type="button"
                       className={`${styles.flowNode} ${styles.flowNodePositioned} ${isSelected ? styles.isSelected : ''}`}
-                      style={{ left: node.x, top: node.y }} aria-pressed={isSelected}
-                      onClick={() => { setSelectedFlowId(node.id); onReveal?.(from, to); }}>
-                      <strong>{node.kind}</strong>
-                      <code>{source.slice(from, to).trim().slice(0, 72) || node.id}</code>
+                      style={{ left: node.x, top: node.y, borderColor: nodeColor, '--flow-node-color': nodeColor } as React.CSSProperties} aria-pressed={isSelected}
+                      title={invalidRange ? 'Invalid source range' : unknown ? 'Unrecognized AST node type' : `Focus ${node.kind} in editor`}
+                      onClick={() => { setSelectedFlowId(node.id); if (!invalidRange) onReveal?.(from, to); }}>
+                      <strong style={{ color: nodeColor }}>{invalidRange ? 'Invalid range' : unknown ? `Unknown: ${node.kind}` : node.kind}</strong>
+                      <code>{tokenizeFlowLabel(snippet.slice(0, 72) || node.id).map((token, index) => <span key={index} style={{ color: token.color }}>{token.text}</span>)}</code>
                       <small>{flow.edges.filter(edge => edge.from === node.id).map(edge => edge.kind).join(' · ') || 'fim'}</small>
                     </button>
                   );
