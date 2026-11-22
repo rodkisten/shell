@@ -1,3 +1,4 @@
+import { evaluateFlowBranch, parseSimulatedValue } from '../lib/flow-simulation';
 import { describeFlowNode, previewShellVariables } from '../lib/flow-semantics';
 import { highlightFlowSource } from '../lib/flow-highlight';
 import { checkShell, type Finding } from '../lib/shellcheck';
@@ -38,6 +39,17 @@ export function ExecutionExplorer({
   const [diagnostics, setDiagnostics] = useState<Finding[]>([]);
   const [simulationOpen, setSimulationOpen] = useState(false);
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
+  const simulatedValues = useMemo(() => Object.fromEntries(
+    Object.entries(variableValues).filter(([, value]) => value.length > 0).map(([key, value]) => [key, parseSimulatedValue(value)])
+  ), [variableValues]);
+  const branchDecisions = useMemo(() => {
+    const decisions = new Map<string, 'true' | 'false' | 'unknown'>();
+    for (const node of flow?.nodes ?? []) {
+      const code = source.slice(node.from ?? 0, node.to ?? 0);
+      decisions.set(node.id, evaluateFlowBranch(node.kind, code, simulatedValues));
+    }
+    return decisions;
+  }, [flow, source, simulatedValues]);
   const detectedVariables = useMemo(() => [...new Set(
     [...source.matchAll(/\$\{([A-Za-z_][\w]*)\}|\$([A-Za-z_][\w]*)/g)]
       .map(match => match[1] ?? match[2]).filter((name): name is string => Boolean(name))
@@ -296,7 +308,7 @@ export function ExecutionExplorer({
                 {simulationOpen ? '▾' : '▸'} Simular variáveis <small>sem executar o script</small>
               </button>
               {simulationOpen && <div className={styles.simulationBody}>
-                <p>Informe valores para visualizar substituições simples. Não avalia expressões, arrays, comandos ou condições.</p>
+                <p>Informe valores para visualizar substituições e avaliar testes simples (-z, -n, =, != e comparações numéricas). Arrays podem ser informados como JSON, por exemplo [\"api\",\"web\"]. Comandos não são executados.</p>
                 {detectedVariables.length === 0 && <p>Nenhuma referência simples a variável encontrada.</p>}
                 {detectedVariables.map(name => <label key={name} className={styles.simulationField}>
                   <span>${name}</span>
@@ -345,6 +357,8 @@ export function ExecutionExplorer({
                     const from = graph.nodes.find(node => node.id === edge.from);
                     const to = graph.nodes.find(node => node.id === edge.to);
                     if (!from || !to) return null;
+                    const decision = branchDecisions.get(edge.from) ?? 'unknown';
+                    const excluded = (edge.kind === 'true' || edge.kind === 'false') && decision !== 'unknown' && edge.kind !== decision;
                     const back = to.y <= from.y;
                     const x1 = from.x + 100;
                     const x2 = to.x + 100;
@@ -355,7 +369,7 @@ export function ExecutionExplorer({
                       ? `M ${x1} ${y1} C ${bend} ${y1 + 35}, ${bend} ${y2 - 35}, ${x2} ${y2}`
                       : `M ${x1} ${y1} C ${x1} ${(y1 + y2) / 2}, ${x2} ${(y1 + y2) / 2}, ${x2} ${y2}`;
                     return <g key={index}>
-                      <path d={d} fill="none" stroke={flowEdgeColor(edge.kind)} strokeWidth="2" strokeDasharray={back ? '5 4' : undefined} markerEnd="url(#flow-arrow)" />
+                      <path d={d} fill="none" stroke={flowEdgeColor(edge.kind)} opacity={excluded ? 0.18 : 1} strokeWidth="2" strokeDasharray={back ? '5 4' : undefined} markerEnd="url(#flow-arrow)" />
                       {edge.kind !== 'next' && <text x={(x1 + x2) / 2 + (back ? 65 : 0)} y={(y1 + y2) / 2 - 5} fill={flowEdgeColor(edge.kind)} fontSize="11" textAnchor="middle">{edge.kind}</text>}
                     </g>;
                   })}
@@ -379,7 +393,7 @@ export function ExecutionExplorer({
                       <strong style={{ color: nodeColor }}>{invalidRange ? 'Intervalo inválido' : semantic.title}</strong>
                       <span className={styles.flowAstKind}>{node.kind}{finding ? ` · ${finding.level}` : ''}</span>
                       <code className={styles.flowHighlighted} dangerouslySetInnerHTML={{ __html: highlightFlowSource(preview.slice(0, 120) || node.id) }} />
-                      <small>{finding?.message ?? semantic.detail}</small>
+                      <small>{finding?.message ?? semantic.detail}{decision !== 'unknown' ? ` · Condição: ${decision === 'true' ? 'verdadeira' : 'falsa'}` : ''}</small>
                     </button>
                   );
                 })}
