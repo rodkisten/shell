@@ -1,3 +1,4 @@
+declare const __SHELL_BUILD__: { sha: string; builtAt: string; environment: string };
 import {
   useCallback,
   useEffect,
@@ -1724,6 +1725,7 @@ export function App() {
 
           {!dockCollapsed && (
             <>
+              <div className="explorer-build-meta"><span title={`Build ${__SHELL_BUILD__.sha}`}>Build · {new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(__SHELL_BUILD__.builtAt))} GMT−3</span></div>
               <div className="explorer-tabs" role="tablist" aria-label="Visualização da análise">
                 {EXPLORER_TABS.map((tab) => (
                   <button
@@ -1753,7 +1755,7 @@ export function App() {
               )}
 
               {explorerTab === 'explanation' && (
-                <pre className="explorer-explanation-text">{explanation?.replace(/\\\\n/g, '\n') ?? 'Analisando…'}</pre>
+                <div className="explorer-explanation-content" role="region" aria-label="Explicação do script">{(explanation?.replace(/\\\\n/g, '\n') ?? 'Analisando…').split('\n').map((line, index) => <p key={index} className={line.trim().startsWith('#') ? 'explorer-explanation-heading' : 'explorer-explanation-line'}>{line || '\u00a0'}</p>)}</div>
               )}
 
               <p>Fonte: catálogo local e parser sh-syntax. Nenhum código é enviado para análise remota.</p>
