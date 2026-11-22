@@ -259,7 +259,7 @@ jobs:
           | :-- | :-- |
           | 🟢 Status | **Deployed and smoke-tested** |
           | 🧩 Pull request | **#$PR_NUMBER** |
-          | 🪪 Source commit | [`$short_sha`](https://github.com/$REPOSITORY/commit/$DEPLOYED_SHA) |
+          | 🪪 Source commit | [$short_sha](https://github.com/$REPOSITORY/commit/$DEPLOYED_SHA) |
           | 🕒 Verified at | **$deployed_at** |
           | 🧪 Workflow | [Run #$RUN_ID · attempt $RUN_ATTEMPT](https://github.com/$REPOSITORY/actions/runs/$RUN_ID) |
           | 🧭 Latest successful preview | [shell.preview.migos.club](https://shell.preview.migos.club) |
