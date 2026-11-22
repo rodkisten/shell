@@ -445,3 +445,5 @@ Selecting an AST node opens a syntax-aware source breakdown: known commands, sub
 The inspector now defaults to a **Blocks** view with selectable cards for statements, conditionals, loops, functions and case clauses. Cards show a bounded source excerpt, parser-derived explanation and count of recognized semantic parts. Select a card to inspect clickable tokens; switch to **Tree** for the full low-level AST. Cards are static analysis, not observed execution, and may overlap for nested shell constructs.
 
 Block cards are ordered by source position and show structural relationships: nested blocks, known static-analysis edges, or textual succession. These labels are deliberately not runtime traces. A clicked card remains selected until **Follow cursor** is enabled; the active card scrolls into view within the inspector.
+
+Expandable path panels in **Blocks** describe possible true/false branches for conditionals, repeat/exit paths for loops, case matching, and command composition. These are explanatory structural scenarios, not a computed or observed execution trace; pipe and conditional-operator details should be confirmed against the source and CFG view.
