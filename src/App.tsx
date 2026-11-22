@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router';
 import {
   Activity,
@@ -61,20 +70,17 @@ import { cancelShell, executeScript, resetShell } from './lib/terminal';
 import { cn } from './lib/utils';
 
 /* ============================================================================
- * [EXTRAIR PARA UTILITÁRIO: src/lib/storage-prefs.ts & src/constants/editor.ts]
+ * [EXTRAIR PARA CONSTANTES: src/constants/app.ts & src/constants/editor.ts]
  * ----------------------------------------------------------------------------
  * O que mover:
- * - Constantes de configuração inicial (`STARTER_SCRIPT`, `KEYBOARD_SHORTCUTS`,
- *   chaves de `localStorage` e limites de tamanho de dock/fonte/painéis).
- * - Helpers seguros de leitura/escrita no `localStorage` (`readBoolPref`,
- *   `readClampedNumberPref`, `writePref`) para evitar blocos `try/catch`
- *   repetidos e falhas no modo privado do Safari.
- * - Tipos compartilhados de UI (`TerminalOutput`, `BusyOperation`, `ExplorerTab`,
- *   `DockPosition`).
+ * - Todas as constantes de configuração abaixo (`APP_VERSION`, `EXTERNAL_URLS`,
+ *   `APP_ROUTES`, `STORAGE_KEYS`, `TIMINGS_MS`, `LIMITS`, `EDITOR_FONT_SIZES`,
+ *   `DOCK_PRESET_SIZES`, `STARTER_SCRIPT`, `KEYBOARD_SHORTCUTS`).
  *
  * Contratos a preservar:
- * - Todas as chaves `shellconductor:*` no `localStorage`.
- * - A estrutura `{ id, script, stdout, stderr, exitCode, time }` de saída.
+ * - Chaves `shellconductor:*` do `localStorage`.
+ * - Paths de rotas (`/`, `/biblioteca`, `/linux`, `/touch`, `/historico`).
+ * - Limites numéricos de fonte, dock e altura de painéis.
  * ============================================================================ */
 
 type TerminalOutput = {
@@ -89,6 +95,34 @@ type TerminalOutput = {
 type BusyOperation = 'format' | 'check' | 'run' | 'explain' | null;
 type ExplorerTab = 'flow' | 'ast' | 'explanation';
 type DockPosition = 'left' | 'right';
+type ResizeTarget = 'editor' | 'terminal';
+
+const APP_VERSION = 'v0.1';
+const DEFAULT_SCRIPT_FILENAME = 'script.zsh';
+const DEFAULT_LANGUAGE_LABEL = 'Zsh';
+const DEFAULT_CHARSET_LABEL = 'UTF-8';
+const TERMINAL_PROMPT_HOST = 'shellconductor@browser ~ %';
+const LOCALE_PT_BR = 'pt-BR';
+
+const EXTERNAL_URLS = {
+  githubRepo: 'https://github.com/rodkisten/shell',
+  shellCheckWiki: 'https://www.shellcheck.net/wiki/',
+  manPages: 'https://www.mankier.com/',
+} as const;
+
+const APP_ROUTES = {
+  editor: '/',
+  library: '/biblioteca',
+  linux: '/linux',
+  touch: '/touch',
+  history: '/historico',
+} as const;
+
+const ROUTE_TITLES: Record<string, string> = {
+  [APP_ROUTES.history]: 'Histórico',
+  [APP_ROUTES.library]: 'Biblioteca',
+  [APP_ROUTES.linux]: 'Alpine Linux',
+};
 
 const STORAGE_KEYS = {
   dockSize: 'shellconductor:dock-size',
@@ -104,6 +138,56 @@ const STORAGE_KEYS = {
   terminalHeight: 'shellconductor:terminal-height',
   editorHeight: 'shellconductor:editor-height',
 } as const;
+
+const TIMINGS_MS = {
+  toastDuration: 3600,
+  draftSaveDebounce: 450,
+  autoRunDebounce: 850,
+  pendingAutoRunDelay: 150,
+  autoCheckDebounce: 900,
+  autoFormatDebounce: 1500,
+  liveExplainDebounce: 450,
+} as const;
+
+const LIMITS = {
+  maxTerminalOutputs: 20,
+  maxSuggestions: 4,
+  maxCompactSnippets: 8,
+  minEditorAutoLines: 2,
+  defaultEditorFallbackHeightPx: 52,
+  defaultTerminalHeightPx: 260,
+  minPaneHeightPx: 150,
+  maxPaneHeightPx: 1100,
+  minSplitRatioPercent: 25,
+  maxSplitRatioPercent: 75,
+  defaultSplitRatioPercent: 50,
+  minEditorFontSizePx: 9,
+  maxEditorFontSizePx: 14,
+  defaultEditorFontSizePx: 11,
+  minDockSizePercent: 25,
+  maxDockSizePercent: 80,
+  defaultDockSizePercent: 47,
+  dockKeyboardStepPercent: 5,
+  mobileBreakpointQuery: '(max-width: 700px)',
+} as const;
+
+const EDITOR_FONT_SIZES = [9, 10, 11, 12, 13, 14] as const;
+const DOCK_PRESET_SIZES = [35, 50, 70] as const;
+const EXPLORER_TABS: readonly ExplorerTab[] = ['flow', 'ast', 'explanation'] as const;
+
+const EXPLORER_TAB_LABELS: Record<ExplorerTab, string> = {
+  flow: 'Fluxo',
+  ast: 'AST',
+  explanation: 'Explicação',
+};
+
+const COMPOUND_AST_NODE_KINDS = new Set<ShellAstNode['kind']>([
+  'BinaryCmd',
+  'IfClause',
+  'ForClause',
+  'WhileClause',
+  'CaseClause',
+]);
 
 const STARTER_SCRIPT = `#!/usr/bin/env zsh
 # Bem-vindo ao ShellConductor 👋
@@ -126,9 +210,17 @@ const KEYBOARD_SHORTCUTS = [
   { label: 'for', value: 'for item in ; do\n  \ndone' },
 ] as const;
 
-const DOCK_MIN_SIZE = 25;
-const DOCK_MAX_SIZE = 80;
-const DOCK_DEFAULT_SIZE = 47;
+/* ============================================================================
+ * [EXTRAIR PARA UTILITÁRIO: src/lib/storage-prefs.ts]
+ * --------------------------------------------------------------------------
+ * O que mover:
+ * - Helpers de cálculo (`clampNumber`) e leitura/escrita resiliente no
+ *   `localStorage` (`readNumberPref`, `readBooleanPref`, `writePref`).
+ * - Helper de resolução de título por rota (`resolvePageTitle`).
+ *
+ * Contratos a preservar:
+ * - Fallback silencioso quando `localStorage` estiver bloqueado (ex.: Safari privado).
+ * ============================================================================ */
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -165,25 +257,15 @@ function writePref(key: string, value: string): void {
 }
 
 function resolvePageTitle(pathname: string): string {
-  switch (pathname) {
-    case '/historico':
-      return 'Histórico';
-    case '/biblioteca':
-      return 'Biblioteca';
-    case '/linux':
-      return 'Alpine Linux';
-    default:
-      return 'Editor';
-  }
+  return ROUTE_TITLES[pathname] ?? 'Editor';
 }
 
 /* ============================================================================
  * [EXTRAIR PARA COMPONENTE: src/components/layout/SidebarNav.tsx]
- * ----------------------------------------------------------------------------
+ * --------------------------------------------------------------------------
  * O que mover:
  * - `NavContents` (e futuramente o `<aside className="sidebar">` + `.mobile-nav`).
- * - Lista declarativa de itens de navegação interna e externa para evitar
- *   duplicação entre `NavContents` e a barra inferior `.mobile-nav`.
+ * - Pode compartilhar uma lista declarativa de rotas com o `<nav className="mobile-nav">`.
  *
  * Contratos a preservar:
  * - Rotas exatas: `/`, `/biblioteca`, `/linux`, `/touch`, `/historico`.
@@ -195,27 +277,27 @@ function NavContents() {
   return (
     <>
       <div className="nav-group-label">WORKSPACE</div>
-      <NavLink end to="/" className={({ isActive }) => cn('side-link', isActive && 'active')}>
+      <NavLink end to={APP_ROUTES.editor} className={({ isActive }) => cn('side-link', isActive && 'active')}>
         <Code2 size={17} /> Editor <span className="shortcut-hint">⌘ 1</span>
       </NavLink>
-      <NavLink to="/biblioteca" className={({ isActive }) => cn('side-link', isActive && 'active')}>
+      <NavLink to={APP_ROUTES.library} className={({ isActive }) => cn('side-link', isActive && 'active')}>
         <BookOpen size={17} /> Biblioteca
       </NavLink>
-      <NavLink to="/linux" className={({ isActive }) => cn('side-link', isActive && 'active')}>
+      <NavLink to={APP_ROUTES.linux} className={({ isActive }) => cn('side-link', isActive && 'active')}>
         <Terminal size={17} /> Alpine Linux <span className="shortcut-hint">v86</span>
       </NavLink>
-      <NavLink to="/touch" className={({ isActive }) => cn('side-link', isActive && 'active')}>
+      <NavLink to={APP_ROUTES.touch} className={({ isActive }) => cn('side-link', isActive && 'active')}>
         <Terminal size={17} /> Touch Commands
       </NavLink>
-      <NavLink to="/historico" className={({ isActive }) => cn('side-link', isActive && 'active')}>
+      <NavLink to={APP_ROUTES.history} className={({ isActive }) => cn('side-link', isActive && 'active')}>
         <Clock3 size={17} /> Histórico
       </NavLink>
 
       <div className="nav-group-label second">REFERÊNCIA</div>
-      <a className="side-link" href="https://www.shellcheck.net/wiki/" target="_blank" rel="noreferrer">
+      <a className="side-link" href={EXTERNAL_URLS.shellCheckWiki} target="_blank" rel="noreferrer">
         <ShieldCheck size={17} /> ShellCheck <ArrowDownToLine className="external-mini" size={13} />
       </a>
-      <a className="side-link" href="https://www.mankier.com/" target="_blank" rel="noreferrer">
+      <a className="side-link" href={EXTERNAL_URLS.manPages} target="_blank" rel="noreferrer">
         <FileText size={17} /> Man pages <ArrowDownToLine className="external-mini" size={13} />
       </a>
     </>
@@ -239,7 +321,7 @@ export function App() {
   const notify = useCallback((message: string) => {
     setToast(message);
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    noticeTimer.current = setTimeout(() => setToast(''), 3600);
+    noticeTimer.current = setTimeout(() => setToast(''), TIMINGS_MS.toastDuration);
   }, []);
 
   useEffect(() => {
@@ -292,7 +374,7 @@ export function App() {
     if (!hydrated.current) return;
     const timer = setTimeout(() => {
       void saveDraft(script).catch(() => undefined);
-    }, 450);
+    }, TIMINGS_MS.draftSaveDebounce);
     return () => clearTimeout(timer);
   }, [script]);
 
@@ -369,9 +451,9 @@ export function App() {
 
   const insert = useCallback(
     (text: string) => {
-      navigation('/');
+      navigation(APP_ROUTES.editor);
       // Editor may not be mounted yet when opened from the library.
-      if (location.pathname !== '/') {
+      if (location.pathname !== APP_ROUTES.editor) {
         setScript((previous) => (previous.trim() ? `${previous.trimEnd()}\n\n${text}` : text));
       } else {
         editor.current?.insert(text);
@@ -384,7 +466,7 @@ export function App() {
     (text: string) => {
       setScript(text);
       setCursor(text.length);
-      navigation('/');
+      navigation(APP_ROUTES.editor);
       notify('Script restaurado no editor.');
     },
     [navigation, notify],
@@ -402,21 +484,33 @@ export function App() {
    *
    * Contratos a preservar:
    * - Variáveis CSS inline `--editor-share` e `--terminal-share`.
-   * - Limites de altura `[150, 1100]` px e proporção `[25, 75]` %.
+   * - Limites de altura `[LIMITS.minPaneHeightPx, LIMITS.maxPaneHeightPx]` e
+   *   proporção `[LIMITS.minSplitRatioPercent, LIMITS.maxSplitRatioPercent]`.
    * ========================================================================== */
   const [showSnippets, setShowSnippets] = useState(false);
   const [showOutput, setShowOutput] = useState(true);
   const [mobileMenu, setMobileMenu] = useState(false);
 
   const [sideBySide, setSideBySide] = useState(() => readBooleanPref(STORAGE_KEYS.sideBySide, false));
-  const [splitRatio, setSplitRatio] = useState(() => readNumberPref(STORAGE_KEYS.splitRatio, 50));
+  const [splitRatio, setSplitRatio] = useState(() =>
+    readNumberPref(STORAGE_KEYS.splitRatio, LIMITS.defaultSplitRatioPercent),
+  );
   const [autoRun, setAutoRun] = useState(() => readBooleanPref(STORAGE_KEYS.autoRun, false));
   const [autoCheck, setAutoCheck] = useState(() => readBooleanPref(STORAGE_KEYS.autoCheck, false));
   const [autoFormat, setAutoFormat] = useState(() => readBooleanPref(STORAGE_KEYS.autoFormat, false));
-  const [editorFontSize, setEditorFontSize] = useState(() => readNumberPref(STORAGE_KEYS.editorFontSize, 11, 9, 14));
+  const [editorFontSize, setEditorFontSize] = useState(() =>
+    readNumberPref(
+      STORAGE_KEYS.editorFontSize,
+      LIMITS.defaultEditorFontSizePx,
+      LIMITS.minEditorFontSizePx,
+      LIMITS.maxEditorFontSizePx,
+    ),
+  );
   const [editorWordWrap, setEditorWordWrap] = useState(() => readBooleanPref(STORAGE_KEYS.editorWordWrap, true));
   const [editorHeight, setEditorHeight] = useState<number | null>(null);
-  const [terminalHeight, setTerminalHeight] = useState(() => readNumberPref(STORAGE_KEYS.terminalHeight, 260));
+  const [terminalHeight, setTerminalHeight] = useState(() =>
+    readNumberPref(STORAGE_KEYS.terminalHeight, LIMITS.defaultTerminalHeightPx),
+  );
 
   useEffect(() => {
     writePref(STORAGE_KEYS.autoCheck, String(autoCheck));
@@ -440,7 +534,7 @@ export function App() {
         .catch(() => {
           /* Keep manual validation available when WASM is unavailable. */
         });
-    }, 900);
+    }, TIMINGS_MS.autoCheckDebounce);
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -461,7 +555,7 @@ export function App() {
         .catch(() => {
           /* Do not modify incomplete or invalid shell input. */
         });
-    }, 1500);
+    }, TIMINGS_MS.autoFormatDebounce);
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -474,14 +568,14 @@ export function App() {
    * O que mover:
    * - Estado `output`, refs `runningRef`, `pendingAutoRun`, `runScriptRef`,
    *   `runRevision` e lógica de fila de auto-execução.
-   * - Funções `runScript`, `run` e `clearOutput` / `resetSandbox`.
+   * - Funções `runScript`, `run` e limpeza/reinício do sandbox.
    *
    * Contratos a preservar:
-   * - Limite máximo de 20 execuções no buffer `output`.
-   * - Debounce de 850ms para `autoRun` e fila única (`pendingAutoRun`) caso o
-   *   usuário continue digitando enquanto o WASM está ocupado.
+   * - Limite máximo de `LIMITS.maxTerminalOutputs` execuções no buffer `output`.
+   * - Debounce de `TIMINGS_MS.autoRunDebounce` para `autoRun` e fila única
+   *   (`pendingAutoRun`) caso o usuário continue digitando com o WASM ocupado.
    * ========================================================================== */
-  const [output, setOutput] = useState<Output[]>([]);
+  const [output, setOutput] = useState<TerminalOutput[]>([]);
   const [runRevision, setRunRevision] = useState(0);
   const runningRef = useRef(false);
   const pendingAutoRun = useRef<string | null>(null);
@@ -502,7 +596,9 @@ export function App() {
       try {
         const result = await executeScript(source);
         const now = Date.now();
-        setOutput((current) => [{ ...result, script: source, id: now, time: now }, ...current].slice(0, 20));
+        setOutput((current) =>
+          [{ ...result, script: source, id: now, time: now }, ...current].slice(0, LIMITS.maxTerminalOutputs),
+        );
 
         if (!automatic) {
           try {
@@ -526,7 +622,7 @@ export function App() {
               exitCode: 1,
             },
             ...current,
-          ].slice(0, 20),
+          ].slice(0, LIMITS.maxTerminalOutputs),
         );
         if (!automatic) notify('Falha na execução. Veja a saída.');
       } finally {
@@ -556,7 +652,7 @@ export function App() {
     const timer = setTimeout(() => {
       if (runningRef.current) pendingAutoRun.current = script;
       else void runScriptRef.current(script, true);
-    }, 850);
+    }, TIMINGS_MS.autoRunDebounce);
 
     return () => clearTimeout(timer);
   }, [script, autoRun]);
@@ -565,7 +661,7 @@ export function App() {
     if (!autoRun || !pendingAutoRun.current || runningRef.current) return;
     const next = pendingAutoRun.current;
     pendingAutoRun.current = null;
-    const timer = setTimeout(() => void runScriptRef.current(next, true), 150);
+    const timer = setTimeout(() => void runScriptRef.current(next, true), TIMINGS_MS.pendingAutoRunDelay);
     return () => clearTimeout(timer);
   }, [runRevision, autoRun]);
 
@@ -576,17 +672,23 @@ export function App() {
    * - Estados `explorerTab`, `explorerOpen`, `dockSize`, `dockCollapsed`,
    *   `dockPosition` e ref `dockDrag`.
    * - Handlers de arraste e acessibilidade por teclado (`resizeDock`, `moveDock`,
-   *   `finishDock`, `handleDockKeyDown`) e persistência no `localStorage`.
+   *   `finishDock`, `handleDockResizerKeyDown`) e persistência no `localStorage`.
    *
    * Contratos a preservar:
-   * - Limites `[25, 80]` % e padrão `47` %.
-   * - Suporte a orientação horizontal no mobile (`max-width: 700px`) e vertical
-   *   no desktop (`left` / `right`).
+   * - Limites `[LIMITS.minDockSizePercent, LIMITS.maxDockSizePercent]` e padrão
+   *   `LIMITS.defaultDockSizePercent`.
+   * - Suporte a orientação horizontal no mobile (`LIMITS.mobileBreakpointQuery`)
+   *   e vertical no desktop (`left` / `right`).
    * ========================================================================== */
   const [explorerTab, setExplorerTab] = useState<ExplorerTab>('flow');
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [dockSize, setDockSize] = useState(() =>
-    readNumberPref(STORAGE_KEYS.dockSize, DOCK_DEFAULT_SIZE, DOCK_MIN_SIZE, DOCK_MAX_SIZE),
+    readNumberPref(
+      STORAGE_KEYS.dockSize,
+      LIMITS.defaultDockSizePercent,
+      LIMITS.minDockSizePercent,
+      LIMITS.maxDockSizePercent,
+    ),
   );
   const [dockCollapsed, setDockCollapsed] = useState(() => readBooleanPref(STORAGE_KEYS.dockCollapsed, false));
   const [dockPosition, setDockPosition] = useState<DockPosition>(() => {
@@ -609,7 +711,7 @@ export function App() {
 
   const resizeDock = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
-    const mobile = window.matchMedia('(max-width: 700px)').matches;
+    const mobile = window.matchMedia(LIMITS.mobileBreakpointQuery).matches;
     event.preventDefault();
     dockDrag.current = {
       pointerId: event.pointerId,
@@ -625,8 +727,9 @@ export function App() {
     if (!drag || drag.pointerId !== event.pointerId) return;
     const dimension = drag.mobile ? (window.visualViewport?.height ?? window.innerHeight) : window.innerWidth;
     const direction = drag.mobile || dockPosition === 'right' ? 1 : -1;
-    const delta = ((direction * (drag.start - (drag.mobile ? event.clientY : event.clientX))) / Math.max(1, dimension)) * 100;
-    setDockSize(clampNumber(drag.size + delta, DOCK_MIN_SIZE, DOCK_MAX_SIZE));
+    const delta =
+      ((direction * (drag.start - (drag.mobile ? event.clientY : event.clientX))) / Math.max(1, dimension)) * 100;
+    setDockSize(clampNumber(drag.size + delta, LIMITS.minDockSizePercent, LIMITS.maxDockSizePercent));
   };
 
   const finishDock = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -637,20 +740,20 @@ export function App() {
     }
   };
 
-  const handleDockResizerKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleDockResizerKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (dockCollapsed) return;
     if (event.key === 'Home') {
       event.preventDefault();
-      setDockSize(DOCK_MIN_SIZE);
+      setDockSize(LIMITS.minDockSizePercent);
     } else if (event.key === 'End') {
       event.preventDefault();
-      setDockSize(DOCK_MAX_SIZE);
+      setDockSize(LIMITS.maxDockSizePercent);
     } else if (event.key === 'ArrowUp' || event.key === 'ArrowRight') {
       event.preventDefault();
-      setDockSize((v) => Math.min(DOCK_MAX_SIZE, v + 5));
+      setDockSize((v) => Math.min(LIMITS.maxDockSizePercent, v + LIMITS.dockKeyboardStepPercent));
     } else if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') {
       event.preventDefault();
-      setDockSize((v) => Math.max(DOCK_MIN_SIZE, v - 5));
+      setDockSize((v) => Math.max(LIMITS.minDockSizePercent, v - LIMITS.dockKeyboardStepPercent));
     }
   };
 
@@ -759,14 +862,7 @@ export function App() {
 
         void analyzeShellWasm(script)
           .then((result) => {
-            const hasCompoundControlFlow = overview.nodes.some(
-              (node) =>
-                node.kind === 'BinaryCmd' ||
-                node.kind === 'IfClause' ||
-                node.kind === 'ForClause' ||
-                node.kind === 'WhileClause' ||
-                node.kind === 'CaseClause',
-            );
+            const hasCompoundControlFlow = overview.nodes.some((node) => COMPOUND_AST_NODE_KINDS.has(node.kind));
             if (revision === analysisRevision.current && !hasCompoundControlFlow) {
               setFlowResult(result);
             }
@@ -807,7 +903,9 @@ export function App() {
         if (revision !== analysisRevision.current) return;
         setAstNodes([]);
         setAnalysisTokens([]);
-        setExplanation(`Não foi possível analisar a sintaxe Zsh: ${error instanceof Error ? error.message : String(error)}`);
+        setExplanation(
+          `Não foi possível analisar a sintaxe Zsh: ${error instanceof Error ? error.message : String(error)}`,
+        );
       } finally {
         if (revision === analysisRevision.current) setBusy(null);
       }
@@ -819,7 +917,7 @@ export function App() {
     if (!explorerOpen || !explanation) return;
     const timer = window.setTimeout(() => {
       void explain(true);
-    }, 450);
+    }, TIMINGS_MS.liveExplainDebounce);
     return () => window.clearTimeout(timer);
     // Recompute only when source changes while dock is open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -834,7 +932,13 @@ export function App() {
     element.setPointerCapture(event.pointerId);
     const move = (e: PointerEvent) => {
       const bounds = parent.getBoundingClientRect();
-      setSplitRatio(clampNumber(((e.clientX - bounds.left) / Math.max(1, bounds.width)) * 100, 25, 75));
+      setSplitRatio(
+        clampNumber(
+          ((e.clientX - bounds.left) / Math.max(1, bounds.width)) * 100,
+          LIMITS.minSplitRatioPercent,
+          LIMITS.maxSplitRatioPercent,
+        ),
+      );
     };
     const finish = () => {
       element.removeEventListener('pointermove', move);
@@ -847,18 +951,20 @@ export function App() {
     element.addEventListener('pointercancel', finish);
   };
 
-  const resize = (target: 'editor' | 'terminal', event: ReactPointerEvent<HTMLDivElement>) => {
+  const resize = (target: ResizeTarget, event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     const origin = event.clientY;
     const initial =
       target === 'editor'
-        ? (editorHeight ?? document.querySelector('.editor-inner')?.getBoundingClientRect().height ?? 52)
+        ? (editorHeight ??
+          document.querySelector('.editor-inner')?.getBoundingClientRect().height ??
+          LIMITS.defaultEditorFallbackHeightPx)
         : terminalHeight;
     const element = event.currentTarget;
     element.setPointerCapture(event.pointerId);
 
     const move = (e: PointerEvent) => {
-      const height = clampNumber(initial + e.clientY - origin, 150, 1100);
+      const height = clampNumber(initial + e.clientY - origin, LIMITS.minPaneHeightPx, LIMITS.maxPaneHeightPx);
       if (target === 'editor') setEditorHeight(height);
       else setTerminalHeight(height);
     };
@@ -881,14 +987,14 @@ export function App() {
    * VALORES DERIVADOS PARA RENDERIZAÇÃO
    * ========================================================================== */
   const scriptLines = useMemo(() => script.split('\n'), [script]);
-  const autoEditorLines = Math.max(2, scriptLines.length);
+  const autoEditorLines = Math.max(LIMITS.minEditorAutoLines, scriptLines.length);
 
   const shellAnalysis = useMemo(() => {
     if (explorerTab === 'explanation' || astNodes.length === 0) return null;
     return analyzeShell(script, astNodes, analysisTokens);
   }, [explorerTab, astNodes, script, analysisTokens]);
 
-  const isMobileViewport = typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches;
+  const isMobileViewport = typeof window !== 'undefined' && window.matchMedia(LIMITS.mobileBreakpointQuery).matches;
 
   const mainColumnStyle = explorerOpen
     ? ({
@@ -937,7 +1043,7 @@ export function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <Link to="/" className="brand">
+        <Link to={APP_ROUTES.editor} className="brand">
           <span className="brand-icon">
             <Terminal size={20} strokeWidth={2.4} />
           </span>
@@ -964,10 +1070,10 @@ export function App() {
           </div>
         </div>
         <div className="side-bottom">
-          <a href="https://github.com/rodkisten/shell" target="_blank" rel="noreferrer">
+          <a href={EXTERNAL_URLS.githubRepo} target="_blank" rel="noreferrer">
             <Github size={16} /> GitHub
           </a>
-          <span>v0.1</span>
+          <span>{APP_VERSION}</span>
         </div>
       </aside>
 
@@ -995,7 +1101,7 @@ export function App() {
             <ManPopover command={inspected} onClose={() => setInspected(null)} onInsert={insert} />
             <a
               className="github-small"
-              href="https://github.com/rodkisten/shell"
+              href={EXTERNAL_URLS.githubRepo}
               target="_blank"
               rel="noreferrer"
               aria-label="GitHub"
@@ -1014,7 +1120,7 @@ export function App() {
         <main className="main-content">
           <Routes>
             <Route
-              path="/"
+              path={APP_ROUTES.editor}
               element={
                 <>
                   <div className="page-heading">
@@ -1028,22 +1134,22 @@ export function App() {
                   </div>
 
                   <div className="compact-workspace-controls" aria-label="Automação e visualização">
-                    <label title="Executar após 850 ms sem digitar">
+                    <label title={`Executar após ${TIMINGS_MS.autoRunDebounce} ms sem digitar`}>
                       <input type="checkbox" checked={autoRun} onChange={(event) => setAutoRun(event.target.checked)} />
                       <Play size={15} />
                       <span>Autoexecutar</span>
                     </label>
-                    <label title="Validação sintática automática após 900 ms">
+                    <label title={`Validação sintática automática após ${TIMINGS_MS.autoCheckDebounce} ms`}>
                       <input type="checkbox" checked={autoCheck} onChange={(event) => setAutoCheck(event.target.checked)} />
                       <ShieldCheck size={15} />
                       <span>Auto sintaxe</span>
                     </label>
-                    <label title="Formatar automaticamente após 1,5 s sem digitar">
+                    <label title={`Formatar automaticamente após ${TIMINGS_MS.autoFormatDebounce / 1000} s sem digitar`}>
                       <input type="checkbox" checked={autoFormat} onChange={(event) => setAutoFormat(event.target.checked)} />
                       <WandSparkles size={15} />
                       <span>Autoformatar</span>
                     </label>
-                    <Link to="/linux" className="compact-control-icon" title="Alpine Linux" aria-label="Alpine Linux">
+                    <Link to={APP_ROUTES.linux} className="compact-control-icon" title="Alpine Linux" aria-label="Alpine Linux">
                       <Terminal size={16} />
                     </Link>
                     <button
@@ -1065,7 +1171,7 @@ export function App() {
                           <span className="file-icon">
                             <FileCode2 size={15} />
                           </span>
-                          <span>script.zsh</span>
+                          <span>{DEFAULT_SCRIPT_FILENAME}</span>
                           <span className="unsaved-dot" aria-label="Rascunho local" />
                         </div>
                         <div className="panel-header-actions">
@@ -1088,7 +1194,7 @@ export function App() {
                                 maxWidth: 74,
                               }}
                             >
-                              {[9, 10, 11, 12, 13, 14].map((size) => (
+                              {EDITOR_FONT_SIZES.map((size) => (
                                 <option key={size} value={size}>
                                   {size}px
                                 </option>
@@ -1113,7 +1219,7 @@ export function App() {
                             />{' '}
                             Wrap
                           </label>
-                          <span className="language-label">Zsh</span>
+                          <span className="language-label">{DEFAULT_LANGUAGE_LABEL}</span>
                           <button title="Colar texto" onClick={paste} aria-label="Colar">
                             <Clipboard size={15} />
                           </button>
@@ -1180,7 +1286,11 @@ export function App() {
 
                       <div
                         className="editor-inner editor-auto-grow"
-                        style={{ height: editorHeight ?? `clamp(52px, ${autoEditorLines * 1.55 + 1.5}em, 65dvh)` }}
+                        style={{
+                          height:
+                            editorHeight ??
+                            `clamp(${LIMITS.defaultEditorFallbackHeightPx}px, ${autoEditorLines * 1.55 + 1.5}em, 65dvh)`,
+                        }}
                       >
                         <ShellEditor
                           ref={editor}
@@ -1259,7 +1369,7 @@ export function App() {
                             <span className="status-light" /> Pronto
                           </span>
                           <span>{scriptLines.length} linhas</span>
-                          <span>UTF-8</span>
+                          <span>{DEFAULT_CHARSET_LABEL}</span>
                         </div>
                         <span>⌘ ↵ para executar</span>
                       </div>
@@ -1314,20 +1424,20 @@ export function App() {
                                   <div className="terminal-prompt">
                                     <span>❯</span>{' '}
                                     {item.script.split('\n').find((line) => line.trim() && !line.startsWith('#')) ||
-                                      'script.zsh'}
+                                      DEFAULT_SCRIPT_FILENAME}
                                   </div>
                                   {item.stdout && <pre>{item.stdout}</pre>}
                                   {item.stderr && <pre className="terminal-error">{item.stderr}</pre>}
                                   <div className={cn('terminal-exit', item.exitCode !== 0 && 'bad')}>
                                     Processo finalizado com código {item.exitCode} ·{' '}
-                                    {new Date(item.time).toLocaleTimeString('pt-BR')}
+                                    {new Date(item.time).toLocaleTimeString(LOCALE_PT_BR)}
                                   </div>
                                 </div>
                               ))
                             ) : (
                               <div className="terminal-empty">
                                 <span className="terminal-prompt">
-                                  <span>❯</span> shellconductor@browser ~ %
+                                  <span>❯</span> {TERMINAL_PROMPT_HOST}
                                 </span>
                                 <p>O terminal está pronto. Execute seu script para ver a saída aqui.</p>
                                 <p className="muted">
@@ -1381,7 +1491,7 @@ export function App() {
                       </div>
                       <div className="suggestions-list">
                         {hints.length ? (
-                          hints.slice(0, 4).map((hint, i) => (
+                          hints.slice(0, LIMITS.maxSuggestions).map((hint, i) => (
                             <button
                               key={hint.label + i}
                               className="hint-item"
@@ -1417,7 +1527,7 @@ export function App() {
 
                       {showSnippets && (
                         <div className="snippet-compact">
-                          {SNIPPETS.slice(0, 8).map((item) => (
+                          {SNIPPETS.slice(0, LIMITS.maxCompactSnippets).map((item) => (
                             <button key={item.id} onClick={() => insert(item.code)}>
                               {item.name}
                               <span>+</span>
@@ -1455,7 +1565,7 @@ export function App() {
                               </span>
                             </strong>
                             <p>{finding.message}</p>
-                            <a href={`https://www.shellcheck.net/wiki/SC${finding.code}`} target="_blank" rel="noreferrer">
+                            <a href={`${EXTERNAL_URLS.shellCheckWiki}SC${finding.code}`} target="_blank" rel="noreferrer">
                               Entenda esse diagnóstico ↗
                             </a>
                           </div>
@@ -1477,10 +1587,10 @@ export function App() {
                 </>
               }
             />
-            <Route path="/linux" element={<LinuxPanel />} />
-            <Route path="/biblioteca" element={<ReferencePanel onInsert={insert} onInspect={setInspected} />} />
+            <Route path={APP_ROUTES.linux} element={<LinuxPanel />} />
+            <Route path={APP_ROUTES.library} element={<ReferencePanel onInsert={insert} onInspect={setInspected} />} />
             <Route
-              path="/historico"
+              path={APP_ROUTES.history}
               element={<HistoryPanel revision={historyRevision} onRestore={restore} notify={notify} />}
             />
             <Route
@@ -1488,7 +1598,7 @@ export function App() {
               element={
                 <div className="empty-state">
                   <h2>Página não encontrada</h2>
-                  <Link to="/">Voltar ao editor</Link>
+                  <Link to={APP_ROUTES.editor}>Voltar ao editor</Link>
                 </div>
               }
             />
@@ -1497,23 +1607,23 @@ export function App() {
       </div>
 
       <nav className="mobile-nav" aria-label="Navegação principal">
-        <NavLink to="/" end className={({ isActive }) => cn(isActive && 'active')}>
+        <NavLink to={APP_ROUTES.editor} end className={({ isActive }) => cn(isActive && 'active')}>
           <Code2 size={20} />
           <span>Editor</span>
         </NavLink>
-        <NavLink to="/biblioteca" className={({ isActive }) => cn(isActive && 'active')}>
+        <NavLink to={APP_ROUTES.library} className={({ isActive }) => cn(isActive && 'active')}>
           <BookOpen size={20} />
           <span>Biblioteca</span>
         </NavLink>
-        <NavLink to="/linux" className={({ isActive }) => cn(isActive && 'active')}>
+        <NavLink to={APP_ROUTES.linux} className={({ isActive }) => cn(isActive && 'active')}>
           <Terminal size={20} />
           <span>Linux</span>
         </NavLink>
-        <NavLink to="/touch" className={({ isActive }) => cn(isActive && 'active')}>
+        <NavLink to={APP_ROUTES.touch} className={({ isActive }) => cn(isActive && 'active')}>
           <Terminal size={20} />
           <span>Touch</span>
         </NavLink>
-        <NavLink to="/historico" className={({ isActive }) => cn(isActive && 'active')}>
+        <NavLink to={APP_ROUTES.history} className={({ isActive }) => cn(isActive && 'active')}>
           <Clock3 size={20} />
           <span>Histórico</span>
         </NavLink>
@@ -1541,8 +1651,8 @@ export function App() {
             role="separator"
             aria-label="Redimensionar explorador"
             aria-orientation={isMobileViewport ? 'horizontal' : 'vertical'}
-            aria-valuemin={DOCK_MIN_SIZE}
-            aria-valuemax={DOCK_MAX_SIZE}
+            aria-valuemin={LIMITS.minDockSizePercent}
+            aria-valuemax={LIMITS.maxDockSizePercent}
             aria-valuenow={dockSize}
             aria-disabled={dockCollapsed}
             tabIndex={dockCollapsed ? -1 : 0}
@@ -1578,7 +1688,7 @@ export function App() {
               </button>
               {!dockCollapsed && (
                 <div className="dock-size-presets" role="group" aria-label="Tamanho do Dock">
-                  {([35, 50, 70] as const).map((size) => (
+                  {DOCK_PRESET_SIZES.map((size) => (
                     <button
                       key={size}
                       type="button"
@@ -1595,7 +1705,7 @@ export function App() {
               <button
                 type="button"
                 className="subtle-icon"
-                onClick={() => setDockSize(DOCK_DEFAULT_SIZE)}
+                onClick={() => setDockSize(LIMITS.defaultDockSizePercent)}
                 title="Restaurar tamanho"
                 aria-label="Restaurar tamanho"
               >
@@ -1616,7 +1726,7 @@ export function App() {
           {!dockCollapsed && (
             <>
               <div className="explorer-tabs" role="tablist" aria-label="Visualização da análise">
-                {(['flow', 'ast', 'explanation'] as const).map((tab) => (
+                {EXPLORER_TABS.map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -1624,7 +1734,7 @@ export function App() {
                     aria-selected={explorerTab === tab}
                     onClick={() => setExplorerTab(tab)}
                   >
-                    {tab === 'flow' ? 'Fluxo' : tab === 'ast' ? 'AST' : 'Explicação'}
+                    {EXPLORER_TAB_LABELS[tab]}
                   </button>
                 ))}
               </div>
