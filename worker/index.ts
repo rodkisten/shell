@@ -146,6 +146,18 @@ export default {
       return env.ASSETS.fetch(new Request(indexUrl, request));
     }
     if (url.pathname.startsWith('/debian/')) return debianInstaller(request, url.pathname);
+    // Artifact routes must never fall through to the SPA index.html.
+    // A dedicated artifact resolver will replace this explicit failure response.
+    if (url.pathname === '/install' || url.pathname.startsWith('/install/')) {
+      return new Response('Installer artifact not found', {
+        status: 404,
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
+    }
     if (url.pathname.startsWith('/v86/')) return linuxAsset(request, env);
     if (url.pathname.startsWith('/api/')) {
       if (request.method !== 'GET') return json({ error: 'Método não permitido' }, 405);
