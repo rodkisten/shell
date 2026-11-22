@@ -1,3 +1,4 @@
+import { describeFlowNode, previewShellVariables } from '../lib/flow-semantics';
 import { highlightFlowSource } from '../lib/flow-highlight';
 import { checkShell, type Finding } from '../lib/shellcheck';
 import { FLOW_COLORS, flowNodeColor, flowEdgeColor } from '../lib/flow-colors';
@@ -35,6 +36,12 @@ export function ExecutionExplorer({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<Finding[]>([]);
+  const [simulationOpen, setSimulationOpen] = useState(false);
+  const [variableValues, setVariableValues] = useState<Record<string, string>>({});
+  const detectedVariables = useMemo(() => [...new Set(
+    [...source.matchAll(/\$\{([A-Za-z_][\w]*)\}|\$([A-Za-z_][\w]*)/g)]
+      .map(match => match[1] ?? match[2]).filter((name): name is string => Boolean(name))
+  )].slice(0, 24), [source]);
   useEffect(() => {
     let cancelled = false;
     void checkShell(source).then(findings => { if (!cancelled) setDiagnostics(findings); });
@@ -284,6 +291,20 @@ export function ExecutionExplorer({
             <div className={styles.flowSummary}>
               {flow.nodes.length} nós · {flow.edges.length} conexões · análise estática
             </div>
+            <div className={styles.simulationPanel}>
+              <button type="button" className={styles.simulationToggle} aria-expanded={simulationOpen} onClick={() => setSimulationOpen(open => !open)}>
+                {simulationOpen ? '▾' : '▸'} Simular variáveis <small>sem executar o script</small>
+              </button>
+              {simulationOpen && <div className={styles.simulationBody}>
+                <p>Informe valores para visualizar substituições simples. Não avalia expressões, arrays, comandos ou condições.</p>
+                {detectedVariables.length === 0 && <p>Nenhuma referência simples a variável encontrada.</p>}
+                {detectedVariables.map(name => <label key={name} className={styles.simulationField}>
+                  <span>${name}</span>
+                  <input value={variableValues[name] ?? ''} placeholder="Valor de exemplo" onChange={event => setVariableValues(previous => ({ ...previous, [name]: event.target.value }))} />
+                </label>)}
+                <button type="button" onClick={() => setVariableValues({})}>Limpar valores</button>
+              </div>}
+            </div>
             <div className={styles.flowToolbar} role="toolbar" aria-label="Zoom do grafo">
               <button type="button" onClick={() => zoomFlow(flowScale / 1.25)} aria-label="Diminuir zoom">−</button>
               <button type="button" onClick={fitFlow}>Enquadrar</button>
@@ -344,19 +365,21 @@ export function ExecutionExplorer({
                   const to = offset(node.end);
                   const isSelected = selectedFlowId === node.id || (!selectedFlowId && activeNode?.id === node.id);
                   const snippet = source.slice(from, to).trim();
+                  const semantic = describeFlowNode(node.kind, snippet);
+                  const preview = previewShellVariables(snippet, variableValues);
                   const invalidRange = from < 0 || to <= from || to > source.length;
                   const finding = diagnosticOffsets.find(item => item.from >= from && item.from <= to);
                   const nodeColor = invalidRange || finding?.level === 'error' ? FLOW_COLORS.failure : finding ? FLOW_COLORS.unknown : flowNodeColor(node.kind, snippet);
-                  const unknown = !invalidRange && nodeColor === FLOW_COLORS.unknown;
                   return (
                     <button key={node.id} ref={isSelected ? activeFlowRef : undefined} type="button"
                       className={`${styles.flowNode} ${styles.flowNodePositioned} ${isSelected ? styles.isSelected : ''}`}
                       style={{ left: node.x, top: node.y, borderColor: nodeColor, '--flow-node-color': nodeColor } as React.CSSProperties} aria-pressed={isSelected}
-                      title={invalidRange ? 'Invalid source range' : finding?.message ?? (unknown ? 'Unrecognized AST node type' : `Focus ${node.kind} in editor`)}
+                      title={invalidRange ? 'Intervalo inválido' : finding?.message ?? semantic.detail}
                       onClick={() => { setSelectedFlowId(node.id); if (!invalidRange) onReveal?.(from, to); }}>
-                      <strong style={{ color: nodeColor }}>{invalidRange ? 'Invalid range' : finding ? `${finding.level}: ${node.kind}` : unknown ? `Unknown: ${node.kind}` : node.kind}</strong>
-                      <code className={styles.flowHighlighted} dangerouslySetInnerHTML={{ __html: highlightFlowSource(snippet.slice(0, 120) || node.id) }} />
-                      <small>{finding?.message ?? (flow.edges.filter(edge => edge.from === node.id).map(edge => edge.kind).join(' · ') || 'fim')}</small>
+                      <strong style={{ color: nodeColor }}>{invalidRange ? 'Intervalo inválido' : semantic.title}</strong>
+                      <span className={styles.flowAstKind}>{node.kind}{finding ? ` · ${finding.level}` : ''}</span>
+                      <code className={styles.flowHighlighted} dangerouslySetInnerHTML={{ __html: highlightFlowSource(preview.slice(0, 120) || node.id) }} />
+                      <small>{finding?.message ?? semantic.detail}</small>
                     </button>
                   );
                 })}
