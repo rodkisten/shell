@@ -20,30 +20,14 @@ const MARGIN = 64;
  */
 export function layoutShellFlow(flow: WasmFlowResult): FlowLayout {
   const byId = new Map(flow.nodes.map(node => [node.id, node]));
-  const outgoing = new Map<string, WasmFlowResult['edges']>();
-  const incoming = new Map<string, WasmFlowResult['edges']>();
-  for (const edge of flow.edges) {
-    if (!byId.has(edge.from) || !byId.has(edge.to)) continue;
-    const out = outgoing.get(edge.from) ?? [];
-    out.push(edge);
-    outgoing.set(edge.from, out);
-    const inc = incoming.get(edge.to) ?? [];
-    inc.push(edge);
-    incoming.set(edge.to, inc);
-  }
-
   // Edges to an ancestor or to an earlier source position are loop backs.
   const forward = flow.edges.filter(edge => {
     const from = byId.get(edge.from);
     const to = byId.get(edge.to);
     return from && to && edge.kind !== 'loop' && to.start >= from.start && edge.from !== edge.to;
   });
-  const forwardOutgoing = new Map<string, typeof forward>();
   const forwardIncoming = new Map<string, typeof forward>();
   for (const edge of forward) {
-    const out = forwardOutgoing.get(edge.from) ?? [];
-    out.push(edge);
-    forwardOutgoing.set(edge.from, out);
     const inc = forwardIncoming.get(edge.to) ?? [];
     inc.push(edge);
     forwardIncoming.set(edge.to, inc);
