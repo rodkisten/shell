@@ -306,3 +306,15 @@
 .flowHighlighted :global(.hljs-comment) { color: #7f848e; font-style: italic; }
 .flowHighlighted :global(.hljs-operator),
 .flowHighlighted :global(.hljs-meta) { color: #56b6c2; }
+
+/* The full graph is initially fitted inside the viewport, not anchored offscreen. */
+.flowStage{position:relative;flex:none;margin:auto}
+.flowCanvas{min-width:0!important;transform-origin:top left}
+.flowScroll{display:flex;align-items:flex-start;justify-content:flex-start;overflow:auto;touch-action:pan-x pan-y;overscroll-behavior:contain}
+.flowToolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:8px 0}
+.flowToolbar button{border:1px solid #64748b66;border-radius:7px;background:#1b1d25;color:#e5e7eb;padding:6px 10px;font:inherit;font-size:11px;cursor:pointer}
+.flowToolbar span{font:11px/1.5 var(--_font-mono);color:#a1a1aa;min-width:38px;text-align:center}
+.flowLegend{display:flex;flex-wrap:wrap;gap:7px 12px;margin:8px 0 10px}
+.flowLegend span{display:inline-flex;align-items:center;gap:5px;font-size:10px;color:#cbd5e1}
+.flowLegend i{display:inline-block;width:8px;height:8px;border-radius:3px;flex:none}
+@media(max-width:700px){.flowScroll{height:45dvh;max-height:none;touch-action:pan-x pan-y}.flowToolbar button{min-height:32px}}
