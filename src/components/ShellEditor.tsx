@@ -152,9 +152,9 @@ function editorFontTheme(fontSize: number) {
 }
 
 const shellTheme = EditorView.theme({
-  '&': { height: '100%', background: '#090b0f' },
+  '&': { minHeight: '0', background: '#090b0f' },
   '.cm-scroller': { fontFamily: "'SFMono-Regular', 'SF Mono', Menlo, Consolas, monospace", overflow: 'auto' },
-  '.cm-content': { minHeight: '390px', padding: '8px 3px 10px', caretColor: '#f4f4f5' },
+  '.cm-content': { minHeight: '0', padding: '8px 3px 10px', caretColor: '#f4f4f5' },
   '.cm-line': { padding: '0 4px' },
   '.cm-gutters': { background: '#090b0f', borderRight: '1px solid #1e222a', color: '#4b5563' },
   '.cm-activeLine': { background: '#15181e' },
