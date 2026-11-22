@@ -65,12 +65,14 @@ export function ExecutionExplorer({
   const graph = useMemo(() => flow ? layoutShellFlow(flow) : null, [flow]);
   const flowViewport = useRef<HTMLDivElement | null>(null);
   const pinch = useRef<{ distance: number; scale: number } | null>(null);
+  const zoomAnchor = useRef<{ x: number; y: number; ratio: number } | null>(null);
   const [flowScale, setFlowScale] = useState(1);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const fitFlow = () => {
     const viewport = flowViewport.current;
     if (!viewport || !graph) return;
-    setFlowScale(Math.max(0.12, Math.min(1, (viewport.clientWidth - 16) / graph.width, (viewport.clientHeight - 16) / graph.height)));
+    zoomAnchor.current = null;
+    setFlowScale(Math.max(0.08, Math.min(1, (viewport.clientWidth - 16) / graph.width, (viewport.clientHeight - 16) / graph.height)));
     viewport.scrollTo({ left: 0, top: 0 });
   };
   useEffect(() => {
@@ -83,14 +85,31 @@ export function ExecutionExplorer({
   }, [view, graph]);
   useEffect(() => {
     if (!graph || !viewportSize.width || !viewportSize.height || view !== 'flow') return;
-    setFlowScale(Math.max(0.12, Math.min(1, (viewportSize.width - 16) / graph.width, (viewportSize.height - 16) / graph.height)));
+    zoomAnchor.current = null;
+    setFlowScale(Math.max(0.08, Math.min(1, (viewportSize.width - 16) / graph.width, (viewportSize.height - 16) / graph.height)));
     flowViewport.current?.scrollTo({ left: 0, top: 0 });
   }, [graph, viewportSize.width, viewportSize.height, view]);
-  const zoomFlow = (next: number) => setFlowScale(Math.max(0.12, Math.min(3, next)));
+  const zoomFlow = (next: number, clientX?: number, clientY?: number) => {
+    const viewport = flowViewport.current;
+    const scale = Math.max(0.08, Math.min(3, next));
+    if (viewport) {
+      const rect = viewport.getBoundingClientRect();
+      const x = (clientX ?? rect.left + rect.width / 2) - rect.left;
+      const y = (clientY ?? rect.top + rect.height / 2) - rect.top;
+      zoomAnchor.current = { x: viewport.scrollLeft + x, y: viewport.scrollTop + y, ratio: scale / flowScale };
+    }
+    setFlowScale(scale);
+  };
+  useEffect(() => {
+    const anchor = zoomAnchor.current;
+    const viewport = flowViewport.current;
+    if (!anchor || !viewport) return;
+    zoomAnchor.current = null;
+    viewport.scrollTo({ left: anchor.x * anchor.ratio - anchor.x + viewport.scrollLeft, top: anchor.y * anchor.ratio - anchor.y + viewport.scrollTop });
+  }, [flowScale]);
   const pinchDistance = (touches: React.TouchList) => Math.hypot(
     touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY,
   );
-
   const activeNode = flow?.nodes
     .filter(node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset < offset(node.end))
     .sort((a, b) => (offset(a.end) - offset(a.start)) - (offset(b.end) - offset(b.start)))[0];
@@ -267,7 +286,11 @@ export function ExecutionExplorer({
                 if (event.touches.length === 2) pinch.current = { distance: pinchDistance(event.touches), scale: flowScale };
               }}
               onTouchMove={event => {
-                if (event.touches.length === 2 && pinch.current) zoomFlow(pinch.current.scale * pinchDistance(event.touches) / Math.max(1, pinch.current.distance));
+                if (event.touches.length === 2 && pinch.current) {
+                  const centerX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+                  const centerY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
+                  zoomFlow(pinch.current.scale * pinchDistance(event.touches) / Math.max(1, pinch.current.distance), centerX, centerY);
+                }
               }}
               onTouchEnd={event => { if (event.touches.length < 2) pinch.current = null; }}>
               {graph && <div className={styles.flowStage} style={{ width: graph.width * flowScale, height: graph.height * flowScale }}><div className={styles.flowCanvas} style={{ width: graph.width, height: graph.height, transform: 'scale(' + flowScale + ')' }}>
