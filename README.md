@@ -451,3 +451,5 @@ Expandable path panels in **Blocks** describe possible true/false branches for c
 ### ☁️ PR preview deployment dashboard
 
 The existing Cloudflare PR Preview workflow updates **one persistent bot comment** after deployment, both preview smoke checks, and stable redirect verification. The dashboard links to the PR-specific preview and latest-successful redirect, identifies the exact PR head SHA, links to the workflow run, and records the verification time in UTC. The workflow migrates its previous preview comment in place and locates future updates using a hidden marker. A failed deployment leaves the previous verified SHA and timestamp intact; it must never claim that an unverified commit was deployed.
+
+The Bash Explain block view now distinguishes binary command operators using the gap between **AST operand ranges**, rather than matching arbitrary text inside statements. This enables operator-specific explanations for `&&`, `||`, `|`, and `|&` while leaving unrecognized or ambiguous structures without fabricated paths. The preview dashboard displays the source commit's short SHA as a link after successful verification.
