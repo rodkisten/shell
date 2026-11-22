@@ -335,3 +335,6 @@
 .simulationField{display:grid;grid-template-columns:minmax(70px,1fr) 2fr;align-items:center;gap:10px;font:11px var(--_font-mono);color:#67e8f9}
 .simulationField input{min-width:0;width:100%;border:1px solid #52525b;border-radius:6px;background:#09090b;color:#fafafa;padding:8px;font:12px var(--_font-mono)}
 .simulationBody>button{justify-self:start;border:1px solid #52525b;border-radius:6px;background:#27272a;color:#e4e4e7;padding:6px 10px}
+
+.simulationField button{border:1px solid #52525b;border-radius:6px;background:#27272a;color:#e4e4e7;padding:7px 9px;cursor:pointer}
+.simulationField input{font-size:16px}
