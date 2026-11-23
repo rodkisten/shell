@@ -42,7 +42,7 @@ export function ExecutionExplorer({
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
   const [customVariableName, setCustomVariableName] = useState('');
   const simulatedValues = useMemo(() => Object.fromEntries(
-    Object.entries(variableValues).filter(([, value]) => value.length > 0).map(([key, value]) => [key, parseSimulatedValue(value)])
+    Object.entries(variableValues).map(([key, value]) => [key, parseSimulatedValue(value)])
   ), [variableValues]);
   const detectedVariables = useMemo(() => [...new Set(
     [...source.matchAll(/\$\{([A-Za-z_][\w]*)\}|\$([A-Za-z_][\w]*)/g)]
