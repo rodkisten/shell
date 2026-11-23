@@ -391,6 +391,7 @@ export function ExecutionExplorer({
                   const isSelected = selectedFlowId === node.id || (!selectedFlowId && activeNode?.id === node.id);
                   const snippet = source.slice(from, to).trim();
                   const semantic = describeFlowNode(node.kind, snippet);
+                   const decision = branchDecisions.get(node.id) ?? 'unknown';
                   const preview = previewShellVariables(snippet, variableValues);
                   const invalidRange = from < 0 || to <= from || to > source.length;
                   const finding = diagnosticOffsets.find(item => item.from >= from && item.from <= to);
