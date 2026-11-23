@@ -13,9 +13,9 @@ import (
 
 type node struct { ID string `json:"id"`; Kind string `json:"kind"`; Start int `json:"start"`; End int `json:"end"` }
 type edge struct { From string `json:"from"`; To string `json:"to"`; Kind string `json:"kind"` }
-type result struct { Nodes []node `json:"nodes"`; Edges []edge `json:"edges"`; Warnings []string `json:"warnings"` }
+type result struct { Nodes []node `json:"nodes"`; Edges []edge `json:"edges"`; Warnings []string `json:"warnings"`; Decisions map[string]string `json:"decisions,omitempty"` }
 
-func analyze(source string) (result, error) {
+func analyze(source string, variables map[string]json.RawMessage) (result, error) {
  file, err := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.KeepComments(true)).Parse(strings.NewReader(source), "script.sh")
  if err != nil { return result{}, err }
  out := result{Nodes: []node{}, Edges: []edge{}, Warnings: []string{
@@ -104,13 +104,18 @@ func analyze(source string) (result, error) {
   return condEntry, exits
  }
  _, _ = walkList(file.Stmts)
+ out.Decisions = simulateConditions(source, out.Nodes, variables)
  return out, nil
 }
 
 func main() {
  callback := js.FuncOf(func(this js.Value, args []js.Value) any {
   if len(args) == 0 { return errorJSON(fmt.Errorf("missing source")) }
-  out, err := analyze(args[0].String())
+  variables := map[string]json.RawMessage{}
+  if len(args) > 1 && args[1].Type() == js.TypeString {
+   if err := json.Unmarshal([]byte(args[1].String()), &variables); err != nil { return errorJSON(err) }
+  }
+  out, err := analyze(args[0].String(), variables)
   if err != nil { return errorJSON(err) }
   data, err := json.Marshal(out)
   if err != nil { return errorJSON(err) }
