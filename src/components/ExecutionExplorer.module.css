@@ -273,3 +273,68 @@
 .pathBranch strong{font-size:11px;color:#ddd6fe}
 .pathBranch span{font-size:11px;line-height:1.5;color:var(--_text-secondary)}
 @media(max-width:700px){.pathBranches{grid-template-columns:1fr}.pathBranch{padding:9px}}
+
+/* Spatial flow graph: nodes and edges share a single scrollable coordinate plane. */
+.flowCanvas{position:relative;min-width:900px}
+.flowNodePositioned{position:absolute;width:200px;height:68px;min-height:68px;padding:6px 8px;z-index:1}
+.flowNodePositioned strong{font-size:12px}
+.flowNodePositioned code{font-size:10px}
+.flowLines{z-index:0}
+@media(max-width:700px){.flowVisual{padding:8px 4px}.flowScroll{max-height:48dvh;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}.flowNodePositioned{touch-action:manipulation}}
+
+/* Semantic graph colors match the editor's dark syntax palette. */
+.flowNodePositioned{border-width:1.5px;box-shadow:inset 3px 0 var(--flow-node-color,#94a3b8),0 4px 16px #0006}
+.flowNodePositioned.isSelected{outline:2px solid var(--flow-node-color,#a78bfa);outline-offset:2px}
+.flowNodePositioned code{white-space:pre;overflow:hidden;text-overflow:ellipsis}
+.flowNodePositioned:focus-visible{outline:3px solid var(--flow-node-color,#a78bfa);outline-offset:3px}
+
+/* Highlight.js Bash tokens mapped to CodeMirror One Dark's dark palette. */
+.flowHighlighted { color: #abb2bf; font-family: inherit; }
+.flowHighlighted :global(.hljs-keyword),
+.flowHighlighted :global(.hljs-built_in),
+.flowHighlighted :global(.hljs-selector-tag) { color: #c678dd; }
+.flowHighlighted :global(.hljs-string),
+.flowHighlighted :global(.hljs-quote) { color: #98c379; }
+.flowHighlighted :global(.hljs-variable),
+.flowHighlighted :global(.hljs-template-variable),
+.flowHighlighted :global(.hljs-attr) { color: #e06c75; }
+.flowHighlighted :global(.hljs-number),
+.flowHighlighted :global(.hljs-literal) { color: #d19a66; }
+.flowHighlighted :global(.hljs-title),
+.flowHighlighted :global(.hljs-function),
+.flowHighlighted :global(.hljs-name) { color: #61afef; }
+.flowHighlighted :global(.hljs-comment) { color: #7f848e; font-style: italic; }
+.flowHighlighted :global(.hljs-operator),
+.flowHighlighted :global(.hljs-meta) { color: #56b6c2; }
+
+/* The full graph is initially fitted inside the viewport, not anchored offscreen. */
+.flowStage{position:relative;flex:none;margin:auto}
+.flowCanvas{min-width:0!important;transform-origin:top left}
+.flowScroll{display:flex;align-items:flex-start;justify-content:flex-start;overflow:auto;touch-action:pan-x pan-y;overscroll-behavior:contain}
+.flowToolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:8px 0}
+.flowToolbar button{border:1px solid #64748b66;border-radius:7px;background:#1b1d25;color:#e5e7eb;padding:6px 10px;font:inherit;font-size:11px;cursor:pointer}
+.flowToolbar span{font:11px/1.5 var(--_font-mono);color:#a1a1aa;min-width:38px;text-align:center}
+.flowLegend{display:flex;flex-wrap:wrap;gap:7px 12px;margin:8px 0 10px}
+.flowLegend span{display:inline-flex;align-items:center;gap:5px;font-size:10px;color:#cbd5e1}
+.flowLegend i{display:inline-block;width:8px;height:8px;border-radius:3px;flex:none}
+@media(max-width:700px){.flowScroll{height:45dvh;max-height:none;touch-action:pan-x pan-y}.flowToolbar button{min-height:32px}}
+
+/* AST cards and explanations use the same token palette as flow nodes. */
+.blockCard .flowHighlighted{display:block;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
+.astMetadata{margin-top:12px;border-top:1px solid #64748b33;padding-top:10px}
+.astMetadata summary{cursor:pointer;color:#94a3b8;font-size:12px;list-style-position:inside}
+.astMetadata[open] summary{color:#c4b5fd}
+.explainCode .flowHighlighted{white-space:pre-wrap;overflow-wrap:anywhere}
+
+.flowAstKind{display:block;font:10px/1.3 var(--_font-mono);color:#a1a1aa;opacity:.85}
+.simulationPanel{margin:8px 0 12px;border:1px solid #393943;border-radius:9px;background:#14151d}
+.simulationToggle{width:100%;display:flex;align-items:center;gap:8px;text-align:left;padding:9px 11px;color:#d8b4fe;background:transparent;border:0;cursor:pointer;font-size:12px}
+.simulationToggle small{margin-left:auto;color:#94a3b8;font-size:10px}
+.simulationBody{display:grid;gap:9px;padding:10px;border-top:1px solid #393943}
+.simulationBody p{margin:0;color:#a1a1aa;font-size:11px}
+.simulationField{display:grid;grid-template-columns:minmax(70px,1fr) 2fr;align-items:center;gap:10px;font:11px var(--_font-mono);color:#67e8f9}
+.simulationField input{min-width:0;width:100%;border:1px solid #52525b;border-radius:6px;background:#09090b;color:#fafafa;padding:8px;font:12px var(--_font-mono)}
+.simulationBody>button{justify-self:start;border:1px solid #52525b;border-radius:6px;background:#27272a;color:#e4e4e7;padding:6px 10px}
+
+.simulationField button{border:1px solid #52525b;border-radius:6px;background:#27272a;color:#e4e4e7;padding:7px 9px;cursor:pointer}
+.simulationField input{font-size:16px}

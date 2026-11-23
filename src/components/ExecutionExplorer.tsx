@@ -1,3 +1,10 @@
+import { parseSimulatedValue } from '../lib/flow-simulation';
+import { analyzeShellWasm } from '../lib/shell-flow-wasm';
+import { describeFlowNode, previewShellVariables } from '../lib/flow-semantics';
+import { highlightFlowSource } from '../lib/flow-highlight';
+import { checkShell, type Finding } from '../lib/shellcheck';
+import { FLOW_COLORS, flowNodeColor, flowEdgeColor } from '../lib/flow-colors';
+import { layoutShellFlow } from '../lib/flow-layout';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ShellAnalysis } from '../lib/shell-analysis';
 import type { SemanticToken } from '../lib/semantic-shell';
@@ -30,6 +37,40 @@ export function ExecutionExplorer({
 }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<Finding[]>([]);
+  const [simulationOpen, setSimulationOpen] = useState(true);
+  const [variableValues, setVariableValues] = useState<Record<string, string>>({});
+  const [inspectedVariable, setInspectedVariable] = useState<string | null>(null);
+  const inferredVariables = useMemo(() => {
+    const values: Record<string, { value: string; offset: number; line: number }> = {};
+    for (const match of source.matchAll(/^([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"\n]*)"|'([^'\n]*)'|([0-9]+))\s*$/gm)) {
+      const position = match.index ?? 0;
+      values[match[1]] = { value: match[2] ?? match[3] ?? match[4] ?? '', offset: position, line: source.slice(0, position).split('\n').length };
+    }
+    return values;
+  }, [source]);
+  const simulatedValues = useMemo(() => Object.fromEntries(
+    Object.entries(variableValues).map(([key, value]) => [key, parseSimulatedValue(value)])
+  ), [variableValues]);
+  const selectedGraphNode = useMemo(() => flow?.nodes.find(node => node.id === selectedFlowId) ?? null, [flow, selectedFlowId]);
+  const selectedSnippet = selectedGraphNode ? source.slice(
+    Math.max(0, Math.min(source.length, new TextDecoder().decode(new TextEncoder().encode(source).slice(0, selectedGraphNode.start)).length)),
+    Math.max(0, Math.min(source.length, new TextDecoder().decode(new TextEncoder().encode(source).slice(0, selectedGraphNode.end)).length))
+  ) : '';
+  const nodeVariables = useMemo(() => [...new Set(
+    [...selectedSnippet.matchAll(/\$\{([A-Za-z_][\w]*)\}|\$([A-Za-z_][\w]*)/g)]
+      .map(match => match[1] ?? match[2]).filter((name): name is string => Boolean(name))
+  )], [selectedSnippet]);
+  useEffect(() => {
+    let cancelled = false;
+    void checkShell(source).then(findings => { if (!cancelled) setDiagnostics(findings); });
+    return () => { cancelled = true; };
+  }, [source]);
+  const diagnosticOffsets = useMemo(() => diagnostics.map(finding => {
+    const lines = source.split('\n');
+    const from = lines.slice(0, Math.max(0, finding.line - 1)).reduce((sum, line) => sum + line.length + 1, 0) + Math.max(0, finding.column - 1);
+    return { ...finding, from };
+  }), [diagnostics, source]);
   const activeAstRef = useRef<HTMLDivElement | null>(null);
   const activeBlockRef = useRef<HTMLButtonElement | null>(null);
   const activeFlowRef = useRef<HTMLButtonElement | null>(null);
@@ -47,6 +88,83 @@ export function ExecutionExplorer({
     return mapping;
   }, [source]);
   const offset = (position: number) => byteOffsets[Math.max(0, Math.min(byteOffsets.length - 1, position))] ?? 0;
+  const graph = useMemo(() => flow ? layoutShellFlow(flow) : null, [flow]);
+  const flowViewport = useRef<HTMLDivElement | null>(null);
+  const pinch = useRef<{ distance: number; scale: number } | null>(null);
+  const scaleRef = useRef(1);
+  const zoomAnchor = useRef<{ x: number; y: number; ratio: number } | null>(null);
+  const [flowScale, setFlowScale] = useState(1);
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+  const fitFlow = () => {
+    const viewport = flowViewport.current;
+    if (!viewport || !graph) return;
+    zoomAnchor.current = null;
+    const nextScale = Math.max(0.08, Math.min(1, (viewport.clientWidth - 16) / graph.width, (viewport.clientHeight - 16) / graph.height));
+    scaleRef.current = nextScale;
+    setFlowScale(nextScale);
+    viewport.scrollTo({ left: 0, top: 0 });
+  };
+  useEffect(() => {
+    const viewport = flowViewport.current;
+    if (!viewport || view !== 'flow') return;
+    const observer = new ResizeObserver(() => setViewportSize({ width: viewport.clientWidth, height: viewport.clientHeight }));
+    observer.observe(viewport);
+    setViewportSize({ width: viewport.clientWidth, height: viewport.clientHeight });
+    return () => observer.disconnect();
+  }, [view, graph]);
+  useEffect(() => {
+    if (!graph || !viewportSize.width || !viewportSize.height || view !== 'flow') return;
+    zoomAnchor.current = null;
+    const nextScale = Math.max(0.08, Math.min(1, (viewportSize.width - 16) / graph.width, (viewportSize.height - 16) / graph.height));
+    scaleRef.current = nextScale;
+    setFlowScale(nextScale);
+    flowViewport.current?.scrollTo({ left: 0, top: 0 });
+  }, [graph, viewportSize.width, viewportSize.height, view]);
+  const zoomFlow = (next: number, clientX?: number, clientY?: number) => {
+    const viewport = flowViewport.current;
+    const scale = Math.max(0.08, Math.min(3, next));
+    if (Math.abs(scale - scaleRef.current) < 0.0001) return;
+    if (viewport) {
+      const rect = viewport.getBoundingClientRect();
+      const x = (clientX ?? rect.left + rect.width / 2) - rect.left;
+      const y = (clientY ?? rect.top + rect.height / 2) - rect.top;
+      zoomAnchor.current = { x: viewport.scrollLeft + x, y: viewport.scrollTop + y, ratio: scale / scaleRef.current };
+    }
+    scaleRef.current = scale;
+    setFlowScale(scale);
+  };
+  useEffect(() => {
+    const anchor = zoomAnchor.current;
+    const viewport = flowViewport.current;
+    if (!anchor || !viewport) return;
+    zoomAnchor.current = null;
+    viewport.scrollTo({ left: anchor.x * anchor.ratio - anchor.x + viewport.scrollLeft, top: anchor.y * anchor.ratio - anchor.y + viewport.scrollTop });
+  }, [flowScale]);
+  const pinchDistance = (touches: React.TouchList) => Math.hypot(
+    touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY,
+  );
+  const [wasmDecisions, setWasmDecisions] = useState<Record<string, 'true' | 'false' | 'unknown'>>({});
+  const [reachableNodes, setReachableNodes] = useState<Record<string, boolean>>({});
+  const [nodeStates, setNodeStates] = useState<Record<string, "reachable" | "indeterminate" | "unreachable">>({});
+  const [simulationStatus, setSimulationStatus] = useState<'idle' | 'running' | 'ready' | 'error'>('idle');
+  useEffect(() => {
+    if (!flow || !simulationOpen) return;
+    let cancelled = false;
+    setSimulationStatus('running');
+    const timeout = setTimeout(() => {
+      void analyzeShellWasm(source, simulatedValues).then(result => {
+        if (cancelled) return;
+        setWasmDecisions(result.decisions ?? {});
+        setReachableNodes(result.reachable ?? {});
+        setNodeStates(result.nodeStates ?? {});
+        setSimulationStatus('ready');
+      }).catch(() => {
+        if (!cancelled) { setWasmDecisions({}); setReachableNodes({}); setNodeStates({}); setSimulationStatus('error'); }
+      });
+    }, 180);
+    return () => { cancelled = true; clearTimeout(timeout); };
+  }, [source, simulatedValues, flow, simulationOpen]);
+  const branchDecisions = useMemo(() => new Map(Object.entries(wasmDecisions)), [wasmDecisions]);
   const activeNode = flow?.nodes
     .filter(node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset < offset(node.end))
     .sort((a, b) => (offset(a.end) - offset(a.start)) - (offset(b.end) - offset(b.start)))[0];
@@ -122,7 +240,19 @@ export function ExecutionExplorer({
   const blockRelations = useMemo(() => new Map(analysis.edges.map(edge => [`${edge.from}:${edge.to}`, edge.kind])), [analysis.edges]);
   const blockNodes = useMemo(() => analysis.astNodes.filter(node => node.navigable && node.from !== undefined && node.to !== undefined && (node.kind === 'Stmt' || node.kind === 'BinaryCmd' || node.kind === 'FuncDecl' || node.kind === 'IfClause' || node.kind === 'ForClause' || node.kind === 'WhileClause' || node.kind === 'CaseClause')).filter(node => !matchingIds || matchingIds.has(node.id)), [analysis.astNodes, matchingIds]);
 
-  const blockOrder = useMemo(() => [...blockNodes].sort((a, b) => (a.from ?? 0) - (b.from ?? 0) || (b.to ?? 0) - (a.to ?? 0)), [blockNodes]);
+  const blockOrder = useMemo(() => {
+    const sorted = [...blockNodes].sort((a, b) => (a.from ?? 0) - (b.from ?? 0) || (b.to ?? 0) - (a.to ?? 0));
+    // A Stmt wrapper and its executable clause often cover exactly the same
+    // source range. Display the specific clause, never two duplicate cards.
+    const rank = (kind: string) => kind === 'Stmt' ? 0 : 1;
+    const unique = new Map<string, typeof sorted[number]>();
+    for (const node of sorted) {
+      const key = `${node.from}:${node.to}`;
+      const previous = unique.get(key);
+      if (!previous || rank(node.kind) > rank(previous.kind)) unique.set(key, node);
+    }
+    return [...unique.values()].sort((a, b) => (a.from ?? 0) - (b.from ?? 0) || (b.to ?? 0) - (a.to ?? 0));
+  }, [blockNodes]);
   const pathDetails = (node: typeof analysis.astNodes[number]) => {
     if (node.kind === 'BinaryCmd') {
       const operands = (children.get(node.id) ?? [])
@@ -202,58 +332,119 @@ export function ExecutionExplorer({
             <div className={styles.flowSummary}>
               {flow.nodes.length} nós · {flow.edges.length} conexões · análise estática
             </div>
-            <div className={styles.flowScroll}>
-              <svg
-                className={styles.flowLines}
-                width="100%"
-                height={Math.max(120, flow.nodes.length * 84)}
-                aria-hidden="true"
-              >
-                {flow.edges.map((edge, index) => {
-                  const from = flow.nodes.findIndex(node => node.id === edge.from);
-                  const to = flow.nodes.findIndex(node => node.id === edge.to);
-                  if (from < 0 || to < 0) return null;
-                  return (
-                    <path
-                      key={index}
-                      d={`M 130 ${from * 84 + 66} C 130 ${from * 84 + 96}, 130 ${to * 84 + 12}, 130 ${to * 84 + 24}`}
-                      fill="none"
-                      stroke={edge.kind === 'next' ? '#64748b' : '#a78bfa'}
-                      strokeWidth="2"
-                      strokeDasharray={edge.kind === 'next' ? undefined : '5 4'}
-                    />
-                  );
-                })}
-              </svg>
-              <div className={styles.flowNodes}>
-                {flow.nodes.map(node => {
+            <div className={styles.simulationPanel}>
+              <button type="button" className={styles.simulationToggle} aria-expanded={simulationOpen} onClick={() => setSimulationOpen(open => !open)}>
+                {simulationOpen ? '▾' : '▸'} Avaliação do nó <small>sem executar comandos</small>
+              </button>
+              {simulationOpen && <div className={styles.simulationBody}>
+                {!selectedGraphNode ? <p>Selecione um nó do grafo para inspecionar apenas as variáveis usadas nesse trecho.</p> : <>
+                  <p><strong>{selectedGraphNode.kind}</strong> · trecho selecionado</p>
+                  <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}><code dangerouslySetInnerHTML={{__html:highlightFlowSource(selectedSnippet)}} /></pre>
+                  <p>Substituição estimada:</p>
+                  <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}><code dangerouslySetInnerHTML={{__html:highlightFlowSource(previewShellVariables(selectedSnippet, Object.fromEntries(nodeVariables.map(name => [name, variableValues[name] ?? inferredVariables[name]?.value ?? '']))) )}} /></pre>
+                  <p>Resultado da avaliação: {simulationStatus === 'running' ? 'calculando…' : simulationStatus === 'error' ? 'erro no motor' : wasmDecisions[selectedGraphNode.id] === 'true' ? 'verdadeiro' : wasmDecisions[selectedGraphNode.id] === 'false' ? 'falso' : 'indeterminado'}.</p>
+                  <p>Saída do comando: não executada. O simulador mostra apenas resultados estáticos comprováveis.</p>
+                  {nodeVariables.length === 0 ? <p>Nenhuma referência de variável neste nó.</p> : <div>
+                    {nodeVariables.map(name => <div key={name} style={{position:'relative',padding:'4px 0'}}>
+                      <button type="button" aria-expanded={inspectedVariable === name} onClick={() => setInspectedVariable(current => current === name ? null : name)}>
+                        ${name} = {variableValues[name] ?? inferredVariables[name]?.value ?? '(desconhecido)'} ▾
+                      </button>
+                      {inspectedVariable === name && <div role="group" aria-label={`Detalhes de ${name}`} style={{padding:10,border:'1px solid #52525b',borderRadius:8,marginTop:5}}>
+                        <strong>${name}</strong>
+                        <p>{inferredVariables[name] ? `Atribuição literal encontrada na linha ${inferredVariables[name].line}. Escopo e alterações posteriores podem modificar esse valor.` : 'Definição não identificada neste trecho. Pode vir do ambiente, de outro escopo ou de um subshell.'}</p>
+                        {inferredVariables[name] && <button type="button" onClick={() => onReveal?.(inferredVariables[name].offset, inferredVariables[name].offset + name.length)}>Ver definição</button>}
+                        <label style={{display:'grid',gap:5}}>Valor para avaliação
+                          <input value={variableValues[name] ?? inferredVariables[name]?.value ?? ''} onChange={event => setVariableValues(previous => ({...previous,[name]:event.target.value}))} />
+                        </label>
+                      </div>}
+                    </div>)}
+                  </div>}
+                </>}
+              </div>}
+            </div>
+            <div className={styles.flowToolbar} role="toolbar" aria-label="Zoom do grafo">
+              <button type="button" onClick={() => zoomFlow(flowScale / 1.25)} aria-label="Diminuir zoom">−</button>
+              <button type="button" onClick={fitFlow}>Enquadrar</button>
+              <span aria-live="polite">{Math.round(flowScale * 100)}%</span>
+              <button type="button" onClick={() => zoomFlow(flowScale * 1.25)} aria-label="Aumentar zoom">+</button>
+              <button type="button" onClick={() => zoomFlow(1)} aria-label="Zoom real">1:1</button>
+            </div>
+            <div className={styles.flowLegend} aria-label="Legenda das cores semânticas">
+              {([
+                ['Comando', FLOW_COLORS.command], ['Condição', FLOW_COLORS.condition],
+                ['Laço', FLOW_COLORS.loop], ['Função', FLOW_COLORS.function],
+                ['Alternativa', FLOW_COLORS.branch], ['Pipeline', FLOW_COLORS.pipeline],
+                ['Verdadeiro', FLOW_COLORS.success], ['Falso', FLOW_COLORS.failure],
+                ['Desconhecido', FLOW_COLORS.unknown], ['Erro', FLOW_COLORS.failure],
+              ] as const).map(([label, color]) => <span key={label}><i style={{ backgroundColor: color }} />{label}</span>)}
+            </div>
+            <div className={styles.flowScroll} ref={flowViewport}
+              onTouchStart={event => {
+                if (event.touches.length === 2) pinch.current = { distance: pinchDistance(event.touches), scale: flowScale };
+              }}
+              onTouchMove={event => {
+                if (event.touches.length === 2 && pinch.current) {
+                  const centerX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+                  const centerY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
+                  zoomFlow(pinch.current.scale * pinchDistance(event.touches) / Math.max(1, pinch.current.distance), centerX, centerY);
+                }
+              }}
+              onTouchEnd={event => { if (event.touches.length < 2) pinch.current = null; }}
+              onTouchCancel={() => { pinch.current = null; }}>
+              {graph && <div className={styles.flowStage} style={{ width: graph.width * flowScale, height: graph.height * flowScale }}><div className={styles.flowCanvas} style={{ width: graph.width, height: graph.height, transform: 'scale(' + flowScale + ')' }}>
+                <svg className={styles.flowLines} width={graph.width} height={graph.height} viewBox={`0 0 ${graph.width} ${graph.height}`} aria-label="Conexões de fluxo">
+                  <defs>
+                    <marker id="flow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                      <path d="M0 0 L8 4 L0 8 Z" fill={FLOW_COLORS.neutral} />
+                    </marker>
+                  </defs>
+                  {flow.edges.map((edge, index) => {
+                    const from = graph.nodes.find(node => node.id === edge.from);
+                    const to = graph.nodes.find(node => node.id === edge.to);
+                    if (!from || !to) return null;
+                    const decision = branchDecisions.get(edge.from) ?? 'unknown';
+                    const excluded = (simulationOpen && reachableNodes[edge.from] === false) || ((edge.kind === 'true' || edge.kind === 'false') && decision !== 'unknown' && edge.kind !== decision);
+                    const back = to.y <= from.y;
+                    const x1 = from.x + 100;
+                    const x2 = to.x + 100;
+                    const y1 = from.y + 68;
+                    const y2 = to.y;
+                    const bend = back ? Math.max(x1, x2) + 135 : (x1 + x2) / 2;
+                    const d = back
+                      ? `M ${x1} ${y1} C ${bend} ${y1 + 35}, ${bend} ${y2 - 35}, ${x2} ${y2}`
+                      : `M ${x1} ${y1} C ${x1} ${(y1 + y2) / 2}, ${x2} ${(y1 + y2) / 2}, ${x2} ${y2}`;
+                    return <g key={index}>
+                      <path d={d} fill="none" stroke={flowEdgeColor(edge.kind)} opacity={excluded ? 0.18 : 1} strokeWidth="2" strokeDasharray={back ? '5 4' : undefined} markerEnd="url(#flow-arrow)" />
+                      {edge.kind !== 'next' && <text x={(x1 + x2) / 2 + (back ? 65 : 0)} y={(y1 + y2) / 2 - 5} fill={flowEdgeColor(edge.kind)} fontSize="11" textAnchor="middle">{edge.kind}</text>}
+                    </g>;
+                  })}
+                </svg>
+                {graph.nodes.map(node => {
                   const from = offset(node.start);
                   const to = offset(node.end);
-                  const isSelected = activeNode ? activeNode.id === node.id : selectedFlowId === node.id;
+                  const isSelected = selectedFlowId === node.id || (!selectedFlowId && activeNode?.id === node.id);
+                  const snippet = source.slice(from, to).trim();
+                  const semantic = describeFlowNode(node.kind, snippet);
+                   const decision = branchDecisions.get(node.id) ?? 'unknown';
+                  const preview = previewShellVariables(snippet, Object.fromEntries([...snippet.matchAll(/\\$\\{([A-Za-z_][\\w]*)\\}|\\$([A-Za-z_][\\w]*)/g)].map(match => match[1] ?? match[2]).filter((name): name is string => Boolean(name)).map(name => [name, variableValues[name] ?? inferredVariables[name]?.value ?? ''])));
+                  const invalidRange = from < 0 || to <= from || to > source.length;
+                  const finding = diagnosticOffsets.find(item => item.from >= from && item.from <= to);
+                  const reachability = simulationOpen && simulationStatus === 'ready' ? nodeStates[node.id] : undefined;
+                  const nodeColor = invalidRange || finding?.level === 'error' ? FLOW_COLORS.failure : finding ? FLOW_COLORS.unknown : flowNodeColor(node.kind, snippet);
                   return (
-                    <button
-                      key={node.id}
-                      ref={isSelected ? activeFlowRef : undefined}
-                      type="button"
-                      className={`${styles.flowNode} ${isSelected ? styles.isSelected : ''}`}
-                      aria-pressed={isSelected}
-                      onClick={() => {
-                        setSelectedFlowId(node.id);
-                        onReveal?.(from, to);
-                      }}
-                    >
-                      <strong>{node.kind}</strong>
-                      <code>{source.slice(from, to).trim().slice(0, 72) || node.id}</code>
-                      <small>
-                        {flow.edges
-                          .filter(edge => edge.from === node.id)
-                          .map(edge => edge.kind)
-                          .join(' · ') || 'fim'}
-                      </small>
+                    <button key={node.id} ref={isSelected ? activeFlowRef : undefined} type="button"
+                      className={`${styles.flowNode} ${styles.flowNodePositioned} ${isSelected ? styles.isSelected : ''}`}
+                      style={{ left: node.x, top: node.y, borderColor: nodeColor, '--flow-node-color': nodeColor, opacity: reachability === 'unreachable' ? 0.28 : reachability === 'indeterminate' ? 0.72 : 1, borderStyle: reachability === 'indeterminate' ? 'dashed' : 'solid' } as React.CSSProperties} aria-pressed={isSelected}
+                      title={invalidRange ? 'Intervalo inválido' : finding?.message ?? semantic.detail}
+                      onClick={() => { setSelectedFlowId(node.id); if (!invalidRange) onReveal?.(from, to); }}>
+                      <strong style={{ color: nodeColor }}>{invalidRange ? 'Intervalo inválido' : semantic.title}</strong>
+                      <span className={styles.flowAstKind}>{node.kind}{finding ? ` · ${finding.level}` : ''}{reachability ? ` · ${reachability === 'reachable' ? 'Alcançável' : reachability === 'indeterminate' ? 'Indeterminado' : 'Inalcançável'}` : ''}</span>
+                      <code className={styles.flowHighlighted} dangerouslySetInnerHTML={{ __html: highlightFlowSource(preview.slice(0, 120) || node.id) }} />
+                      <small>{finding?.message ?? semantic.detail}{decision !== 'unknown' ? ` · Condição: ${decision === 'true' ? 'verdadeira' : 'falsa'}` : ''}</small>
                     </button>
                   );
                 })}
-              </div>
+              </div></div>}
             </div>
             <p className={styles.note}>
               As conexões são aproximações estáticas. Não representam execução observada.
@@ -294,10 +485,10 @@ export function ExecutionExplorer({
               const paths = pathDetails(node);
               const isExpanded = expandedPaths.has(node.id);
               return <div key={node.id} className={styles.blockEntry}>
-                {index > 0 && <div className={styles.blockRelation} aria-label="Relação estrutural">{nested ? "↳ Bloco interno" : relation ? `↓ Relação estática: ${relation}` : "↓ Próximo trecho no código"}</div>}
+                {index > 0 && <div className={styles.blockRelation} aria-label="Relação estrutural">{nested ? "↳ Bloco interno" : relation ? `↓ ${relation === "unknown" ? "Relação não determinada" : `Relação: ${relation}`}` : "↓ Próximo trecho no código"}</div>}
                 <button ref={selected?.id === node.id ? activeBlockRef : undefined} type="button" className={`${styles.blockCard} ${selected?.id === node.id ? styles.blockCardActive : ""}`} aria-pressed={selected?.id === node.id} onClick={() => { selectAstNode(node); setFocusedToken(null); }}>
-                <span className={styles.blockCardHeading}><strong>{index + 1}. {node.kind}</strong><small>{parts.length} partes explicáveis</small></span>
-                <code>{code.length > 180 ? `${code.slice(0, 180)}…` : code}</code>
+                <span className={styles.blockCardHeading}><strong style={{ color: flowNodeColor(node.kind, code) }}>{index + 1}. {node.kind}</strong><small>{parts.length} partes explicáveis</small></span>
+                <code className={styles.flowHighlighted} dangerouslySetInnerHTML={{ __html: highlightFlowSource(code.length > 180 ? `${code.slice(0, 180)}…` : code) }} />
                 <span className={styles.blockCardDescription}>{node.description}</span>
               </button>
                 {paths && <div className={styles.pathPanel}>
@@ -357,7 +548,7 @@ export function ExecutionExplorer({
           </div>}
           {selected && (
             <aside className={styles.details} aria-live="polite">
-              <strong>{selected.kind}</strong>
+              <strong style={{ color: flowNodeColor(selected.kind, selectedSource) }}>{selected.kind}</strong>
               <p>{selected.description}</p>
               {explanation && (
                 <div className={styles.semantic}>
@@ -374,20 +565,20 @@ export function ExecutionExplorer({
               </div>
               {selectedSource && <div className={styles.explainBlock} aria-label="Explicação interativa do código">
                 <p className={styles.note}>Selecione um comando, argumento ou operador para entender o que ele faz.</p>
-                <div className={styles.explainCode}><code>{(() => {
+                <div className={styles.explainCode}><code className={styles.flowHighlighted}>{(() => {
                   const pieces: React.ReactNode[] = [];
                   let position = selected.from ?? 0;
                   for (const token of explainedTokens) {
-                    if (token.from > position) pieces.push(source.slice(position, token.from));
+                    if (token.from > position) pieces.push(<span key={`plain:${position}`} dangerouslySetInnerHTML={{ __html: highlightFlowSource(source.slice(position, token.from)) }} />);
                     pieces.push(<button key={`${token.from}:${token.to}:${token.title}`} type="button" className={styles.explainToken} aria-pressed={inspectedToken?.from === token.from && inspectedToken?.to === token.to} onClick={() => { setFocusedToken(token); onReveal?.(token.from, token.to); }} title={token.title}>{source.slice(token.from, token.to)}</button>);
                     position = token.to;
                   }
-                  if (position < (selected.to ?? 0)) pieces.push(source.slice(position, selected.to));
+                  if (position < (selected.to ?? 0)) pieces.push(<span key={`plain:${position}`} dangerouslySetInnerHTML={{ __html: highlightFlowSource(source.slice(position, selected.to)) }} />);
                   return pieces;
                 })()}</code></div>
                 {inspectedToken ? <div className={styles.tokenExplanation} role="status"><strong>{inspectedToken.title}</strong><p>{inspectedToken.description}</p>{inspectedToken.example && <pre><code>{inspectedToken.example}</code></pre>}<small>Fonte: {inspectedToken.source}</small></div> : <p className={styles.note}>{explainedTokens.length ? `${explainedTokens.length} partes explicáveis neste bloco` : 'Nenhuma explicação detalhada disponível para este trecho; consulte a descrição estrutural acima.'}</p>}
               </div>}
-              <dl>
+              <details className={styles.astMetadata}><summary>Detalhes técnicos do AST</summary><dl>
                 <dt>Node ID</dt>
                 <dd>{selected.id}</dd>
                 <dt>Parent</dt>
@@ -400,7 +591,7 @@ export function ExecutionExplorer({
                 <dd>{selected.navigable ? 'Yes' : 'No'}</dd>
                 <dt>Source range</dt>
                 <dd>{selected.from === undefined ? 'Unavailable' : `${selected.from}–${selected.to}`}</dd>
-              </dl>
+              </dl></details>
             </aside>
           )}
           {analysis.warnings.map(warning => (
