@@ -40,11 +40,8 @@ export function ExecutionExplorer({
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<Finding[]>([]);
   const [simulationOpen, setSimulationOpen] = useState(true);
-  const [variableValues, setVariableValues] = useState<Record<string, string>>({});
+  const [nodeOverrides, setNodeOverrides] = useState<Record<string, Record<string, string>>>({});
   const [inspectedVariable, setInspectedVariable] = useState<string | null>(null);
-  const simulatedValues = useMemo(() => Object.fromEntries(
-    Object.entries(variableValues).map(([key, value]) => [key, parseSimulatedValue(value)])
-  ), [variableValues]);
   const selectedGraphNode = useMemo(() => flow?.nodes.find(node => node.id === selectedFlowId) ?? null, [flow, selectedFlowId]);
   const selectedSnippet = selectedGraphNode ? source.slice(
     Math.max(0, Math.min(source.length, new TextDecoder().decode(new TextEncoder().encode(source).slice(0, selectedGraphNode.start)).length)),
@@ -84,9 +81,13 @@ export function ExecutionExplorer({
     [source, selectedGraphNode, selectedNodeStart, selectedNodeEnd],
   );
   const nodeVariables = nodeBindings.map(binding => binding.name);
+  const selectedOverrides = selectedGraphNode ? nodeOverrides[selectedGraphNode.id] ?? {} : {};
   const scopedValues = Object.fromEntries(nodeBindings
-    .filter(binding => binding.offset >= 0 || binding.name in variableValues)
-    .map(binding => [binding.name, variableValues[binding.name] ?? binding.value]));
+    .filter(binding => binding.offset >= 0 || binding.name in selectedOverrides)
+    .map(binding => [binding.name, selectedOverrides[binding.name] ?? binding.value]));
+  const simulatedValues = useMemo(() => Object.fromEntries(
+    Object.entries(selectedOverrides).map(([key, value]) => [key, parseSimulatedValue(value)])
+  ), [selectedOverrides]);
   const graph = useMemo(() => flow ? layoutShellFlow(flow) : null, [flow]);
   const flowViewport = useRef<HTMLDivElement | null>(null);
   const pinch = useRef<{ distance: number; scale: number } | null>(null);
@@ -346,14 +347,14 @@ export function ExecutionExplorer({
                   {nodeVariables.length === 0 ? <p>Nenhuma referência de variável neste nó.</p> : <div>
                     {nodeVariables.map(name => <div key={name} style={{position:'relative',padding:'4px 0'}}>
                       <button type="button" aria-expanded={inspectedVariable === name} onClick={() => setInspectedVariable(current => current === name ? null : name)}>
-                        ${name} = {variableValues[name] ?? nodeBindings.find(binding => binding.name === name && binding.offset >= 0)?.value ?? '(desconhecido)'} ▾
+                        ${name} = {selectedOverrides[name] ?? nodeBindings.find(binding => binding.name === name && binding.offset >= 0)?.value ?? '(desconhecido)'} ▾
                       </button>
                       {inspectedVariable === name && <div role="group" aria-label={`Detalhes de ${name}`} style={{padding:10,border:'1px solid #52525b',borderRadius:8,marginTop:5}}>
                         <strong>${name}</strong>
                         <p>{nodeBindings.find(binding => binding.name === name && binding.offset >= 0) ? `Definição candidata na linha ${nodeBindings.find(binding => binding.name === name)?.line}. Escopo: ${nodeBindings.find(binding => binding.name === name)?.scope}. A análise não executa expansões dinâmicas.` : 'Definição não identificada neste contexto. Pode vir do ambiente ou de uma expansão dinâmica.'}</p>
                         {nodeBindings.some(binding => binding.name === name && binding.offset >= 0) && <button type="button" onClick={() => onReveal?.(nodeBindings.find(binding => binding.name === name)?.offset ?? 0, (nodeBindings.find(binding => binding.name === name)?.offset ?? 0) + name.length)}>Ver definição</button>}
                         <label style={{display:'grid',gap:5}}>Valor para avaliação
-                          <input value={variableValues[name] ?? nodeBindings.find(binding => binding.name === name && binding.offset >= 0)?.value ?? ''} onChange={event => setVariableValues(previous => ({...previous,[name]:event.target.value}))} />
+                          <input value={selectedOverrides[name] ?? nodeBindings.find(binding => binding.name === name && binding.offset >= 0)?.value ?? ''} onChange={event => setNodeOverrides(previous => ({ ...previous, [selectedGraphNode.id]: { ...previous[selectedGraphNode.id], [name]: event.target.value } }))} />
                         </label>
                       </div>}
                     </div>)}
@@ -427,8 +428,8 @@ export function ExecutionExplorer({
                    const decision = branchDecisions.get(node.id) ?? 'unknown';
                   const snippetBindings = resolveNodeBindings(source, from, to);
                   const preview = previewShellVariables(snippet, Object.fromEntries(snippetBindings
-                    .filter(binding => binding.offset >= 0 || binding.name in variableValues)
-                    .map(binding => [binding.name, variableValues[binding.name] ?? binding.value])));
+                    .filter(binding => binding.offset >= 0 || binding.name in (nodeOverrides[node.id] ?? {}))
+                    .map(binding => [binding.name, nodeOverrides[node.id]?.[binding.name] ?? binding.value])));
                   const invalidRange = from < 0 || to <= from || to > source.length;
                   const finding = diagnosticOffsets.find(item => item.from >= from && item.from <= to);
                   const reachability = simulationOpen && simulationStatus === 'ready' ? nodeStates[node.id] : undefined;
