@@ -42,14 +42,6 @@ export function ExecutionExplorer({
   const [simulationOpen, setSimulationOpen] = useState(true);
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
   const [inspectedVariable, setInspectedVariable] = useState<string | null>(null);
-  const inferredVariables = useMemo(() => {
-    const values: Record<string, { value: string; offset: number; line: number }> = {};
-    for (const match of source.matchAll(/^([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"\n]*)"|'([^'\n]*)'|([0-9]+))\s*$/gm)) {
-      const position = match.index ?? 0;
-      values[match[1]] = { value: match[2] ?? match[3] ?? match[4] ?? '', offset: position, line: source.slice(0, position).split('\n').length };
-    }
-    return values;
-  }, [source]);
   const simulatedValues = useMemo(() => Object.fromEntries(
     Object.entries(variableValues).map(([key, value]) => [key, parseSimulatedValue(value)])
   ), [variableValues]);
