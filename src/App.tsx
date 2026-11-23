@@ -182,14 +182,6 @@ const EXPLORER_TAB_LABELS: Record<ExplorerTab, string> = {
   explanation: 'Explicação',
 };
 
-const COMPOUND_AST_NODE_KINDS = new Set<ShellAstNode['kind']>([
-  'BinaryCmd',
-  'IfClause',
-  'ForClause',
-  'WhileClause',
-  'CaseClause',
-]);
-
 const STARTER_SCRIPT = `#!/usr/bin/env zsh
 # Bem-vindo ao ShellConductor 👋
 set -euo pipefail
