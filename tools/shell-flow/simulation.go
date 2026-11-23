@@ -432,6 +432,14 @@ func evalStmtCondition(stmt *syntax.Stmt, env map[string]simVal) string {
 	return ""
 }
 
+// resolveTestWord safely narrows a test expression to a literal shell word.
+// Compound expressions are handled by evalTestExpr and must not be treated as words.
+func resolveTestWord(expr syntax.TestExpr, env map[string]simVal) (string, bool) {
+ word, ok := expr.(*syntax.Word)
+ if !ok { return "", false }
+ return resolveWord(word, env)
+}
+
 func evalTestExpr(expr syntax.TestExpr, env map[string]simVal) string {
 	switch e := expr.(type) {
 	case *syntax.ParenTest:
@@ -448,7 +456,7 @@ func evalTestExpr(expr syntax.TestExpr, env map[string]simVal) string {
 			}
 			return "unknown"
 		}
-		val, ok := resolveWord(e.X, env)
+		val, ok := resolveTestWord(e.X, env)
 		if !ok {
 			return "unknown"
 		}
@@ -487,7 +495,7 @@ func evalTestExpr(expr syntax.TestExpr, env map[string]simVal) string {
 		}
 
 		lhs, okL := resolveWord(e.X, env)
-		rhs, okR := resolveWord(e.Y, env)
+		rhs, okR := resolveTestWord(e.Y, env)
 		if !okL || !okR {
 			return "unknown"
 		}
