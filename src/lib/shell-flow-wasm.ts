@@ -1,6 +1,6 @@
 export type WasmFlowNode = { id: string; kind: string; start: number; end: number };
 export type WasmFlowEdge = { from: string; to: string; kind: string };
-export type WasmFlowResult = { nodes: WasmFlowNode[]; edges: WasmFlowEdge[]; warnings: string[] };
+export type WasmFlowResult = { nodes: WasmFlowNode[]; edges: WasmFlowEdge[]; warnings: string[]; decisions?: Record<string, "true" | "false" | "unknown"> };
 export type FlowWasmStatus = { state: 'idle' | 'loading' | 'ready' | 'error'; message?: string };
 type Pending = { resolve: (value: WasmFlowResult) => void; reject: (error: Error) => void };
 let worker: Worker | undefined;
@@ -54,11 +54,11 @@ function getWorker(): Worker {
   }
 }
 export function initializeShellFlowWasm(): void { getWorker(); }
-export function analyzeShellWasm(source: string): Promise<WasmFlowResult> {
+export function analyzeShellWasm(source: string, variables: Record<string, string | readonly string[]> = {}): Promise<WasmFlowResult> {
   const current = getWorker();
   const id = ++nextId;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
-    current.postMessage({ type: 'analyze', id, source });
+    current.postMessage({ type: 'analyze', id, source, variables });
   });
 }
