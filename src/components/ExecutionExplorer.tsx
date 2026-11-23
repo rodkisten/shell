@@ -1,4 +1,5 @@
 import { parseSimulatedValue } from '../lib/flow-simulation';
+import { resolveNodeBindings } from '../lib/node-scope';
 import { analyzeShellWasm } from '../lib/shell-flow-wasm';
 import { describeFlowNode, previewShellVariables } from '../lib/flow-semantics';
 import { highlightFlowSource } from '../lib/flow-highlight';
@@ -57,10 +58,16 @@ export function ExecutionExplorer({
     Math.max(0, Math.min(source.length, new TextDecoder().decode(new TextEncoder().encode(source).slice(0, selectedGraphNode.start)).length)),
     Math.max(0, Math.min(source.length, new TextDecoder().decode(new TextEncoder().encode(source).slice(0, selectedGraphNode.end)).length))
   ) : '';
-  const nodeVariables = useMemo(() => [...new Set(
-    [...selectedSnippet.matchAll(/\$\{([A-Za-z_][\w]*)\}|\$([A-Za-z_][\w]*)/g)]
-      .map(match => match[1] ?? match[2]).filter((name): name is string => Boolean(name))
-  )], [selectedSnippet]);
+  const selectedNodeStart = selectedGraphNode ? offset(selectedGraphNode.start) : 0;
+  const selectedNodeEnd = selectedGraphNode ? offset(selectedGraphNode.end) : 0;
+  const nodeBindings = useMemo(
+    () => selectedGraphNode ? resolveNodeBindings(source, selectedNodeStart, selectedNodeEnd) : [],
+    [source, selectedGraphNode, selectedNodeStart, selectedNodeEnd],
+  );
+  const nodeVariables = nodeBindings.map(binding => binding.name);
+  const scopedValues = Object.fromEntries(nodeBindings
+    .filter(binding => binding.offset >= 0 || binding.name in variableValues)
+    .map(binding => [binding.name, variableValues[binding.name] ?? binding.value]));
   useEffect(() => {
     let cancelled = false;
     void checkShell(source).then(findings => { if (!cancelled) setDiagnostics(findings); });
@@ -341,20 +348,20 @@ export function ExecutionExplorer({
                   <p><strong>{selectedGraphNode.kind}</strong> · trecho selecionado</p>
                   <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}><code dangerouslySetInnerHTML={{__html:highlightFlowSource(selectedSnippet)}} /></pre>
                   <p>Substituição estimada:</p>
-                  <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}><code dangerouslySetInnerHTML={{__html:highlightFlowSource(previewShellVariables(selectedSnippet, Object.fromEntries(nodeVariables.map(name => [name, variableValues[name] ?? inferredVariables[name]?.value ?? '']))) )}} /></pre>
+                  <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}><code dangerouslySetInnerHTML={{__html:highlightFlowSource(previewShellVariables(selectedSnippet, scopedValues) )}} /></pre>
                   <p>Resultado da avaliação: {simulationStatus === 'running' ? 'calculando…' : simulationStatus === 'error' ? 'erro no motor' : wasmDecisions[selectedGraphNode.id] === 'true' ? 'verdadeiro' : wasmDecisions[selectedGraphNode.id] === 'false' ? 'falso' : 'indeterminado'}.</p>
                   <p>Saída do comando: não executada. O simulador mostra apenas resultados estáticos comprováveis.</p>
                   {nodeVariables.length === 0 ? <p>Nenhuma referência de variável neste nó.</p> : <div>
                     {nodeVariables.map(name => <div key={name} style={{position:'relative',padding:'4px 0'}}>
                       <button type="button" aria-expanded={inspectedVariable === name} onClick={() => setInspectedVariable(current => current === name ? null : name)}>
-                        ${name} = {variableValues[name] ?? inferredVariables[name]?.value ?? '(desconhecido)'} ▾
+                        ${name} = {variableValues[name] ?? nodeBindings.find(binding => binding.name === name && binding.offset >= 0)?.value ?? '(desconhecido)'} ▾
                       </button>
                       {inspectedVariable === name && <div role="group" aria-label={`Detalhes de ${name}`} style={{padding:10,border:'1px solid #52525b',borderRadius:8,marginTop:5}}>
                         <strong>${name}</strong>
-                        <p>{inferredVariables[name] ? `Atribuição literal encontrada na linha ${inferredVariables[name].line}. Escopo e alterações posteriores podem modificar esse valor.` : 'Definição não identificada neste trecho. Pode vir do ambiente, de outro escopo ou de um subshell.'}</p>
-                        {inferredVariables[name] && <button type="button" onClick={() => onReveal?.(inferredVariables[name].offset, inferredVariables[name].offset + name.length)}>Ver definição</button>}
+                        <p>{nodeBindings.find(binding => binding.name === name && binding.offset >= 0) ? `Definição candidata na linha ${nodeBindings.find(binding => binding.name === name)?.line}. Escopo: ${nodeBindings.find(binding => binding.name === name)?.scope}. A análise não executa expansões dinâmicas.` : 'Definição não identificada neste contexto. Pode vir do ambiente ou de uma expansão dinâmica.'}</p>
+                        {nodeBindings.some(binding => binding.name === name && binding.offset >= 0) && <button type="button" onClick={() => onReveal?.(nodeBindings.find(binding => binding.name === name)?.offset ?? 0, (nodeBindings.find(binding => binding.name === name)?.offset ?? 0) + name.length)}>Ver definição</button>}
                         <label style={{display:'grid',gap:5}}>Valor para avaliação
-                          <input value={variableValues[name] ?? inferredVariables[name]?.value ?? ''} onChange={event => setVariableValues(previous => ({...previous,[name]:event.target.value}))} />
+                          <input value={variableValues[name] ?? nodeBindings.find(binding => binding.name === name && binding.offset >= 0)?.value ?? ''} onChange={event => setVariableValues(previous => ({...previous,[name]:event.target.value}))} />
                         </label>
                       </div>}
                     </div>)}
