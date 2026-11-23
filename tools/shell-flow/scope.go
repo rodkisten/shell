@@ -3,7 +3,7 @@
 package main
 
 import (
-	"strings"
+	"sort"
 
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -22,8 +22,6 @@ type scopedVariable struct {
 func scopeVariables(file *syntax.File, nodes []node) map[string][]scopedVariable {
 	result := make(map[string][]scopedVariable, len(nodes))
 	for _, target := range nodes {
-		// Track the syntactic ancestry of the selected node. Definitions from
-		// unrelated function bodies and subshells must not escape their scope.
 		var scopes []syntax.Node
 		syntax.Walk(file, func(n syntax.Node) bool {
 			if n == nil {
@@ -45,7 +43,6 @@ func scopeVariables(file *syntax.File, nodes []node) map[string][]scopedVariable
 				return true
 			}
 
-			// Extrai atribuições tanto de CallExpr puro (VAR=1) quanto de DeclClause (export/local/declare/readonly VAR=1)
 			var assigns []*syntax.Assign
 			switch cmd := stmt.Cmd.(type) {
 			case *syntax.CallExpr:
@@ -59,9 +56,6 @@ func scopeVariables(file *syntax.File, nodes []node) map[string][]scopedVariable
 				return true
 			}
 
-			// Reject assignments nested in conditional branches, loops, command
-			// substitutions and pipelines. Source order alone does not prove that
-			// those assignments executed before the selected node.
 			uncertain := false
 			syntax.Walk(file, func(parent syntax.Node) bool {
 				if parent == nil {
@@ -80,7 +74,6 @@ func scopeVariables(file *syntax.File, nodes []node) map[string][]scopedVariable
 				return true
 			}
 
-			// Only literal assignments are candidates.
 			for _, assign := range assigns {
 				if assign.Name == nil || assign.Value == nil {
 					continue
@@ -110,7 +103,6 @@ func scopeVariables(file *syntax.File, nodes []node) map[string][]scopedVariable
 					continue
 				}
 
-				// Find the nearest function/subshell enclosing the assignment.
 				var owner syntax.Node
 				syntax.Walk(file, func(n syntax.Node) bool {
 					if n == nil {
@@ -169,7 +161,7 @@ func scopeVariables(file *syntax.File, nodes []node) map[string][]scopedVariable
 			return true
 		})
 
-		vars := []scopedVariable{}
+		vars := make([]scopedVariable, 0, len(names))
 		for name := range names {
 			if candidate, ok := candidates[name]; ok {
 				vars = append(vars, candidate)
@@ -178,14 +170,9 @@ func scopeVariables(file *syntax.File, nodes []node) map[string][]scopedVariable
 			}
 		}
 
-		// Sort for stable JSON and predictable React keys.
-		for i := 0; i < len(vars); i++ {
-			for j := i + 1; j < len(vars); j++ {
-				if strings.Compare(vars[i].Name, vars[j].Name) > 0 {
-					vars[i], vars[j] = vars[j], vars[i]
-				}
-			}
-		}
+		sort.Slice(vars, func(i, j int) bool {
+			return vars[i].Name < vars[j].Name
+		})
 		result[target.ID] = vars
 	}
 	return result
