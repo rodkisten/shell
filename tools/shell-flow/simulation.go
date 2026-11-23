@@ -120,7 +120,13 @@ func simulateConditions(source string, file *syntax.File, nodes []node, variable
  record := func(stmt *syntax.Stmt, outcome string) {
   if outcome == "unknown" { return }
   key := strings.Join([]string{strconv.Itoa(int(stmt.Pos().Offset())), strconv.Itoa(int(stmt.End().Offset()))}, ":")
-  for _, id := range byRange[key] { decisions[id] = outcome }
+  for _, id := range byRange[key] {
+   if previous, exists := decisions[id]; exists && previous != outcome {
+    decisions[id] = "unknown"
+   } else if !exists {
+    decisions[id] = outcome
+   }
+  }
  }
  var walkList func([]*syntax.Stmt, simulationEnv) simulationEnv
  var walkIf func(*syntax.IfClause, simulationEnv) simulationEnv
@@ -170,8 +176,17 @@ func simulateConditions(source string, file *syntax.File, nodes []node, variable
      continue
     }
    }
-   // Loop iterations and arbitrary commands can mutate shell state.
-   // They are not executed or unrolled. Preserve only user-provided inputs.
+   // Loop iterations are not unrolled. Their bodies may change variables,
+   // so invalidate inferred values before evaluating following statements.
+   if _, isFor := stmt.Cmd.(*syntax.ForClause); isFor {
+    env = copySimulationEnv(initial)
+    continue
+   }
+   if _, isWhile := stmt.Cmd.(*syntax.WhileClause); isWhile {
+    env = copySimulationEnv(initial)
+    continue
+   }
+   // Side-effect-free test commands preserve the environment.
    outcome := evaluateTest(source[start:end], env)
    record(stmt, outcome)
    if outcome == "unknown" { env = copySimulationEnv(initial) }
