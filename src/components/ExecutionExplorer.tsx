@@ -37,10 +37,13 @@ export function ExecutionExplorer({
 }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
+  const [inspectedFlowId, setInspectedFlowId] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<Finding[]>([]);
   const [simulationOpen, setSimulationOpen] = useState(true);
   const [nodeOverrides, setNodeOverrides] = useState<Record<string, Record<string, string>>>({});
   const [inspectedVariable, setInspectedVariable] = useState<string | null>(null);
+  const inspectedFlowNode = flow?.nodes.find(node => node.id === inspectedFlowId);
+  const inspectedFlowSource = inspectedFlowNode ? source.slice(new TextDecoder().decode(new TextEncoder().encode(source).slice(0, inspectedFlowNode.start)).length, new TextDecoder().decode(new TextEncoder().encode(source).slice(0, inspectedFlowNode.end)).length) : '';
   const selectedGraphNode = useMemo(() => flow?.nodes.find(node => node.id === selectedFlowId) ?? null, [flow, selectedFlowId]);
   const selectedSnippet = selectedGraphNode ? source.slice(
     Math.max(0, Math.min(source.length, new TextDecoder().decode(new TextEncoder().encode(source).slice(0, selectedGraphNode.start)).length)),
@@ -186,7 +189,7 @@ export function ExecutionExplorer({
   }, [analysis.astNodes, normalizedQuery]);
   useEffect(() => {
     const target = view === 'flow' ? activeFlowRef.current : astMode === 'blocks' ? activeBlockRef.current : activeAstRef.current;
-    if (!target) return;
+    if (!target || view === 'flow') return;
     const container = target.closest('[role="tree"], [aria-label="Grafo de fluxo de controle"], [aria-label="Blocos explicativos do script"]');
     if (!container) return;
     const targetRect = target.getBoundingClientRect();
@@ -356,6 +359,22 @@ export function ExecutionExplorer({
                 </>}
               </div>}
             </div>
+            {inspectedFlowNode && <div className={styles.flowDialogBackdrop} onClick={() => setInspectedFlowId(null)}>
+              <section role="dialog" aria-modal="true" aria-label="Código do nó" className={styles.flowDialog} onClick={event => event.stopPropagation()}>
+                <header className={styles.flowDialogHeader}>
+                  <strong>Código do nó · {inspectedFlowNode.kind}</strong>
+                  <button type="button" aria-label="Fechar detalhes" onClick={() => setInspectedFlowId(null)}>✕</button>
+                </header>
+                <p>Trecho original do script</p>
+                <pre className={styles.flowDialogCode}><code dangerouslySetInnerHTML={{__html:highlightFlowSource(inspectedFlowSource)}} /></pre>
+                <p>Substituição estimada</p>
+                <pre className={styles.flowDialogCode}><code dangerouslySetInnerHTML={{__html:highlightFlowSource(previewShellVariables(inspectedFlowSource, Object.fromEntries((flow.variables?.[inspectedFlowNode.id] ?? []).filter(binding => binding.value !== null || binding.name in (nodeOverrides[inspectedFlowNode.id] ?? {})).map(binding => [binding.name, nodeOverrides[inspectedFlowNode.id]?.[binding.name] ?? binding.value ?? ''])))}} /></pre>
+                <div className={styles.flowDialogActions}>
+                  <button type="button" onClick={() => { setInspectedFlowId(null); onReveal?.(offset(inspectedFlowNode.start), offset(inspectedFlowNode.end)); }}>Mostrar no editor</button>
+                  <button type="button" onClick={() => setInspectedFlowId(null)}>Fechar</button>
+                </div>
+              </section>
+            </div>}
             <div className={styles.flowToolbar} role="toolbar" aria-label="Zoom do grafo">
               <button type="button" onClick={() => zoomFlow(flowScale / 1.25)} aria-label="Diminuir zoom">−</button>
               <button type="button" onClick={fitFlow}>Enquadrar</button>
@@ -433,7 +452,7 @@ export function ExecutionExplorer({
                       className={`${styles.flowNode} ${styles.flowNodePositioned} ${isSelected ? styles.isSelected : ''}`}
                       style={{ left: node.x, top: node.y, borderColor: nodeColor, '--flow-node-color': nodeColor, opacity: reachability === 'unreachable' ? 0.28 : reachability === 'indeterminate' ? 0.72 : 1, borderStyle: reachability === 'indeterminate' ? 'dashed' : 'solid' } as React.CSSProperties} aria-pressed={isSelected}
                       title={invalidRange ? 'Intervalo inválido' : finding?.message ?? semantic.detail}
-                      onClick={() => { setSelectedFlowId(node.id); if (!invalidRange) onReveal?.(from, to); }}>
+                      onClick={() => { setSelectedFlowId(node.id); setInspectedFlowId(node.id); }}>
                       <strong style={{ color: nodeColor }}>{invalidRange ? 'Intervalo inválido' : semantic.title}</strong>
                       <span className={styles.flowAstKind}>{node.kind}{finding ? ` · ${finding.level}` : ''}{reachability ? ` · ${reachability === 'reachable' ? 'Alcançável' : reachability === 'indeterminate' ? 'Indeterminado' : 'Inalcançável'}` : ''}</span>
                       <code className={styles.flowHighlighted} dangerouslySetInnerHTML={{ __html: highlightFlowSource(preview.slice(0, 120) || node.id) }} />
