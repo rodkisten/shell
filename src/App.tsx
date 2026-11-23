@@ -863,8 +863,9 @@ export function App() {
 
         void analyzeShellWasm(script)
           .then((result) => {
-            const hasCompoundControlFlow = overview.nodes.some((node) => COMPOUND_AST_NODE_KINDS.has(node.kind));
-            if (revision === analysisRevision.current && !hasCompoundControlFlow) {
+            // The Go/WASM graph is authoritative for all supported Bash
+            // control-flow constructs, including compound branches and loops.
+            if (revision === analysisRevision.current) {
               setFlowResult(result);
             }
           })
