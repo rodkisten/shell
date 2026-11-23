@@ -494,7 +494,7 @@ func evalTestExpr(expr syntax.TestExpr, env map[string]simVal) string {
 			return "unknown"
 		}
 
-		lhs, okL := resolveWord(e.X, env)
+		lhs, okL := resolveTestWord(e.X, env)
 		rhs, okR := resolveTestWord(e.Y, env)
 		if !okL || !okR {
 			return "unknown"
