@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, useLocation } from 'react-router';
 import './styles.css';
+import { DiagnosticsPanel, ShellErrorBoundary } from './ShellDiagnostics';
 import './touch.css';
 import { installPageZoomGuard } from './lib/page-zoom-guard';
 
@@ -22,8 +23,11 @@ function RoutedApp() {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
+    <ShellErrorBoundary>
     <BrowserRouter>
       <RoutedApp />
     </BrowserRouter>
+    <DiagnosticsPanel />
+    </ShellErrorBoundary>
   </React.StrictMode>,
 );
