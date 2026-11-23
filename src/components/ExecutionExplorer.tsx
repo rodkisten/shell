@@ -38,16 +38,36 @@ export function ExecutionExplorer({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<Finding[]>([]);
-  const [simulationOpen, setSimulationOpen] = useState(false);
+  const [simulationOpen, setSimulationOpen] = useState(true);
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
   const [customVariableName, setCustomVariableName] = useState('');
+  // Infer editable defaults from literal assignments in the current script.
+  // These are suggestions only: the user can override them in the simulator.
+  const inferredVariables = useMemo(() => {
+    const values: Record<string, string> = {};
+    for (const match of source.matchAll(/^([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"\\n]*)"|'([^'\\n]*)'|([0-9]+))\\s*$/gm)) {
+      values[match[1]] = match[2] ?? match[3] ?? match[4] ?? '';
+    }
+    return values;
+  }, [source]);
+  useEffect(() => {
+    setVariableValues(previous => {
+      const next: Record<string, string> = {};
+      for (const [name, value] of Object.entries(inferredVariables)) next[name] = previous[name] ?? value;
+      for (const [name, value] of Object.entries(previous)) {
+        if (!(name in next)) next[name] = value;
+      }
+      return Object.keys(next).length === Object.keys(previous).length &&
+        Object.entries(next).every(([key, value]) => previous[key] === value) ? previous : next;
+    });
+  }, [inferredVariables]);
   const simulatedValues = useMemo(() => Object.fromEntries(
     Object.entries(variableValues).map(([key, value]) => [key, parseSimulatedValue(value)])
   ), [variableValues]);
   const detectedVariables = useMemo(() => [...new Set(
     [...source.matchAll(/\$\{([A-Za-z_][\w]*)\}|\$([A-Za-z_][\w]*)/g)]
       .map(match => match[1] ?? match[2]).filter((name): name is string => Boolean(name))
-  )].slice(0, 24), [source]);
+  )].slice(0, 48), [source]);
   useEffect(() => {
     let cancelled = false;
     void checkShell(source).then(findings => { if (!cancelled) setDiagnostics(findings); });
@@ -324,7 +344,7 @@ export function ExecutionExplorer({
                 {simulationOpen ? '▾' : '▸'} Simular variáveis <small>sem executar o script</small>
               </button>
               {simulationOpen && <div className={styles.simulationBody}>
-                <p role="status">Motor Go/WASM: {simulationStatus === 'running' ? 'analisando…' : simulationStatus === 'ready' ? 'pronto' : simulationStatus === 'error' ? 'indisponível' : 'aguardando'}</p>
+                <p role="status">Variáveis identificadas: {detectedVariables.length} · Motor Go/WASM: {simulationStatus === 'running' ? 'analisando…' : simulationStatus === 'ready' ? 'pronto' : simulationStatus === 'error' ? 'indisponível' : 'aguardando'}</p>
                 <p>Informe valores para visualizar substituições e avaliar testes simples (-z, -n, =, != e comparações numéricas). Arrays podem ser informados como JSON, por exemplo [\"api\",\"web\"]. Comandos não são executados.</p>
                 {detectedVariables.length === 0 && Object.keys(variableValues).length === 0 && <p>Nenhuma referência simples encontrada. Adicione uma variável manualmente abaixo.</p>}
                 {[...new Set([...detectedVariables, ...Object.keys(variableValues)])].map(name => <label key={name} className={styles.simulationField}>
@@ -341,7 +361,7 @@ export function ExecutionExplorer({
                   <input aria-label="Nome da variável" value={customVariableName} placeholder="Nova variável" onChange={event => setCustomVariableName(event.target.value)} />
                   <button type="submit">Adicionar variável</button>
                 </form>
-                <button type="button" onClick={() => setVariableValues({})}>Limpar valores</button>
+                <button type="button" onClick={() => setVariableValues({ ...inferredVariables })}>Restaurar valores do script</button>
               </div>}
             </div>
             <div className={styles.flowToolbar} role="toolbar" aria-label="Zoom do grafo">
