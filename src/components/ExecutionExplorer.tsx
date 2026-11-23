@@ -433,7 +433,10 @@ export function ExecutionExplorer({
                   const snippet = source.slice(from, to).trim();
                   const semantic = describeFlowNode(node.kind, snippet);
                    const decision = branchDecisions.get(node.id) ?? 'unknown';
-                  const preview = previewShellVariables(snippet, Object.fromEntries([...snippet.matchAll(/\\$\\{([A-Za-z_][\\w]*)\\}|\\$([A-Za-z_][\\w]*)/g)].map(match => match[1] ?? match[2]).filter((name): name is string => Boolean(name)).map(name => [name, variableValues[name] ?? inferredVariables[name]?.value ?? ''])));
+                  const snippetBindings = resolveNodeBindings(source, from, to);
+                  const preview = previewShellVariables(snippet, Object.fromEntries(snippetBindings
+                    .filter(binding => binding.offset >= 0 || binding.name in variableValues)
+                    .map(binding => [binding.name, variableValues[binding.name] ?? binding.value])));
                   const invalidRange = from < 0 || to <= from || to > source.length;
                   const finding = diagnosticOffsets.find(item => item.from >= from && item.from <= to);
                   const reachability = simulationOpen && simulationStatus === 'ready' ? nodeStates[node.id] : undefined;
