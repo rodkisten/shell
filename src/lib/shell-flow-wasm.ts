@@ -63,7 +63,7 @@ function resolveParameter(expr: string, values: SimulationVariables): string | u
     const val = values[lenMatch[1]];
     if (val === undefined) return undefined;
     if (Array.isArray(val)) return val.length === 0 ? '0' : String([...val[0]].length);
-    return String([...val].length);
+    return typeof val === 'string' ? String([...val].length) : undefined;
   }
 
   // ${VAR:-default}, ${VAR-default}, ${VAR:+alt}, ${VAR+alt}, ${VAR:=default}, ${VAR=default}
@@ -71,7 +71,7 @@ function resolveParameter(expr: string, values: SimulationVariables): string | u
   if (modMatch) {
     const [, name, op, rawFallback] = modMatch;
     const val = values[name];
-    if (Array.isArray(val)) return undefined;
+    if (typeof val !== 'string' && val !== undefined) return undefined;
 
     const exists = val !== undefined;
     const nonEmpty = exists && val.length > 0;
@@ -425,3 +425,10 @@ export function evaluateFlowBranch(kind: string, code: string, values: Simulatio
   if (kind !== 'UntilClause' || result === 'unknown') return result;
   return invertTruth(result);
 }
+
+/** Control-flow graph returned by the static analysis engine. */
+export type WasmFlowResult = {
+  nodes: Array<{ id: string; kind: string; start: number; end: number }>;
+  edges: Array<{ from: string; to: string; kind: string }>;
+  variables?: Record<string, Array<{ name: string; value: string | null }>>;
+};
