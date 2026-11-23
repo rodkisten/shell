@@ -131,6 +131,7 @@ export function ExecutionExplorer({
     touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY,
   );
   const [wasmDecisions, setWasmDecisions] = useState<Record<string, 'true' | 'false' | 'unknown'>>({});
+  const [reachableNodes, setReachableNodes] = useState<Record<string, boolean>>({});
   const [simulationStatus, setSimulationStatus] = useState<'idle' | 'running' | 'ready' | 'error'>('idle');
   useEffect(() => {
     if (!flow || !simulationOpen) return;
@@ -140,9 +141,10 @@ export function ExecutionExplorer({
       void analyzeShellWasm(source, simulatedValues).then(result => {
         if (cancelled) return;
         setWasmDecisions(result.decisions ?? {});
+        setReachableNodes(result.reachable ?? {});
         setSimulationStatus('ready');
       }).catch(() => {
-        if (!cancelled) { setWasmDecisions({}); setSimulationStatus('error'); }
+        if (!cancelled) { setWasmDecisions({}); setReachableNodes({}); setSimulationStatus('error'); }
       });
     }, 180);
     return () => { cancelled = true; clearTimeout(timeout); };
@@ -381,7 +383,7 @@ export function ExecutionExplorer({
                     const to = graph.nodes.find(node => node.id === edge.to);
                     if (!from || !to) return null;
                     const decision = branchDecisions.get(edge.from) ?? 'unknown';
-                    const excluded = (edge.kind === 'true' || edge.kind === 'false') && decision !== 'unknown' && edge.kind !== decision;
+                    const excluded = (simulationOpen && reachableNodes[edge.from] === false) || ((edge.kind === 'true' || edge.kind === 'false') && decision !== 'unknown' && edge.kind !== decision);
                     const back = to.y <= from.y;
                     const x1 = from.x + 100;
                     const x2 = to.x + 100;
