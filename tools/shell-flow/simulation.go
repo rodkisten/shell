@@ -81,15 +81,31 @@ func evaluateTest(source string, variables map[string]json.RawMessage) string {
  return "false"
 }
 
+// Only simple top-level assignments are propagated. Assignments inside branches,
+// loops and functions require path-sensitive evaluation and remain unknown.
+var assignmentPattern = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)=(.*)$`)
+
 func simulateConditions(source string, nodes []node, variables map[string]json.RawMessage) map[string]string {
  decisions := make(map[string]string)
+ environment := make(map[string]json.RawMessage, len(variables))
+ for key, value := range variables { environment[key] = value }
  for _, n := range nodes {
   if n.Start < 0 || n.End > len(source) || n.Start >= n.End { continue }
   fragment := strings.TrimSpace(source[n.Start:n.End])
-  if n.Kind == "Stmt" || n.Kind == "CallExpr" {
-   decision := evaluateTest(fragment, variables)
-   if decision != "unknown" { decisions[n.ID] = decision }
+  if n.Kind != "Stmt" && n.Kind != "CallExpr" { continue }
+  if match := assignmentPattern.FindStringSubmatch(fragment); match != nil {
+   // Explicit input values take precedence over source defaults.
+   if _, supplied := variables[match[1]]; !supplied {
+    if value, known := simulationOperand(match[2], environment); known {
+     encoded, _ := json.Marshal(value)
+     environment[match[1]] = encoded
+    } else {
+     delete(environment, match[1])
+    }
+   }
   }
+  decision := evaluateTest(fragment, environment)
+  if decision != "unknown" { decisions[n.ID] = decision }
  }
  return decisions
 }
