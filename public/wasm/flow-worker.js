@@ -25,12 +25,12 @@ async function initialize() {
   return ready;
 }
 self.onmessage = async event => {
-  const { id, type, source } = event.data ?? {};
+  const { id, type, source, variables } = event.data ?? {};
   if (type !== 'analyze' && type !== 'init') return;
   try {
     await initialize();
     if (type === 'analyze') {
-      const parsed = JSON.parse(self.shellFlowAnalyze(source));
+      const parsed = JSON.parse(self.shellFlowAnalyze(source, JSON.stringify(variables ?? {})));
       if (parsed.error) throw new Error(parsed.error);
       self.postMessage({ id, type: 'result', result: parsed });
     }
