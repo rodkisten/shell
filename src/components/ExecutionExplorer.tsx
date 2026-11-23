@@ -81,13 +81,13 @@ export function ExecutionExplorer({
     [source, selectedGraphNode, selectedNodeStart, selectedNodeEnd],
   );
   const nodeVariables = nodeBindings.map(binding => binding.name);
-  const selectedOverrides = selectedGraphNode ? nodeOverrides[selectedGraphNode.id] ?? {} : {};
+  const selectedOverrides = useMemo(() => selectedGraphNode ? nodeOverrides[selectedGraphNode.id] ?? {} : {}, [nodeOverrides, selectedGraphNode]);
   const scopedValues = Object.fromEntries(nodeBindings
     .filter(binding => binding.offset >= 0 || binding.name in selectedOverrides)
     .map(binding => [binding.name, selectedOverrides[binding.name] ?? binding.value]));
   const simulatedValues = useMemo(() => Object.fromEntries(
-    Object.entries(selectedOverrides).map(([key, value]) => [key, parseSimulatedValue(value)])
-  ), [selectedOverrides]);
+    Object.entries(scopedValues).map(([key, value]) => [key, parseSimulatedValue(value)])
+  ), [selectedGraphNode?.id, nodeBindings, selectedOverrides]);
   const graph = useMemo(() => flow ? layoutShellFlow(flow) : null, [flow]);
   const flowViewport = useRef<HTMLDivElement | null>(null);
   const pinch = useRef<{ distance: number; scale: number } | null>(null);
