@@ -40,34 +40,27 @@ export function ExecutionExplorer({
   const [diagnostics, setDiagnostics] = useState<Finding[]>([]);
   const [simulationOpen, setSimulationOpen] = useState(true);
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
-  const [customVariableName, setCustomVariableName] = useState('');
-  // Infer editable defaults from literal assignments in the current script.
-  // These are suggestions only: the user can override them in the simulator.
+  const [inspectedVariable, setInspectedVariable] = useState<string | null>(null);
   const inferredVariables = useMemo(() => {
-    const values: Record<string, string> = {};
-    for (const match of source.matchAll(/^([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"\\n]*)"|'([^'\\n]*)'|([0-9]+))\\s*$/gm)) {
-      values[match[1]] = match[2] ?? match[3] ?? match[4] ?? '';
+    const values: Record<string, { value: string; offset: number; line: number }> = {};
+    for (const match of source.matchAll(/^([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"\n]*)"|'([^'\n]*)'|([0-9]+))\s*$/gm)) {
+      const position = match.index ?? 0;
+      values[match[1]] = { value: match[2] ?? match[3] ?? match[4] ?? '', offset: position, line: source.slice(0, position).split('\n').length };
     }
     return values;
   }, [source]);
-  useEffect(() => {
-    setVariableValues(previous => {
-      const next: Record<string, string> = {};
-      for (const [name, value] of Object.entries(inferredVariables)) next[name] = previous[name] ?? value;
-      for (const [name, value] of Object.entries(previous)) {
-        if (!(name in next)) next[name] = value;
-      }
-      return Object.keys(next).length === Object.keys(previous).length &&
-        Object.entries(next).every(([key, value]) => previous[key] === value) ? previous : next;
-    });
-  }, [inferredVariables]);
   const simulatedValues = useMemo(() => Object.fromEntries(
     Object.entries(variableValues).map(([key, value]) => [key, parseSimulatedValue(value)])
   ), [variableValues]);
-  const detectedVariables = useMemo(() => [...new Set(
-    [...source.matchAll(/\$\{([A-Za-z_][\w]*)\}|\$([A-Za-z_][\w]*)/g)]
+  const selectedGraphNode = useMemo(() => flow?.nodes.find(node => node.id === selectedFlowId) ?? null, [flow, selectedFlowId]);
+  const selectedSnippet = selectedGraphNode ? source.slice(
+    Math.max(0, Math.min(source.length, new TextDecoder().decode(new TextEncoder().encode(source).slice(0, selectedGraphNode.start)).length)),
+    Math.max(0, Math.min(source.length, new TextDecoder().decode(new TextEncoder().encode(source).slice(0, selectedGraphNode.end)).length))
+  ) : '';
+  const nodeVariables = useMemo(() => [...new Set(
+    [...selectedSnippet.matchAll(/\$\{([A-Za-z_][\w]*)\}|\$([A-Za-z_][\w]*)/g)]
       .map(match => match[1] ?? match[2]).filter((name): name is string => Boolean(name))
-  )].slice(0, 48), [source]);
+  )], [selectedSnippet]);
   useEffect(() => {
     let cancelled = false;
     void checkShell(source).then(findings => { if (!cancelled) setDiagnostics(findings); });
@@ -341,27 +334,32 @@ export function ExecutionExplorer({
             </div>
             <div className={styles.simulationPanel}>
               <button type="button" className={styles.simulationToggle} aria-expanded={simulationOpen} onClick={() => setSimulationOpen(open => !open)}>
-                {simulationOpen ? '▾' : '▸'} Simular variáveis <small>sem executar o script</small>
+                {simulationOpen ? '▾' : '▸'} Avaliação do nó <small>sem executar comandos</small>
               </button>
               {simulationOpen && <div className={styles.simulationBody}>
-                <p role="status">Variáveis identificadas: {detectedVariables.length} · Motor Go/WASM: {simulationStatus === 'running' ? 'analisando…' : simulationStatus === 'ready' ? 'pronto' : simulationStatus === 'error' ? 'indisponível' : 'aguardando'}</p>
-                <p>Informe valores para visualizar substituições e avaliar testes simples (-z, -n, =, != e comparações numéricas). Arrays podem ser informados como JSON, por exemplo [\"api\",\"web\"]. Comandos não são executados.</p>
-                {detectedVariables.length === 0 && Object.keys(variableValues).length === 0 && <p>Nenhuma referência simples encontrada. Adicione uma variável manualmente abaixo.</p>}
-                {[...new Set([...detectedVariables, ...Object.keys(variableValues)])].map(name => <label key={name} className={styles.simulationField}>
-                  <span>${name}</span>
-                  <input value={variableValues[name] ?? ''} placeholder="Valor de exemplo" onChange={event => setVariableValues(previous => ({ ...previous, [name]: event.target.value }))} />
-                </label>)}
-                <form className={styles.simulationField} onSubmit={event => {
-                  event.preventDefault();
-                  const name = customVariableName.trim();
-                  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return;
-                  setVariableValues(previous => ({ ...previous, [name]: previous[name] ?? '' }));
-                  setCustomVariableName('');
-                }}>
-                  <input aria-label="Nome da variável" value={customVariableName} placeholder="Nova variável" onChange={event => setCustomVariableName(event.target.value)} />
-                  <button type="submit">Adicionar variável</button>
-                </form>
-                <button type="button" onClick={() => setVariableValues({ ...inferredVariables })}>Restaurar valores do script</button>
+                {!selectedGraphNode ? <p>Selecione um nó do grafo para inspecionar apenas as variáveis usadas nesse trecho.</p> : <>
+                  <p><strong>{selectedGraphNode.kind}</strong> · trecho selecionado</p>
+                  <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}><code dangerouslySetInnerHTML={{__html:highlightFlowSource(selectedSnippet)}} /></pre>
+                  <p>Substituição estimada:</p>
+                  <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}><code dangerouslySetInnerHTML={{__html:highlightFlowSource(previewShellVariables(selectedSnippet, Object.fromEntries(nodeVariables.map(name => [name, variableValues[name] ?? inferredVariables[name]?.value ?? '']))) )}} /></pre>
+                  <p>Resultado da avaliação: {simulationStatus === 'running' ? 'calculando…' : simulationStatus === 'error' ? 'erro no motor' : wasmDecisions[selectedGraphNode.id] === 'true' ? 'verdadeiro' : wasmDecisions[selectedGraphNode.id] === 'false' ? 'falso' : 'indeterminado'}.</p>
+                  <p>Saída do comando: não executada. O simulador mostra apenas resultados estáticos comprováveis.</p>
+                  {nodeVariables.length === 0 ? <p>Nenhuma referência de variável neste nó.</p> : <div>
+                    {nodeVariables.map(name => <div key={name} style={{position:'relative',padding:'4px 0'}}>
+                      <button type="button" aria-expanded={inspectedVariable === name} onClick={() => setInspectedVariable(current => current === name ? null : name)}>
+                        ${name} = {variableValues[name] ?? inferredVariables[name]?.value ?? '(desconhecido)'} ▾
+                      </button>
+                      {inspectedVariable === name && <div role="group" aria-label={`Detalhes de ${name}`} style={{padding:10,border:'1px solid #52525b',borderRadius:8,marginTop:5}}>
+                        <strong>${name}</strong>
+                        <p>{inferredVariables[name] ? `Atribuição literal encontrada na linha ${inferredVariables[name].line}. Escopo e alterações posteriores podem modificar esse valor.` : 'Definição não identificada neste trecho. Pode vir do ambiente, de outro escopo ou de um subshell.'}</p>
+                        {inferredVariables[name] && <button type="button" onClick={() => onReveal?.(inferredVariables[name].offset, inferredVariables[name].offset + name.length)}>Ver definição</button>}
+                        <label style={{display:'grid',gap:5}}>Valor para avaliação
+                          <input value={variableValues[name] ?? inferredVariables[name]?.value ?? ''} onChange={event => setVariableValues(previous => ({...previous,[name]:event.target.value}))} />
+                        </label>
+                      </div>}
+                    </div>)}
+                  </div>}
+                </>}
               </div>}
             </div>
             <div className={styles.flowToolbar} role="toolbar" aria-label="Zoom do grafo">
@@ -428,7 +426,7 @@ export function ExecutionExplorer({
                   const snippet = source.slice(from, to).trim();
                   const semantic = describeFlowNode(node.kind, snippet);
                    const decision = branchDecisions.get(node.id) ?? 'unknown';
-                  const preview = previewShellVariables(snippet, variableValues);
+                  const preview = previewShellVariables(snippet, Object.fromEntries([...snippet.matchAll(/\\$\\{([A-Za-z_][\\w]*)\\}|\\$([A-Za-z_][\\w]*)/g)].map(match => match[1] ?? match[2]).filter((name): name is string => Boolean(name)).map(name => [name, variableValues[name] ?? inferredVariables[name]?.value ?? ''])));
                   const invalidRange = from < 0 || to <= from || to > source.length;
                   const finding = diagnosticOffsets.find(item => item.from >= from && item.from <= to);
                   const reachability = simulationOpen && simulationStatus === 'ready' ? nodeStates[node.id] : undefined;
