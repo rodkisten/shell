@@ -13,8 +13,19 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-// simulateConditions statically evaluates test expressions ([ ], [[ ]], test, (( )), true/false)
-// and CaseClause patterns using provided runtime variables and conservative script-level defaults.
+type simVal struct {
+	scalar string
+	array  []string
+	isArr  bool
+}
+
+func (v simVal) asScalar() (string, bool) {
+	if v.isArr {
+		return "", false
+	}
+	return v.scalar, true
+}
+
 func simulateConditions(source string, file *syntax.File, nodes []node, rawVars map[string]json.RawMessage) map[string]string {
 	decisions := make(map[string]string)
 	explicitEnv := flattenJSONVars(rawVars)
@@ -62,8 +73,8 @@ func simulateConditions(source string, file *syntax.File, nodes []node, rawVars 
 	return decisions
 }
 
-func buildEnvBeforeOffset(file *syntax.File, targetOffset int, explicit map[string]string) map[string]string {
-	env := make(map[string]string, len(explicit))
+func buildEnvBeforeOffset(file *syntax.File, targetOffset int, explicit map[string]simVal) map[string]simVal {
+	env := make(map[string]simVal, len(explicit))
 
 	syntax.Walk(file, func(n syntax.Node) bool {
 		stmt, ok := n.(*syntax.Stmt)
@@ -103,14 +114,41 @@ func buildEnvBeforeOffset(file *syntax.File, targetOffset int, explicit map[stri
 		}
 
 		for _, assign := range assigns {
-			if assign.Name == nil || assign.Value == nil {
+			if assign.Name == nil {
 				continue
 			}
-			if val, ok := extractLiteral(assign.Value); ok {
-				if assign.Append {
-					env[assign.Name.Value] += val
-				} else {
-					env[assign.Name.Value] = val
+			if assign.Array != nil {
+				var items []string
+				allLit := true
+				for _, elem := range assign.Array.Elems {
+					if elem.Index != nil {
+						allLit = false
+						break
+					}
+					if val, ok := extractLiteral(elem.Value); ok {
+						items = append(items, val)
+					} else {
+						allLit = false
+						break
+					}
+				}
+				if allLit {
+					if assign.Append && env[assign.Name.Value].isArr {
+						env[assign.Name.Value] = simVal{array: append(env[assign.Name.Value].array, items...), isArr: true}
+					} else {
+						env[assign.Name.Value] = simVal{array: items, isArr: true}
+					}
+				}
+				continue
+			}
+			if assign.Value != nil {
+				if val, ok := extractLiteral(assign.Value); ok {
+					if assign.Append {
+						prev := env[assign.Name.Value].scalar
+						env[assign.Name.Value] = simVal{scalar: prev + val}
+					} else {
+						env[assign.Name.Value] = simVal{scalar: val}
+					}
 				}
 			}
 		}
@@ -159,45 +197,88 @@ func findExactNode(nodes []node, pos, end syntax.Pos) string {
 	return ""
 }
 
-func flattenJSONVars(raw map[string]json.RawMessage) map[string]string {
-	out := make(map[string]string, len(raw))
+func flattenJSONVars(raw map[string]json.RawMessage) map[string]simVal {
+	out := make(map[string]simVal, len(raw))
 	for k, v := range raw {
+		var arr []string
+		if err := json.Unmarshal(v, &arr); err == nil {
+			out[k] = simVal{array: arr, isArr: true}
+			continue
+		}
 		var str string
 		if err := json.Unmarshal(v, &str); err == nil {
-			out[k] = str
+			out[k] = simVal{scalar: str}
 			continue
 		}
 		var num float64
 		if err := json.Unmarshal(v, &num); err == nil {
-			out[k] = strconv.FormatFloat(num, 'f', -1, 64)
+			out[k] = simVal{scalar: strconv.FormatFloat(num, 'f', -1, 64)}
 			continue
 		}
 		var b bool
 		if err := json.Unmarshal(v, &b); err == nil {
-			out[k] = strconv.FormatBool(b)
+			out[k] = simVal{scalar: strconv.FormatBool(b)}
 			continue
 		}
-		out[k] = strings.Trim(string(v), `"`)
+		out[k] = simVal{scalar: strings.Trim(string(v), `"`)}
 	}
 	return out
 }
 
-func resolveParamExp(pe *syntax.ParamExp, env map[string]string) (string, bool) {
+func resolveParamExp(pe *syntax.ParamExp, env map[string]simVal) (string, bool) {
 	if pe == nil || pe.Param == nil {
 		return "", false
 	}
 	name := pe.Param.Value
-	val, exists := env[name]
+	entry, exists := env[name]
 
-	// Suporte a ${#VAR} (comprimento da string)
+	// Indexação de array: ${ARR[0]} ou ${#ARR[@]}
+	if pe.Index != nil {
+		if !exists || !entry.isArr {
+			return "", false
+		}
+		if word, ok := pe.Index.(*syntax.Word); ok {
+			idxStr, okIdx := resolveWord(word, env)
+			if !okIdx {
+				return "", false
+			}
+			if (idxStr == "@" || idxStr == "*") && pe.Length {
+				return strconv.Itoa(len(entry.array)), true
+			}
+			if idx, err := strconv.Atoi(strings.TrimSpace(idxStr)); err == nil {
+				if idx < 0 {
+					idx = len(entry.array) + idx
+				}
+				if idx >= 0 && idx < len(entry.array) {
+					if pe.Length {
+						return strconv.Itoa(len([]rune(entry.array[idx]))), true
+					}
+					return entry.array[idx], true
+				}
+				return "", true
+			}
+		}
+		return "", false
+	}
+
 	if pe.Length {
 		if !exists {
 			return "", false
 		}
-		return strconv.Itoa(len([]rune(val))), true
+		if entry.isArr {
+			if len(entry.array) == 0 {
+				return "0", true
+			}
+			return strconv.Itoa(len([]rune(entry.array[0]))), true
+		}
+		return strconv.Itoa(len([]rune(entry.scalar))), true
 	}
 
-	// Suporte a modificadores ${VAR:-default}, ${VAR-default}, ${VAR:+alt}, ${VAR+alt}, ${VAR:=default}
+	if entry.isArr {
+		return "", false
+	}
+
+	val := entry.scalar
 	if pe.Exp != nil {
 		op := pe.Exp.Op.String()
 		argVal, argOK := resolveWord(pe.Exp.Word, env)
@@ -231,7 +312,7 @@ func resolveParamExp(pe *syntax.ParamExp, env map[string]string) (string, bool) 
 	return val, true
 }
 
-func resolveWord(w *syntax.Word, env map[string]string) (string, bool) {
+func resolveWord(w *syntax.Word, env map[string]simVal) (string, bool) {
 	if w == nil {
 		return "", true
 	}
@@ -276,7 +357,7 @@ func resolveWord(w *syntax.Word, env map[string]string) (string, bool) {
 	return sb.String(), true
 }
 
-func evalCaseClause(clause *syntax.CaseClause, env map[string]string) string {
+func evalCaseClause(clause *syntax.CaseClause, env map[string]simVal) string {
 	subject, ok := resolveWord(clause.Word, env)
 	if !ok {
 		return "unknown"
@@ -295,7 +376,7 @@ func evalCaseClause(clause *syntax.CaseClause, env map[string]string) string {
 	return "case:none"
 }
 
-func matchCaseItem(subject string, patterns []*syntax.Word, env map[string]string) (matched bool, resolved bool) {
+func matchCaseItem(subject string, patterns []*syntax.Word, env map[string]simVal) (matched bool, resolved bool) {
 	for _, patWord := range patterns {
 		patStr, ok := resolveWord(patWord, env)
 		if !ok {
@@ -312,7 +393,7 @@ func matchCaseItem(subject string, patterns []*syntax.Word, env map[string]strin
 	return false, true
 }
 
-func evalStmtCondition(stmt *syntax.Stmt, env map[string]string) string {
+func evalStmtCondition(stmt *syntax.Stmt, env map[string]simVal) string {
 	switch cmd := stmt.Cmd.(type) {
 	case *syntax.TestClause:
 		return evalTestExpr(cmd.X, env)
@@ -322,7 +403,6 @@ func evalStmtCondition(stmt *syntax.Stmt, env map[string]string) string {
 		if !ok {
 			return "unknown"
 		}
-		// Em Bash/Zsh, (( expr )) retorna exit 0 (true) se o resultado for != 0
 		return boolToDecision(val != 0)
 
 	case *syntax.CallExpr:
@@ -352,7 +432,7 @@ func evalStmtCondition(stmt *syntax.Stmt, env map[string]string) string {
 	return ""
 }
 
-func evalTestExpr(expr syntax.TestExpr, env map[string]string) string {
+func evalTestExpr(expr syntax.TestExpr, env map[string]simVal) string {
 	switch e := expr.(type) {
 	case *syntax.ParenTest:
 		return evalTestExpr(e.X, env)
@@ -373,11 +453,11 @@ func evalTestExpr(expr syntax.TestExpr, env map[string]string) string {
 			return "unknown"
 		}
 		switch e.Op {
-		case syntax.TsEmpStr: // -z
+		case syntax.TsEmpStr:
 			return boolToDecision(val == "")
-		case syntax.TsNempStr: // -n
+		case syntax.TsNempStr:
 			return boolToDecision(val != "")
-		case syntax.TsVarSet: // -v
+		case syntax.TsVarSet:
 			_, exists := env[val]
 			return boolToDecision(exists)
 		default:
@@ -413,7 +493,6 @@ func evalTestExpr(expr syntax.TestExpr, env map[string]string) string {
 		}
 
 		opStr := e.Op.String()
-		// Suporte a regex =~ dentro de [[ ... ]]
 		if opStr == "=~" {
 			re, err := regexp.Compile(rhs)
 			if err != nil {
@@ -421,7 +500,6 @@ func evalTestExpr(expr syntax.TestExpr, env map[string]string) string {
 			}
 			return boolToDecision(re.MatchString(lhs))
 		}
-		// Suporte a globbing == / != dentro de [[ ... ]]
 		if (opStr == "==" || opStr == "=") && strings.ContainsAny(rhs, "*?[") {
 			okMatch, err := path.Match(rhs, lhs)
 			if err == nil {
@@ -440,12 +518,11 @@ func evalTestExpr(expr syntax.TestExpr, env map[string]string) string {
 	return "unknown"
 }
 
-func evalBracketArgs(args []*syntax.Word, env map[string]string) string {
+func evalBracketArgs(args []*syntax.Word, env map[string]simVal) string {
 	if len(args) == 0 {
 		return "false"
 	}
 
-	// Suporte a negação prefixada `[ ! ... ]`
 	first, okFirst := resolveWord(args[0], env)
 	if okFirst && first == "!" && len(args) > 1 {
 		sub := evalBracketArgs(args[1:], env)
@@ -458,7 +535,6 @@ func evalBracketArgs(args []*syntax.Word, env map[string]string) string {
 		return "unknown"
 	}
 
-	// Suporte a operadores compostos `-a` e `-o`
 	for i, arg := range args {
 		tok, ok := resolveWord(arg, env)
 		if !ok {
@@ -524,7 +600,7 @@ func evalBracketArgs(args []*syntax.Word, env map[string]string) string {
 	return "unknown"
 }
 
-func evalArithmValue(expr syntax.ArithmExpr, env map[string]string) (int, bool) {
+func evalArithmValue(expr syntax.ArithmExpr, env map[string]simVal) (int, bool) {
 	switch e := expr.(type) {
 	case *syntax.ParenArithm:
 		return evalArithmValue(e.X, env)
@@ -537,9 +613,8 @@ func evalArithmValue(expr syntax.ArithmExpr, env map[string]string) (int, bool) 
 		if num, err := strconv.Atoi(str); err == nil {
 			return num, true
 		}
-		// Em contexto aritmético (( x > 0 )), identificadores sem $ referenciam variáveis
-		if val, exists := env[str]; exists {
-			if num, err := strconv.Atoi(strings.TrimSpace(val)); err == nil {
+		if entry, exists := env[str]; exists && !entry.isArr {
+			if num, err := strconv.Atoi(strings.TrimSpace(entry.scalar)); err == nil {
 				return num, true
 			}
 		}
