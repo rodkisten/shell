@@ -43,6 +43,15 @@ export function ExecutionExplorer({
   const [nodeOverrides, setNodeOverrides] = useState<Record<string, Record<string, string>>>({});
   const [inspectedVariable, setInspectedVariable] = useState<string | null>(null);
   const inspectedFlowNode = flow?.nodes.find(node => node.id === inspectedFlowId);
+  // Escape closes the inspector without changing the selected graph node.
+  useEffect(() => {
+    if (!inspectedFlowId) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setInspectedFlowId(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [inspectedFlowId]);
   const inspectedFlowSource = inspectedFlowNode ? source.slice(new TextDecoder().decode(new TextEncoder().encode(source).slice(0, inspectedFlowNode.start)).length, new TextDecoder().decode(new TextEncoder().encode(source).slice(0, inspectedFlowNode.end)).length) : '';
   const selectedGraphNode = useMemo(() => flow?.nodes.find(node => node.id === selectedFlowId) ?? null, [flow, selectedFlowId]);
   const selectedSnippet = selectedGraphNode ? source.slice(
@@ -336,9 +345,9 @@ export function ExecutionExplorer({
               {simulationOpen && <div className={styles.simulationBody}>
                 {!selectedGraphNode ? <p>Selecione um nó do grafo para inspecionar apenas as variáveis usadas nesse trecho.</p> : <>
                   <p><strong>{selectedGraphNode.kind}</strong> · trecho selecionado</p>
-                  <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}><code dangerouslySetInnerHTML={{__html:highlightFlowSource(selectedSnippet)}} /></pre>
+                  <pre className={styles.flowDialogCode}><code className={styles.flowHighlighted} dangerouslySetInnerHTML={{__html:highlightFlowSource(selectedSnippet)}} /></pre>
                   <p>Substituição estimada:</p>
-                  <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}><code dangerouslySetInnerHTML={{__html:highlightFlowSource(previewShellVariables(selectedSnippet, scopedValues) )}} /></pre>
+                  <pre className={styles.flowDialogCode}><code className={styles.flowHighlighted} dangerouslySetInnerHTML={{__html:highlightFlowSource(previewShellVariables(selectedSnippet, scopedValues) )}} /></pre>
                   <p>Resultado da avaliação: {simulationStatus === 'running' ? 'calculando…' : simulationStatus === 'error' ? 'erro no motor' : wasmDecisions[selectedGraphNode.id] === 'true' ? 'verdadeiro' : wasmDecisions[selectedGraphNode.id] === 'false' ? 'falso' : 'indeterminado'}.</p>
                   <p>Saída do comando: não executada. O simulador mostra apenas resultados estáticos comprováveis.</p>
                   {nodeVariables.length === 0 ? <p>Nenhuma referência de variável neste nó.</p> : <div>
@@ -366,9 +375,9 @@ export function ExecutionExplorer({
                   <button type="button" aria-label="Fechar detalhes" onClick={() => setInspectedFlowId(null)}>✕</button>
                 </header>
                 <p>Trecho original do script</p>
-                <pre className={styles.flowDialogCode}><code dangerouslySetInnerHTML={{__html:highlightFlowSource(inspectedFlowSource)}} /></pre>
+                <pre className={styles.flowDialogCode}><code className={styles.flowHighlighted} dangerouslySetInnerHTML={{__html:highlightFlowSource(inspectedFlowSource)}} /></pre>
                 <p>Substituição estimada</p>
-                <pre className={styles.flowDialogCode}><code dangerouslySetInnerHTML={{__html:highlightFlowSource(previewShellVariables(inspectedFlowSource, Object.fromEntries((flow.variables?.[inspectedFlowNode.id] ?? []).filter(binding => binding.value !== null || binding.name in (nodeOverrides[inspectedFlowNode.id] ?? {})).map(binding => [binding.name, nodeOverrides[inspectedFlowNode.id]?.[binding.name] ?? binding.value ?? ''])))}} /></pre>
+                <pre className={styles.flowDialogCode}><code className={styles.flowHighlighted} dangerouslySetInnerHTML={{__html:highlightFlowSource(previewShellVariables(inspectedFlowSource, Object.fromEntries((flow.variables?.[inspectedFlowNode.id] ?? []).filter(binding => binding.value !== null || binding.name in (nodeOverrides[inspectedFlowNode.id] ?? {})).map(binding => [binding.name, nodeOverrides[inspectedFlowNode.id]?.[binding.name] ?? binding.value ?? ''])))}} /></pre>
                 <div className={styles.flowDialogActions}>
                   <button type="button" onClick={() => { setInspectedFlowId(null); onReveal?.(offset(inspectedFlowNode.start), offset(inspectedFlowNode.end)); }}>Mostrar no editor</button>
                   <button type="button" onClick={() => setInspectedFlowId(null)}>Fechar</button>
@@ -452,7 +461,7 @@ export function ExecutionExplorer({
                       className={`${styles.flowNode} ${styles.flowNodePositioned} ${isSelected ? styles.isSelected : ''}`}
                       style={{ left: node.x, top: node.y, borderColor: nodeColor, '--flow-node-color': nodeColor, opacity: reachability === 'unreachable' ? 0.28 : reachability === 'indeterminate' ? 0.72 : 1, borderStyle: reachability === 'indeterminate' ? 'dashed' : 'solid' } as React.CSSProperties} aria-pressed={isSelected}
                       title={invalidRange ? 'Intervalo inválido' : finding?.message ?? semantic.detail}
-                      onClick={() => { setSelectedFlowId(node.id); setInspectedFlowId(node.id); }}>
+                      onClick={() => { setSelectedFlowId(node.id); setInspectedFlowId(node.id); if (!invalidRange) onReveal?.(from, to); }}>
                       <strong style={{ color: nodeColor }}>{invalidRange ? 'Intervalo inválido' : semantic.title}</strong>
                       <span className={styles.flowAstKind}>{node.kind}{finding ? ` · ${finding.level}` : ''}{reachability ? ` · ${reachability === 'reachable' ? 'Alcançável' : reachability === 'indeterminate' ? 'Indeterminado' : 'Inalcançável'}` : ''}</span>
                       <code className={styles.flowHighlighted} dangerouslySetInnerHTML={{ __html: highlightFlowSource(preview.slice(0, 120) || node.id) }} />
