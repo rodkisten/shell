@@ -3,7 +3,6 @@
 package main
 
 import (
- "encoding/json"
  "strings"
 
  "mvdan.cc/sh/v3/syntax"
