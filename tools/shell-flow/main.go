@@ -35,16 +35,20 @@ type result struct {
 }
 
 func analyze(source string, variables map[string]json.RawMessage) (result, error) {
-	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.KeepComments(true)).Parse(strings.NewReader(source), "script.sh")
+	file, err := syntax.NewParser(
+		syntax.Variant(syntax.LangBash),
+		syntax.KeepComments(true),
+	).Parse(strings.NewReader(source), "script.sh")
 	if err != nil {
 		return result{}, err
 	}
+
 	out := result{
 		Nodes: []node{},
 		Edges: []edge{},
 		Warnings: []string{
 			"Static control-flow approximation; not an observed runtime trace.",
-			"Bash parser mode; Zsh-specific syntax may be unsupported.",
+			"Bash parser mode; Zsh-specific syntax (e.g., glob qualifiers or zsh-only flags) may be unsupported.",
 		},
 	}
 
@@ -67,7 +71,6 @@ func analyze(source string, variables map[string]json.RawMessage) (result, error
 		}
 	}
 
-	// Exit labels represent the condition on the edge to the next node.
 	type exit struct{ id, kind string }
 
 	invertExits := func(exits []exit) []exit {
@@ -181,6 +184,15 @@ func analyze(source string, variables map[string]json.RawMessage) (result, error
 				entry, exits = id, []exit{{id, "next"}}
 			}
 
+		case *syntax.FuncDecl:
+			// Declaração de função cria um nó de definição; o corpo só executa quando chamado.
+			id := add("FuncDecl", stmt.Pos(), stmt.End())
+			entry, exits = id, []exit{{id, "next"}}
+
+		case *syntax.CoprocClause:
+			id := add("Coproc", stmt.Pos(), stmt.End())
+			entry, exits = id, []exit{{id, "next"}}
+
 		default:
 			id := add("Stmt", stmt.Pos(), stmt.End())
 			entry = id
@@ -276,7 +288,11 @@ func analyze(source string, variables map[string]json.RawMessage) (result, error
 		if !endPos.IsValid() {
 			endPos = clause.End()
 		}
-		headerID := add("ForClause", clause.Pos(), endPos)
+		kind := "ForClause"
+		if clause.Select {
+			kind = "SelectClause"
+		}
+		headerID := add(kind, clause.Pos(), endPos)
 
 		doEntry, doExits := walkList(clause.Do)
 		if doEntry != "" {
@@ -302,13 +318,17 @@ func analyze(source string, variables map[string]json.RawMessage) (result, error
 
 		var exits []exit
 		hasDefault := false
+		itemEntries := make([]string, len(clause.Items))
+		itemExitsList := make([][]exit, len(clause.Items))
 
 		for i, item := range clause.Items {
 			label := fmt.Sprintf("case:%d", i)
 			itemEntry, itemExits := walkList(item.Stmts)
+			itemEntries[i] = itemEntry
+			itemExitsList[i] = itemExits
+
 			if itemEntry != "" {
 				connect(headerID, itemEntry, label)
-				exits = append(exits, itemExits...)
 			} else {
 				exits = append(exits, exit{headerID, label})
 			}
@@ -319,6 +339,27 @@ func analyze(source string, variables map[string]json.RawMessage) (result, error
 						hasDefault = true
 					}
 				}
+			}
+		}
+
+		// Tratar operadores de término de item: ;; (break), ;& (fallthrough), ;;& (continue testing)
+		for i, item := range clause.Items {
+			op := item.Op.String()
+			switch op {
+			case ";&", ";;&":
+				if i+1 < len(clause.Items) && itemEntries[i+1] != "" {
+					if len(itemExitsList[i]) > 0 {
+						for _, e := range itemExitsList[i] {
+							connect(e.id, itemEntries[i+1], "fallthrough")
+						}
+					} else {
+						connect(headerID, itemEntries[i+1], "fallthrough")
+					}
+				} else {
+					exits = append(exits, itemExitsList[i]...)
+				}
+			default: // ";;" ou vazio
+				exits = append(exits, itemExitsList[i]...)
 			}
 		}
 
@@ -333,10 +374,7 @@ func analyze(source string, variables map[string]json.RawMessage) (result, error
 	out.Variables = scopeVariables(file, out.Nodes)
 	out.Decisions = simulateConditions(source, file, out.Nodes, variables)
 	out.NodeStates = flowNodeStates(out.Nodes, out.Edges, out.Decisions)
-	out.Reachable = make(map[string]bool, len(out.NodeStates))
-	for id, state := range out.NodeStates {
-		out.Reachable[id] = state != "unreachable"
-	}
+	out.Reachable = reachableFlowNodes(out.Nodes, out.Edges, out.Decisions)
 	return out, nil
 }
 
