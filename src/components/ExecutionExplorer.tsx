@@ -132,6 +132,7 @@ export function ExecutionExplorer({
   );
   const [wasmDecisions, setWasmDecisions] = useState<Record<string, 'true' | 'false' | 'unknown'>>({});
   const [reachableNodes, setReachableNodes] = useState<Record<string, boolean>>({});
+  const [nodeStates, setNodeStates] = useState<Record<string, "reachable" | "indeterminate" | "unreachable">>({});
   const [simulationStatus, setSimulationStatus] = useState<'idle' | 'running' | 'ready' | 'error'>('idle');
   useEffect(() => {
     if (!flow || !simulationOpen) return;
@@ -142,9 +143,10 @@ export function ExecutionExplorer({
         if (cancelled) return;
         setWasmDecisions(result.decisions ?? {});
         setReachableNodes(result.reachable ?? {});
+        setNodeStates(result.nodeStates ?? {});
         setSimulationStatus('ready');
       }).catch(() => {
-        if (!cancelled) { setWasmDecisions({}); setReachableNodes({}); setSimulationStatus('error'); }
+        if (!cancelled) { setWasmDecisions({}); setReachableNodes({}); setNodeStates({}); setSimulationStatus('error'); }
       });
     }, 180);
     return () => { cancelled = true; clearTimeout(timeout); };
@@ -409,15 +411,16 @@ export function ExecutionExplorer({
                   const preview = previewShellVariables(snippet, variableValues);
                   const invalidRange = from < 0 || to <= from || to > source.length;
                   const finding = diagnosticOffsets.find(item => item.from >= from && item.from <= to);
+                  const reachability = simulationOpen && simulationStatus === 'ready' ? nodeStates[node.id] : undefined;
                   const nodeColor = invalidRange || finding?.level === 'error' ? FLOW_COLORS.failure : finding ? FLOW_COLORS.unknown : flowNodeColor(node.kind, snippet);
                   return (
                     <button key={node.id} ref={isSelected ? activeFlowRef : undefined} type="button"
                       className={`${styles.flowNode} ${styles.flowNodePositioned} ${isSelected ? styles.isSelected : ''}`}
-                      style={{ left: node.x, top: node.y, borderColor: nodeColor, '--flow-node-color': nodeColor } as React.CSSProperties} aria-pressed={isSelected}
+                      style={{ left: node.x, top: node.y, borderColor: nodeColor, '--flow-node-color': nodeColor, opacity: reachability === 'unreachable' ? 0.28 : reachability === 'indeterminate' ? 0.72 : 1, borderStyle: reachability === 'indeterminate' ? 'dashed' : 'solid' } as React.CSSProperties} aria-pressed={isSelected}
                       title={invalidRange ? 'Intervalo inválido' : finding?.message ?? semantic.detail}
                       onClick={() => { setSelectedFlowId(node.id); if (!invalidRange) onReveal?.(from, to); }}>
                       <strong style={{ color: nodeColor }}>{invalidRange ? 'Intervalo inválido' : semantic.title}</strong>
-                      <span className={styles.flowAstKind}>{node.kind}{finding ? ` · ${finding.level}` : ''}</span>
+                      <span className={styles.flowAstKind}>{node.kind}{finding ? ` · ${finding.level}` : ''}{reachability ? ` · ${reachability === 'reachable' ? 'Alcançável' : reachability === 'indeterminate' ? 'Indeterminado' : 'Inalcançável'}` : ''}</span>
                       <code className={styles.flowHighlighted} dangerouslySetInnerHTML={{ __html: highlightFlowSource(preview.slice(0, 120) || node.id) }} />
                       <small>{finding?.message ?? semantic.detail}{decision !== 'unknown' ? ` · Condição: ${decision === 'true' ? 'verdadeira' : 'falsa'}` : ''}</small>
                     </button>
