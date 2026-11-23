@@ -403,3 +403,41 @@
 .flowDialogCode code :global(.hljs-variable) { color: #e06c75; }
 .flowDialogCode code :global(.hljs-number) { color: #d19a66; }
 .flowDialogCode code :global(.hljs-comment) { color: #7f848e; }
+
+/* CFG layout uses fixed 68px nodes and edge anchors at y + 68.
+   Keep visual cards on that exact grid to prevent overlapping labels/edges. */
+.flowNodePositioned {
+  height: 68px;
+  min-height: 68px;
+  max-height: 68px;
+  padding: 5px 8px;
+  gap: 2px;
+  justify-content: center;
+  overflow: hidden;
+}
+.flowNodePositioned strong {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flowNodePositioned .flowAstKind {
+  flex: 0 0 auto;
+  font-size: 9px;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flowNodePositioned .flowHighlighted {
+  flex: 0 0 auto;
+  font-size: 10px;
+  line-height: 1.3;
+  padding: 2px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flowNodePositioned small { display: none; }
