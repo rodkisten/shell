@@ -183,13 +183,62 @@ const EXPLORER_TAB_LABELS: Record<ExplorerTab, string> = {
 };
 
 const STARTER_SCRIPT = `#!/usr/bin/env zsh
-# Bem-vindo ao ShellConductor 👋
+# Shell Workbench · Laboratório de fluxo e avaliação estática
+# Experimente mudar AMBIENTE, ATIVO, TENTATIVAS e PERFIL no simulador.
 set -euo pipefail
 
-nome="mundo"
-for numero in 1 2 3; do
-  printf "Olá, %s! Iteração %s\\n" "$nome" "$numero"
+AMBIENTE="producao"
+ATIVO="sim"
+TENTATIVAS=3
+PERFIL="admin"
+SERVICOS="api web worker"
+
+printf 'Ambiente: %s\\n' "$AMBIENTE"
+
+# Condições, alternativas e junção dos caminhos.
+if [ "$AMBIENTE" = "producao" ]; then
+  printf 'Deploy de produção\\n'
+elif [ "$AMBIENTE" = "staging" ]; then
+  printf 'Deploy de homologação\\n'
+else
+  printf 'Ambiente de desenvolvimento\\n'
+fi
+
+# Operadores lógicos e comparações numéricas.
+if [ "$ATIVO" = "sim" ] && [ "$TENTATIVAS" -gt 1 ]; then
+  printf 'Serviço habilitado\\n'
+else
+  printf 'Serviço em espera\\n'
+fi
+
+if [ "$PERFIL" = "admin" ] || [ "$PERFIL" = "editor" ]; then
+  printf 'Permissão de escrita\\n'
+fi
+
+# Seleção de casos.
+case "$PERFIL" in
+  admin) printf 'Acesso completo\\n' ;;
+  editor) printf 'Acesso de edição\\n' ;;
+  *) printf 'Acesso de leitura\\n' ;;
+esac
+
+# Loop for, pipeline e substituição de comandos.
+for servico in $SERVICOS; do
+  printf 'Verificando: %s\\n' "$servico"
 done
+printf 'api\\nweb\\nworker\\n' | grep 'web'
+
+# Loop while, função e redirecionamento.
+contador=0
+while [ "$contador" -lt 2 ]; do
+  printf 'Ciclo %s\\n' "$contador"
+  contador=$((contador + 1))
+done
+
+saudacao() {
+  printf 'Análise concluída para %s\\n' "$1"
+}
+saudacao "$AMBIENTE"
 `;
 
 const KEYBOARD_SHORTCUTS = [
