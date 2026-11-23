@@ -13,7 +13,7 @@ import (
 
 type node struct { ID string `json:"id"`; Kind string `json:"kind"`; Start int `json:"start"`; End int `json:"end"` }
 type edge struct { From string `json:"from"`; To string `json:"to"`; Kind string `json:"kind"` }
-type result struct { Nodes []node `json:"nodes"`; Edges []edge `json:"edges"`; Warnings []string `json:"warnings"`; Decisions map[string]string `json:"decisions,omitempty"`; Reachable map[string]bool `json:"reachable,omitempty"`; NodeStates map[string]string `json:"nodeStates,omitempty"` }
+type result struct { Nodes []node `json:"nodes"`; Edges []edge `json:"edges"`; Warnings []string `json:"warnings"`; Decisions map[string]string `json:"decisions,omitempty"`; Reachable map[string]bool `json:"reachable,omitempty"`; NodeStates map[string]string `json:"nodeStates,omitempty"`; Variables map[string][]scopedVariable `json:"variables,omitempty"` }
 
 func analyze(source string, variables map[string]json.RawMessage) (result, error) {
  file, err := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.KeepComments(true)).Parse(strings.NewReader(source), "script.sh")
@@ -104,6 +104,7 @@ func analyze(source string, variables map[string]json.RawMessage) (result, error
   return condEntry, exits
  }
  _, _ = walkList(file.Stmts)
+ out.Variables = scopeVariables(file, out.Nodes)
  out.Decisions = simulateConditions(source, file, out.Nodes, variables)
  out.NodeStates = flowNodeStates(out.Nodes, out.Edges, out.Decisions)
  out.Reachable = make(map[string]bool, len(out.NodeStates))
