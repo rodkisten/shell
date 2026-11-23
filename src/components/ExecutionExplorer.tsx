@@ -377,7 +377,7 @@ export function ExecutionExplorer({
                 <p>Trecho original do script</p>
                 <pre className={styles.flowDialogCode}><code className={styles.flowHighlighted} dangerouslySetInnerHTML={{__html:highlightFlowSource(inspectedFlowSource)}} /></pre>
                 <p>Substituição estimada</p>
-                <pre className={styles.flowDialogCode}><code className={styles.flowHighlighted} dangerouslySetInnerHTML={{__html:highlightFlowSource(previewShellVariables(inspectedFlowSource, Object.fromEntries((flow.variables?.[inspectedFlowNode.id] ?? []).filter(binding => binding.value !== null || binding.name in (nodeOverrides[inspectedFlowNode.id] ?? {})).map(binding => [binding.name, nodeOverrides[inspectedFlowNode.id]?.[binding.name] ?? binding.value ?? ''])))}} /></pre>
+                <pre className={styles.flowDialogCode}><code className={styles.flowHighlighted} dangerouslySetInnerHTML={{__html:highlightFlowSource(previewShellVariables(inspectedFlowSource, Object.fromEntries((flow.variables?.[inspectedFlowNode.id] ?? []).filter(binding => binding.value !== null || binding.name in (nodeOverrides[inspectedFlowNode.id] ?? {})).map(binding => [binding.name, nodeOverrides[inspectedFlowNode.id]?.[binding.name] ?? binding.value ?? '']))))}} /></pre>
                 <div className={styles.flowDialogActions}>
                   <button type="button" onClick={() => { setInspectedFlowId(null); onReveal?.(offset(inspectedFlowNode.start), offset(inspectedFlowNode.end)); }}>Mostrar no editor</button>
                   <button type="button" onClick={() => setInspectedFlowId(null)}>Fechar</button>
