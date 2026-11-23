@@ -185,7 +185,6 @@ func analyze(source string, variables map[string]json.RawMessage) (result, error
 			}
 
 		case *syntax.FuncDecl:
-			// Declaração de função cria um nó de definição; o corpo só executa quando chamado.
 			id := add("FuncDecl", stmt.Pos(), stmt.End())
 			entry, exits = id, []exit{{id, "next"}}
 
@@ -342,7 +341,6 @@ func analyze(source string, variables map[string]json.RawMessage) (result, error
 			}
 		}
 
-		// Tratar operadores de término de item: ;; (break), ;& (fallthrough), ;;& (continue testing)
 		for i, item := range clause.Items {
 			op := item.Op.String()
 			switch op {
@@ -358,7 +356,7 @@ func analyze(source string, variables map[string]json.RawMessage) (result, error
 				} else {
 					exits = append(exits, itemExitsList[i]...)
 				}
-			default: // ";;" ou vazio
+			default:
 				exits = append(exits, itemExitsList[i]...)
 			}
 		}
