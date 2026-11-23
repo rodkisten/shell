@@ -104,7 +104,7 @@ func analyze(source string, variables map[string]json.RawMessage) (result, error
   return condEntry, exits
  }
  _, _ = walkList(file.Stmts)
- out.Decisions = simulateConditions(source, out.Nodes, variables)
+ out.Decisions = simulateConditions(source, file, out.Nodes, variables)
  return out, nil
 }
 
