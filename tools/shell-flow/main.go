@@ -13,7 +13,7 @@ import (
 
 type node struct { ID string `json:"id"`; Kind string `json:"kind"`; Start int `json:"start"`; End int `json:"end"` }
 type edge struct { From string `json:"from"`; To string `json:"to"`; Kind string `json:"kind"` }
-type result struct { Nodes []node `json:"nodes"`; Edges []edge `json:"edges"`; Warnings []string `json:"warnings"`; Decisions map[string]string `json:"decisions,omitempty"` }
+type result struct { Nodes []node `json:"nodes"`; Edges []edge `json:"edges"`; Warnings []string `json:"warnings"`; Decisions map[string]string `json:"decisions,omitempty"`; Reachable map[string]bool `json:"reachable,omitempty"` }
 
 func analyze(source string, variables map[string]json.RawMessage) (result, error) {
  file, err := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.KeepComments(true)).Parse(strings.NewReader(source), "script.sh")
@@ -105,6 +105,7 @@ func analyze(source string, variables map[string]json.RawMessage) (result, error
  }
  _, _ = walkList(file.Stmts)
  out.Decisions = simulateConditions(source, file, out.Nodes, variables)
+ out.Reachable = reachableFlowNodes(out.Nodes, out.Edges, out.Decisions)
  return out, nil
 }
 
