@@ -4,8 +4,6 @@ package main
 
 import "strings"
 
-// flowNodeStates distinguishes nodes reachable on a known path from nodes
-// reached only through an unresolved condition. It never executes commands.
 func flowNodeStates(nodes []node, edges []edge, decisions map[string]string) map[string]string {
 	states := make(map[string]string, len(nodes))
 	if len(nodes) == 0 {
@@ -40,8 +38,6 @@ func flowNodeStates(nodes []node, edges []edge, decisions map[string]string) map
 	if len(queue) == 0 {
 		queue = append(queue, visit{nodes[0].ID, false})
 	}
-	// Visit each node at most twice: once via a certain path, once via an
-	// uncertain path. A certain path always wins when paths converge.
 	seen := make(map[string]uint8)
 	for len(queue) > 0 {
 		current := queue[0]
@@ -88,8 +84,6 @@ func flowNodeStates(nodes []node, edges []edge, decisions map[string]string) map
 	return states
 }
 
-// reachableFlowNodes retains the original boolean contract for callers that
-// only need to know whether a path is possible.
 func reachableFlowNodes(nodes []node, edges []edge, decisions map[string]string) map[string]bool {
 	states := flowNodeStates(nodes, edges, decisions)
 	reachable := make(map[string]bool, len(states))
