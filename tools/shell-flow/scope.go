@@ -25,10 +25,8 @@ func scopeVariables(file *syntax.File, nodes []node) map[string][]scopedVariable
   // Track the syntactic ancestry of the selected node. Definitions from
   // unrelated function bodies and subshells must not escape their scope.
   var scopes []syntax.Node
-  var ancestry []syntax.Node
   syntax.Walk(file, func(n syntax.Node) bool {
-   if n == nil { if len(ancestry)>0 { ancestry=ancestry[:len(ancestry)-1] }; return true }
-   ancestry=append(ancestry,n)
+   if n == nil { return true }
    if int(n.Pos().Offset()) <= target.Start && int(n.End().Offset()) >= target.End {
     switch n.(type) {
     case *syntax.Subshell, *syntax.FuncDecl:
@@ -43,8 +41,21 @@ func scopeVariables(file *syntax.File, nodes []node) map[string][]scopedVariable
    if !ok || int(stmt.Pos().Offset()) >= target.Start { return true }
    call,ok:=stmt.Cmd.(*syntax.CallExpr)
    if !ok || len(call.Args)>0 || len(call.Assigns)==0 { return true }
-   // Only unconditional literal assignments are accepted. Other statements
-   // can alter state dynamically and are handled by the simulation engine.
+   // Reject assignments nested in conditional branches, loops, command
+   // substitutions and pipelines. Source order alone does not prove that
+   // those assignments executed before the selected node.
+   uncertain := false
+   syntax.Walk(file, func(parent syntax.Node) bool {
+    if parent == nil { return true }
+    if parent.Pos().Offset() > stmt.Pos().Offset() || parent.End().Offset() < stmt.End().Offset() { return true }
+    switch parent.(type) {
+    case *syntax.IfClause, *syntax.ForClause, *syntax.WhileClause, *syntax.CaseClause, *syntax.BinaryCmd, *syntax.CmdSubst:
+     uncertain = true
+    }
+    return true
+   })
+   if uncertain { return true }
+   // Only literal assignments with no command arguments are candidates.
    for _, assign:=range call.Assigns {
     if assign.Name==nil || assign.Value==nil { continue }
     var value string
