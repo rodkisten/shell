@@ -1,13 +1,14 @@
+/* global window */
 // Install before React and before any application module executes.
 (function () {
   var events = [];
   var listeners = [];
   var MAX = 150;
   function capture(type, message, detail) {
-    var entry = { id: Date.now() + '-' + Math.random().toString(36).slice(2), type: type, message: String(message || 'Unknown error'), detail: String(detail || ''), timestamp: new Date().toISOString(), url: location.href };
+    var entry = { id: Date.now() + '-' + Math.random().toString(36).slice(2), type: type, message: String(message || 'Unknown error'), detail: String(detail || ''), timestamp: new Date().toISOString(), url: window.location.href };
     events.push(entry);
     if (events.length > MAX) events.shift();
-    listeners.slice().forEach(function (listener) { try { listener(entry); } catch (_) {} });
+    listeners.slice().forEach(function (listener) { try { listener(entry); } catch (error) { window.console.warn('Diagnostic listener failed', error); } });
   }
   window.__shellDiagnostics = {
     events: events,
