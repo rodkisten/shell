@@ -123,34 +123,40 @@ func simulateConditions(source string, file *syntax.File, nodes []node, variable
   for _, id := range byRange[key] { decisions[id] = outcome }
  }
  var walkList func([]*syntax.Stmt, simulationEnv) simulationEnv
+ var walkIf func(*syntax.IfClause, simulationEnv) simulationEnv
+ walkIf = func(clause *syntax.IfClause, incoming simulationEnv) simulationEnv {
+  conditionEnv := walkList(clause.Cond, incoming)
+  outcome := "unknown"
+  if len(clause.Cond) > 0 {
+   last := clause.Cond[len(clause.Cond)-1]
+   a, b := int(last.Pos().Offset()), int(last.End().Offset())
+   if a >= 0 && b <= len(source) && a < b {
+    outcome = evaluateTest(source[a:b], conditionEnv)
+    record(last, outcome)
+   }
+  }
+  thenEnv := copySimulationEnv(conditionEnv)
+  elseEnv := copySimulationEnv(conditionEnv)
+  if outcome != "false" { thenEnv = walkList(clause.Then, thenEnv) }
+  if clause.Else != nil && outcome != "true" {
+   if len(clause.Else.Cond) > 0 {
+    // Elif is another clause, not a synthetic zero-offset statement.
+    elseEnv = walkIf(clause.Else, elseEnv)
+   } else { elseEnv = walkList(clause.Else.Then, elseEnv) }
+  }
+  switch outcome {
+  case "true": return thenEnv
+  case "false": return elseEnv
+  default: return mergeSimulationEnv(thenEnv, elseEnv)
+  }
+ }
  walkList = func(stmts []*syntax.Stmt, incoming simulationEnv) simulationEnv {
   env := copySimulationEnv(incoming)
   for _, stmt := range stmts {
    start, end := int(stmt.Pos().Offset()), int(stmt.End().Offset())
    if start < 0 || end > len(source) || start >= end { continue }
    if clause, ok := stmt.Cmd.(*syntax.IfClause); ok {
-    conditionEnv := walkList(clause.Cond, env)
-    outcome := "unknown"
-    if len(clause.Cond) > 0 {
-     last := clause.Cond[len(clause.Cond)-1]
-     a, b := int(last.Pos().Offset()), int(last.End().Offset())
-     if a >= 0 && b <= len(source) && a < b { outcome = evaluateTest(source[a:b], conditionEnv) }
-    }
-    thenEnv := copySimulationEnv(conditionEnv)
-    elseEnv := copySimulationEnv(conditionEnv)
-    if outcome != "false" { thenEnv = walkList(clause.Then, thenEnv) }
-    if clause.Else != nil && outcome != "true" {
-     if len(clause.Else.Cond) > 0 {
-      // Else-if chains are evaluated as another conditional.
-      synthetic := &syntax.Stmt{Cmd: clause.Else}
-      elseEnv = walkList([]*syntax.Stmt{synthetic}, elseEnv)
-     } else { elseEnv = walkList(clause.Else.Then, elseEnv) }
-    }
-    switch outcome {
-    case "true": env = thenEnv
-    case "false": env = elseEnv
-    default: env = mergeSimulationEnv(thenEnv, elseEnv)
-    }
+    env = walkIf(clause, env)
     continue
    }
    if call, ok := stmt.Cmd.(*syntax.CallExpr); ok && len(call.Args) == 0 && len(call.Assigns) == 1 && len(stmt.Redirs) == 0 && !stmt.Background && !stmt.Negated {
@@ -164,12 +170,11 @@ func simulateConditions(source string, file *syntax.File, nodes []node, variable
      continue
     }
    }
+   // Loop iterations and arbitrary commands can mutate shell state.
+   // They are not executed or unrolled. Preserve only user-provided inputs.
    outcome := evaluateTest(source[start:end], env)
    record(stmt, outcome)
-   if outcome == "unknown" {
-    // A command with unknown side effects invalidates inferred values.
-    env = copySimulationEnv(initial)
-   }
+   if outcome == "unknown" { env = copySimulationEnv(initial) }
   }
   return env
  }
