@@ -3,196 +3,651 @@
 package main
 
 import (
- "encoding/json"
- "math/big"
- "regexp"
- "strconv"
- "strings"
+	"encoding/json"
+	"fmt"
+	"path"
+	"regexp"
+	"strconv"
+	"strings"
 
- "mvdan.cc/sh/v3/syntax"
+	"mvdan.cc/sh/v3/syntax"
 )
 
-// simulation.go deliberately interprets a small, side-effect-free subset.
-// Unknown results must never be treated as successful execution.
-var variablePattern = regexp.MustCompile(`^\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?$`)
-var testPattern = regexp.MustCompile(`^(.+?)\s+(==|!=|=|-eq|-ne|-gt|-ge|-lt|-le)\s+(.+)$`)
-var unaryPattern = regexp.MustCompile(`^(-z|-n)\s+(.+)$`)
+// simulateConditions statically evaluates test expressions ([ ], [[ ]], test, (( )), true/false)
+// and CaseClause patterns using provided runtime variables and conservative script-level defaults.
+func simulateConditions(source string, file *syntax.File, nodes []node, rawVars map[string]json.RawMessage) map[string]string {
+	decisions := make(map[string]string)
+	explicitEnv := flattenJSONVars(rawVars)
 
-func simulationOperand(raw string, variables map[string]json.RawMessage) (string, bool) {
- value := strings.TrimSpace(raw)
- if len(value) >= 2 && ((value[0] == '"' && value[len(value)-1] == '"') || (value[0] == 39 && value[len(value)-1] == 39)) {
-  value = value[1:len(value)-1]
- }
- if match := variablePattern.FindStringSubmatch(value); match != nil {
-  rawValue, exists := variables[match[1]]
-  if !exists { return "", false }
-  var text string
-  if json.Unmarshal(rawValue, &text) == nil { return text, true }
-  return "", false // Arrays cannot be silently coerced into strings.
- }
- if strings.ContainsAny(value, "$\x60") { return "", false }
- return value, true
+	syntax.Walk(file, func(n syntax.Node) bool {
+		stmt, ok := n.(*syntax.Stmt)
+		if !ok || stmt.Cmd == nil {
+			return true
+		}
+
+		if caseCmd, isCase := stmt.Cmd.(*syntax.CaseClause); isCase {
+			endPos := caseCmd.In
+			if !endPos.IsValid() {
+				endPos = caseCmd.End()
+			}
+			nodeID := findExactNode(nodes, caseCmd.Pos(), endPos)
+			if nodeID != "" {
+				env := buildEnvBeforeOffset(file, int(caseCmd.Pos().Offset()), explicitEnv)
+				decisions[nodeID] = evalCaseClause(caseCmd, env)
+			}
+			return true
+		}
+
+		nodeID := findExactNode(nodes, stmt.Pos(), stmt.End())
+		if nodeID == "" {
+			return true
+		}
+
+		env := buildEnvBeforeOffset(file, int(stmt.Pos().Offset()), explicitEnv)
+		outcome := evalStmtCondition(stmt, env)
+		if outcome != "" {
+			if stmt.Negated {
+				switch outcome {
+				case "true":
+					outcome = "false"
+				case "false":
+					outcome = "true"
+				}
+			}
+			decisions[nodeID] = outcome
+		}
+		return true
+	})
+
+	return decisions
 }
 
-func evaluateTest(source string, variables map[string]json.RawMessage) string {
- text := strings.TrimSpace(source)
- if text == "true" || text == ":" { return "true" }
- if text == "false" { return "false" }
- var body string
- switch {
- case strings.HasPrefix(text, "[[ ") && strings.HasSuffix(text, " ]]"):
-  body = strings.TrimSpace(text[3:len(text)-3])
- case strings.HasPrefix(text, "[ ") && strings.HasSuffix(text, " ]"):
-  body = strings.TrimSpace(text[2:len(text)-2])
- case strings.HasPrefix(text, "test "):
-  body = strings.TrimSpace(text[5:])
- default:
-  return "unknown"
- }
- if match := unaryPattern.FindStringSubmatch(body); match != nil {
-  value, ok := simulationOperand(match[2], variables)
-  if !ok { return "unknown" }
-  truth := len(value) == 0
-  if match[1] == "-n" { truth = !truth }
-  if truth { return "true" }
-  return "false"
- }
- match := testPattern.FindStringSubmatch(body)
- if match == nil { return "unknown" }
- left, leftOK := simulationOperand(match[1], variables)
- right, rightOK := simulationOperand(match[3], variables)
- if !leftOK || !rightOK { return "unknown" }
- var truth bool
- switch match[2] {
- case "=", "==": truth = left == right
- case "!=": truth = left != right
- default:
-  a, okA := new(big.Int).SetString(left, 10)
-  b, okB := new(big.Int).SetString(right, 10)
-  if !okA || !okB { return "unknown" }
-  cmp := a.Cmp(b)
-  switch match[2] {
-  case "-eq": truth = cmp == 0
-  case "-ne": truth = cmp != 0
-  case "-gt": truth = cmp > 0
-  case "-ge": truth = cmp >= 0
-  case "-lt": truth = cmp < 0
-  case "-le": truth = cmp <= 0
-  }
- }
- if truth { return "true" }
- return "false"
+func buildEnvBeforeOffset(file *syntax.File, targetOffset int, explicit map[string]string) map[string]string {
+	env := make(map[string]string, len(explicit))
+
+	syntax.Walk(file, func(n syntax.Node) bool {
+		stmt, ok := n.(*syntax.Stmt)
+		if !ok || int(stmt.Pos().Offset()) >= targetOffset {
+			return true
+		}
+
+		var assigns []*syntax.Assign
+		switch cmd := stmt.Cmd.(type) {
+		case *syntax.CallExpr:
+			if len(cmd.Args) == 0 && len(cmd.Assigns) > 0 {
+				assigns = cmd.Assigns
+			}
+		case *syntax.DeclClause:
+			assigns = cmd.Args
+		}
+		if len(assigns) == 0 {
+			return true
+		}
+
+		uncertain := false
+		syntax.Walk(file, func(parent syntax.Node) bool {
+			if parent == nil {
+				return true
+			}
+			if parent.Pos().Offset() > stmt.Pos().Offset() || parent.End().Offset() < stmt.End().Offset() {
+				return true
+			}
+			switch parent.(type) {
+			case *syntax.IfClause, *syntax.ForClause, *syntax.WhileClause, *syntax.CaseClause, *syntax.BinaryCmd, *syntax.CmdSubst, *syntax.Subshell, *syntax.FuncDecl:
+				uncertain = true
+			}
+			return true
+		})
+		if uncertain {
+			return true
+		}
+
+		for _, assign := range assigns {
+			if assign.Name == nil || assign.Value == nil {
+				continue
+			}
+			if val, ok := extractLiteral(assign.Value); ok {
+				if assign.Append {
+					env[assign.Name.Value] += val
+				} else {
+					env[assign.Name.Value] = val
+				}
+			}
+		}
+		return true
+	})
+
+	for k, v := range explicit {
+		env[k] = v
+	}
+	return env
 }
 
-// Environment merging keeps only facts equal across all feasible paths.
-type simulationEnv map[string]json.RawMessage
-
-func copySimulationEnv(env simulationEnv) simulationEnv {
- next := make(simulationEnv, len(env))
- for key, value := range env { next[key] = value }
- return next
+func extractLiteral(w *syntax.Word) (string, bool) {
+	if w == nil {
+		return "", true
+	}
+	var value strings.Builder
+	for _, part := range w.Parts {
+		switch p := part.(type) {
+		case *syntax.Lit:
+			value.WriteString(p.Value)
+		case *syntax.SglQuoted:
+			value.WriteString(p.Value)
+		case *syntax.DblQuoted:
+			for _, inner := range p.Parts {
+				lit, ok := inner.(*syntax.Lit)
+				if !ok {
+					return "", false
+				}
+				value.WriteString(lit.Value)
+			}
+		default:
+			return "", false
+		}
+	}
+	return value.String(), true
 }
 
-func mergeSimulationEnv(left, right simulationEnv) simulationEnv {
- merged := make(simulationEnv)
- for key, value := range left {
-  if other, ok := right[key]; ok && string(value) == string(other) {
-   merged[key] = value
-  }
- }
- return merged
+func findExactNode(nodes []node, pos, end syntax.Pos) string {
+	startOff, endOff := int(pos.Offset()), int(end.Offset())
+	for _, candidate := range nodes {
+		if startOff == candidate.Start && endOff == candidate.End {
+			return candidate.ID
+		}
+	}
+	return ""
 }
 
-var assignmentPattern = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)=(.*)$`)
+func flattenJSONVars(raw map[string]json.RawMessage) map[string]string {
+	out := make(map[string]string, len(raw))
+	for k, v := range raw {
+		var str string
+		if err := json.Unmarshal(v, &str); err == nil {
+			out[k] = str
+			continue
+		}
+		var num float64
+		if err := json.Unmarshal(v, &num); err == nil {
+			out[k] = strconv.FormatFloat(num, 'f', -1, 64)
+			continue
+		}
+		var b bool
+		if err := json.Unmarshal(v, &b); err == nil {
+			out[k] = strconv.FormatBool(b)
+			continue
+		}
+		out[k] = strings.Trim(string(v), `"`)
+	}
+	return out
+}
 
-// Evaluate statements in source order and fork state at conditional branches.
-// Unknown conditions merge the states rather than guessing a branch.
-func simulateConditions(source string, file *syntax.File, nodes []node, variables map[string]json.RawMessage) map[string]string {
- decisions := make(map[string]string)
- initial := make(simulationEnv, len(variables))
- for key, value := range variables { initial[key] = value }
- // The graph uses the condition statement's offset as its node identity.
- byRange := make(map[string][]string)
- for _, n := range nodes {
-  key := strings.Join([]string{strconv.Itoa(n.Start), strconv.Itoa(n.End)}, ":")
-  byRange[key] = append(byRange[key], n.ID)
- }
- record := func(stmt *syntax.Stmt, outcome string) {
-  if outcome == "unknown" { return }
-  key := strings.Join([]string{strconv.Itoa(int(stmt.Pos().Offset())), strconv.Itoa(int(stmt.End().Offset()))}, ":")
-  for _, id := range byRange[key] {
-   if previous, exists := decisions[id]; exists && previous != outcome {
-    decisions[id] = "unknown"
-   } else if !exists {
-    decisions[id] = outcome
-   }
-  }
- }
- var walkList func([]*syntax.Stmt, simulationEnv) simulationEnv
- var walkIf func(*syntax.IfClause, simulationEnv) simulationEnv
- walkIf = func(clause *syntax.IfClause, incoming simulationEnv) simulationEnv {
-  conditionEnv := walkList(clause.Cond, incoming)
-  outcome := "unknown"
-  if len(clause.Cond) > 0 {
-   last := clause.Cond[len(clause.Cond)-1]
-   a, b := int(last.Pos().Offset()), int(last.End().Offset())
-   if a >= 0 && b <= len(source) && a < b {
-    outcome = evaluateTest(source[a:b], conditionEnv)
-    record(last, outcome)
-   }
-  }
-  thenEnv := copySimulationEnv(conditionEnv)
-  elseEnv := copySimulationEnv(conditionEnv)
-  if outcome != "false" { thenEnv = walkList(clause.Then, thenEnv) }
-  if clause.Else != nil && outcome != "true" {
-   if len(clause.Else.Cond) > 0 {
-    // Elif is another clause, not a synthetic zero-offset statement.
-    elseEnv = walkIf(clause.Else, elseEnv)
-   } else { elseEnv = walkList(clause.Else.Then, elseEnv) }
-  }
-  switch outcome {
-  case "true": return thenEnv
-  case "false": return elseEnv
-  default: return mergeSimulationEnv(thenEnv, elseEnv)
-  }
- }
- walkList = func(stmts []*syntax.Stmt, incoming simulationEnv) simulationEnv {
-  env := copySimulationEnv(incoming)
-  for _, stmt := range stmts {
-   start, end := int(stmt.Pos().Offset()), int(stmt.End().Offset())
-   if start < 0 || end > len(source) || start >= end { continue }
-   if clause, ok := stmt.Cmd.(*syntax.IfClause); ok {
-    env = walkIf(clause, env)
-    continue
-   }
-   if call, ok := stmt.Cmd.(*syntax.CallExpr); ok && len(call.Args) == 0 && len(call.Assigns) == 1 && len(stmt.Redirs) == 0 && !stmt.Background && !stmt.Negated {
-    if match := assignmentPattern.FindStringSubmatch(strings.TrimSpace(source[start:end])); match != nil {
-     if _, supplied := variables[match[1]]; !supplied {
-      if value, known := simulationOperand(match[2], env); known {
-       encoded, _ := json.Marshal(value)
-       env[match[1]] = encoded
-      } else { delete(env, match[1]) }
-     }
-     continue
-    }
-   }
-   // Loop iterations are not unrolled. Their bodies may change variables,
-   // so invalidate inferred values before evaluating following statements.
-   if _, isFor := stmt.Cmd.(*syntax.ForClause); isFor {
-    env = copySimulationEnv(initial)
-    continue
-   }
-   if _, isWhile := stmt.Cmd.(*syntax.WhileClause); isWhile {
-    env = copySimulationEnv(initial)
-    continue
-   }
-   // Side-effect-free test commands preserve the environment.
-   outcome := evaluateTest(source[start:end], env)
-   record(stmt, outcome)
-   if outcome == "unknown" { env = copySimulationEnv(initial) }
-  }
-  return env
- }
- walkList(file.Stmts, initial)
- return decisions
+func resolveParamExp(pe *syntax.ParamExp, env map[string]string) (string, bool) {
+	if pe == nil || pe.Param == nil {
+		return "", false
+	}
+	name := pe.Param.Value
+	val, exists := env[name]
+
+	// Suporte a ${#VAR} (comprimento da string)
+	if pe.Length {
+		if !exists {
+			return "", false
+		}
+		return strconv.Itoa(len([]rune(val))), true
+	}
+
+	// Suporte a modificadores ${VAR:-default}, ${VAR-default}, ${VAR:+alt}, ${VAR+alt}, ${VAR:=default}
+	if pe.Exp != nil {
+		op := pe.Exp.Op.String()
+		argVal, argOK := resolveWord(pe.Exp.Word, env)
+		switch op {
+		case ":-", ":=":
+			if exists && val != "" {
+				return val, true
+			}
+			return argVal, argOK
+		case "-", "=":
+			if exists {
+				return val, true
+			}
+			return argVal, argOK
+		case ":+":
+			if exists && val != "" {
+				return argVal, argOK
+			}
+			return "", true
+		case "+":
+			if exists {
+				return argVal, argOK
+			}
+			return "", true
+		}
+	}
+
+	if !exists {
+		return "", false
+	}
+	return val, true
+}
+
+func resolveWord(w *syntax.Word, env map[string]string) (string, bool) {
+	if w == nil {
+		return "", true
+	}
+	var sb strings.Builder
+	for _, part := range w.Parts {
+		switch p := part.(type) {
+		case *syntax.Lit:
+			sb.WriteString(p.Value)
+		case *syntax.SglQuoted:
+			sb.WriteString(p.Value)
+		case *syntax.ParamExp:
+			val, ok := resolveParamExp(p, env)
+			if !ok {
+				return "", false
+			}
+			sb.WriteString(val)
+		case *syntax.DblQuoted:
+			for _, inner := range p.Parts {
+				switch ip := inner.(type) {
+				case *syntax.Lit:
+					sb.WriteString(ip.Value)
+				case *syntax.ParamExp:
+					val, ok := resolveParamExp(ip, env)
+					if !ok {
+						return "", false
+					}
+					sb.WriteString(val)
+				default:
+					return "", false
+				}
+			}
+		case *syntax.ArithmExp:
+			res, ok := evalArithmValue(p.X, env)
+			if !ok {
+				return "", false
+			}
+			sb.WriteString(strconv.Itoa(res))
+		default:
+			return "", false
+		}
+	}
+	return sb.String(), true
+}
+
+func evalCaseClause(clause *syntax.CaseClause, env map[string]string) string {
+	subject, ok := resolveWord(clause.Word, env)
+	if !ok {
+		return "unknown"
+	}
+
+	for i, item := range clause.Items {
+		matched, resolved := matchCaseItem(subject, item.Patterns, env)
+		if !resolved {
+			return "unknown"
+		}
+		if matched {
+			return fmt.Sprintf("case:%d", i)
+		}
+	}
+
+	return "case:none"
+}
+
+func matchCaseItem(subject string, patterns []*syntax.Word, env map[string]string) (matched bool, resolved bool) {
+	for _, patWord := range patterns {
+		patStr, ok := resolveWord(patWord, env)
+		if !ok {
+			return false, false
+		}
+		if patStr == "*" {
+			return true, true
+		}
+		okMatch, err := path.Match(patStr, subject)
+		if err == nil && okMatch {
+			return true, true
+		}
+	}
+	return false, true
+}
+
+func evalStmtCondition(stmt *syntax.Stmt, env map[string]string) string {
+	switch cmd := stmt.Cmd.(type) {
+	case *syntax.TestClause:
+		return evalTestExpr(cmd.X, env)
+
+	case *syntax.ArithmCmd:
+		val, ok := evalArithmValue(cmd.X, env)
+		if !ok {
+			return "unknown"
+		}
+		// Em Bash/Zsh, (( expr )) retorna exit 0 (true) se o resultado for != 0
+		return boolToDecision(val != 0)
+
+	case *syntax.CallExpr:
+		if len(cmd.Args) == 0 {
+			return ""
+		}
+		name, ok := resolveWord(cmd.Args[0], env)
+		if !ok {
+			return "unknown"
+		}
+		switch name {
+		case "true", ":":
+			return "true"
+		case "false":
+			return "false"
+		case "[", "test":
+			args := cmd.Args[1:]
+			if name == "[" && len(args) > 0 {
+				last, _ := resolveWord(args[len(args)-1], env)
+				if last == "]" {
+					args = args[:len(args)-1]
+				}
+			}
+			return evalBracketArgs(args, env)
+		}
+	}
+	return ""
+}
+
+func evalTestExpr(expr syntax.TestExpr, env map[string]string) string {
+	switch e := expr.(type) {
+	case *syntax.ParenTest:
+		return evalTestExpr(e.X, env)
+
+	case *syntax.UnaryTest:
+		if e.Op == syntax.TsNot {
+			res := evalTestExpr(e.X, env)
+			if res == "true" {
+				return "false"
+			}
+			if res == "false" {
+				return "true"
+			}
+			return "unknown"
+		}
+		val, ok := resolveWord(e.X, env)
+		if !ok {
+			return "unknown"
+		}
+		switch e.Op {
+		case syntax.TsEmpStr: // -z
+			return boolToDecision(val == "")
+		case syntax.TsNempStr: // -n
+			return boolToDecision(val != "")
+		case syntax.TsVarSet: // -v
+			_, exists := env[val]
+			return boolToDecision(exists)
+		default:
+			return "unknown"
+		}
+
+	case *syntax.BinaryTest:
+		if e.Op == syntax.AndTest || e.Op == syntax.OrTest {
+			left := evalTestExpr(e.X, env)
+			right := evalTestExpr(e.Y, env)
+			if e.Op == syntax.AndTest {
+				if left == "false" || right == "false" {
+					return "false"
+				}
+				if left == "true" && right == "true" {
+					return "true"
+				}
+				return "unknown"
+			}
+			if left == "true" || right == "true" {
+				return "true"
+			}
+			if left == "false" && right == "false" {
+				return "false"
+			}
+			return "unknown"
+		}
+
+		lhs, okL := resolveWord(e.X, env)
+		rhs, okR := resolveWord(e.Y, env)
+		if !okL || !okR {
+			return "unknown"
+		}
+
+		opStr := e.Op.String()
+		// Suporte a regex =~ dentro de [[ ... ]]
+		if opStr == "=~" {
+			re, err := regexp.Compile(rhs)
+			if err != nil {
+				return "unknown"
+			}
+			return boolToDecision(re.MatchString(lhs))
+		}
+		// Suporte a globbing == / != dentro de [[ ... ]]
+		if (opStr == "==" || opStr == "=") && strings.ContainsAny(rhs, "*?[") {
+			okMatch, err := path.Match(rhs, lhs)
+			if err == nil {
+				return boolToDecision(okMatch)
+			}
+		}
+		if opStr == "!=" && strings.ContainsAny(rhs, "*?[") {
+			okMatch, err := path.Match(rhs, lhs)
+			if err == nil {
+				return boolToDecision(!okMatch)
+			}
+		}
+
+		return compareBinary(opStr, lhs, rhs)
+	}
+	return "unknown"
+}
+
+func evalBracketArgs(args []*syntax.Word, env map[string]string) string {
+	if len(args) == 0 {
+		return "false"
+	}
+
+	// Suporte a negação prefixada `[ ! ... ]`
+	first, okFirst := resolveWord(args[0], env)
+	if okFirst && first == "!" && len(args) > 1 {
+		sub := evalBracketArgs(args[1:], env)
+		if sub == "true" {
+			return "false"
+		}
+		if sub == "false" {
+			return "true"
+		}
+		return "unknown"
+	}
+
+	// Suporte a operadores compostos `-a` e `-o`
+	for i, arg := range args {
+		tok, ok := resolveWord(arg, env)
+		if !ok {
+			continue
+		}
+		if tok == "-o" && i > 0 && i < len(args)-1 {
+			l := evalBracketArgs(args[:i], env)
+			r := evalBracketArgs(args[i+1:], env)
+			if l == "true" || r == "true" {
+				return "true"
+			}
+			if l == "false" && r == "false" {
+				return "false"
+			}
+			return "unknown"
+		}
+		if tok == "-a" && i > 0 && i < len(args)-1 {
+			l := evalBracketArgs(args[:i], env)
+			r := evalBracketArgs(args[i+1:], env)
+			if l == "false" || r == "false" {
+				return "false"
+			}
+			if l == "true" && r == "true" {
+				return "true"
+			}
+			return "unknown"
+		}
+	}
+
+	switch len(args) {
+	case 1:
+		val, ok := resolveWord(args[0], env)
+		if !ok {
+			return "unknown"
+		}
+		return boolToDecision(val != "")
+	case 2:
+		op, okOp := resolveWord(args[0], env)
+		val, okVal := resolveWord(args[1], env)
+		if !okOp || !okVal {
+			return "unknown"
+		}
+		switch op {
+		case "-z":
+			return boolToDecision(val == "")
+		case "-n":
+			return boolToDecision(val != "")
+		case "-v":
+			_, exists := env[val]
+			return boolToDecision(exists)
+		default:
+			return "unknown"
+		}
+	case 3:
+		lhs, okL := resolveWord(args[0], env)
+		op, okOp := resolveWord(args[1], env)
+		rhs, okR := resolveWord(args[2], env)
+		if !okL || !okOp || !okR {
+			return "unknown"
+		}
+		return compareBinary(op, lhs, rhs)
+	}
+	return "unknown"
+}
+
+func evalArithmValue(expr syntax.ArithmExpr, env map[string]string) (int, bool) {
+	switch e := expr.(type) {
+	case *syntax.ParenArithm:
+		return evalArithmValue(e.X, env)
+	case *syntax.Word:
+		str, ok := resolveWord(e, env)
+		if !ok {
+			return 0, false
+		}
+		str = strings.TrimSpace(str)
+		if num, err := strconv.Atoi(str); err == nil {
+			return num, true
+		}
+		// Em contexto aritmético (( x > 0 )), identificadores sem $ referenciam variáveis
+		if val, exists := env[str]; exists {
+			if num, err := strconv.Atoi(strings.TrimSpace(val)); err == nil {
+				return num, true
+			}
+		}
+		return 0, false
+	case *syntax.UnaryArithm:
+		val, ok := evalArithmValue(e.X, env)
+		if !ok {
+			return 0, false
+		}
+		switch e.Op.String() {
+		case "+":
+			return val, true
+		case "-":
+			return -val, true
+		case "!":
+			if val == 0 {
+				return 1, true
+			}
+			return 0, true
+		}
+	case *syntax.BinaryArithm:
+		l, okL := evalArithmValue(e.X, env)
+		r, okR := evalArithmValue(e.Y, env)
+		if !okL || !okR {
+			return 0, false
+		}
+		switch e.Op.String() {
+		case "+":
+			return l + r, true
+		case "-":
+			return l - r, true
+		case "*":
+			return l * r, true
+		case "/":
+			if r == 0 {
+				return 0, false
+			}
+			return l / r, true
+		case "%":
+			if r == 0 {
+				return 0, false
+			}
+			return l % r, true
+		case "==":
+			return boolToInt(l == r), true
+		case "!=":
+			return boolToInt(l != r), true
+		case "<":
+			return boolToInt(l < r), true
+		case "<=":
+			return boolToInt(l <= r), true
+		case ">":
+			return boolToInt(l > r), true
+		case ">=":
+			return boolToInt(l >= r), true
+		case "&&":
+			return boolToInt(l != 0 && r != 0), true
+		case "||":
+			return boolToInt(l != 0 || r != 0), true
+		}
+	}
+	return 0, false
+}
+
+func compareBinary(op, lhs, rhs string) string {
+	switch op {
+	case "=", "==":
+		return boolToDecision(lhs == rhs)
+	case "!=":
+		return boolToDecision(lhs != rhs)
+	case "<":
+		return boolToDecision(lhs < rhs)
+	case ">":
+		return boolToDecision(lhs > rhs)
+	case "-eq", "-ne", "-lt", "-le", "-gt", "-ge":
+		lNum, errL := strconv.Atoi(strings.TrimSpace(lhs))
+		rNum, errR := strconv.Atoi(strings.TrimSpace(rhs))
+		if errL != nil || errR != nil {
+			return "unknown"
+		}
+		switch op {
+		case "-eq":
+			return boolToDecision(lNum == rNum)
+		case "-ne":
+			return boolToDecision(lNum != rNum)
+		case "-lt":
+			return boolToDecision(lNum < rNum)
+		case "-le":
+			return boolToDecision(lNum <= rNum)
+		case "-gt":
+			return boolToDecision(lNum > rNum)
+		case "-ge":
+			return boolToDecision(lNum >= rNum)
+		}
+	}
+	return "unknown"
+}
+
+func boolToDecision(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
