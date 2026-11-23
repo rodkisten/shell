@@ -58,16 +58,6 @@ export function ExecutionExplorer({
     Math.max(0, Math.min(source.length, new TextDecoder().decode(new TextEncoder().encode(source).slice(0, selectedGraphNode.start)).length)),
     Math.max(0, Math.min(source.length, new TextDecoder().decode(new TextEncoder().encode(source).slice(0, selectedGraphNode.end)).length))
   ) : '';
-  const selectedNodeStart = selectedGraphNode ? offset(selectedGraphNode.start) : 0;
-  const selectedNodeEnd = selectedGraphNode ? offset(selectedGraphNode.end) : 0;
-  const nodeBindings = useMemo(
-    () => selectedGraphNode ? resolveNodeBindings(source, selectedNodeStart, selectedNodeEnd) : [],
-    [source, selectedGraphNode, selectedNodeStart, selectedNodeEnd],
-  );
-  const nodeVariables = nodeBindings.map(binding => binding.name);
-  const scopedValues = Object.fromEntries(nodeBindings
-    .filter(binding => binding.offset >= 0 || binding.name in variableValues)
-    .map(binding => [binding.name, variableValues[binding.name] ?? binding.value]));
   useEffect(() => {
     let cancelled = false;
     void checkShell(source).then(findings => { if (!cancelled) setDiagnostics(findings); });
@@ -95,6 +85,16 @@ export function ExecutionExplorer({
     return mapping;
   }, [source]);
   const offset = (position: number) => byteOffsets[Math.max(0, Math.min(byteOffsets.length - 1, position))] ?? 0;
+  const selectedNodeStart = selectedGraphNode ? offset(selectedGraphNode.start) : 0;
+  const selectedNodeEnd = selectedGraphNode ? offset(selectedGraphNode.end) : 0;
+  const nodeBindings = useMemo(
+    () => selectedGraphNode ? resolveNodeBindings(source, selectedNodeStart, selectedNodeEnd) : [],
+    [source, selectedGraphNode, selectedNodeStart, selectedNodeEnd],
+  );
+  const nodeVariables = nodeBindings.map(binding => binding.name);
+  const scopedValues = Object.fromEntries(nodeBindings
+    .filter(binding => binding.offset >= 0 || binding.name in variableValues)
+    .map(binding => [binding.name, variableValues[binding.name] ?? binding.value]));
   const graph = useMemo(() => flow ? layoutShellFlow(flow) : null, [flow]);
   const flowViewport = useRef<HTMLDivElement | null>(null);
   const pinch = useRef<{ distance: number; scale: number } | null>(null);
