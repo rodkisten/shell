@@ -35,7 +35,7 @@ jobs:
       - name: 🤖 Rod GitHub App token
        # if: steps.changed.outputs.changed == 'true'
         id: bot
-        uses: rodkisten/github/actions/app-token@main
+        uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_PRIVATE_KEY }}
