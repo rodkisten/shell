@@ -5,7 +5,7 @@ export type FlowLayout = { nodes: PositionedFlowNode[]; width: number; height: n
 
 const NODE_WIDTH = 200;
 const COLUMN_GAP = 72;
-const ROW_GAP = 112;
+const ROW_GAP = 176;
 const MARGIN = 64;
 
 /**
