@@ -4,6 +4,8 @@ package main
 
 import "strings"
 
+// flowNodeStates preserves certainty across CFG branches without executing shell commands.
+// Known decisions prune incompatible edges; unresolved paths remain indeterminate.
 func flowNodeStates(nodes []node, edges []edge, decisions map[string]string) map[string]string {
 	states := make(map[string]string, len(nodes))
 	if len(nodes) == 0 {
