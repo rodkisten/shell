@@ -6,6 +6,7 @@ import (
  "encoding/json"
  "math/big"
  "regexp"
+ "strconv"
  "strings"
 
  "mvdan.cc/sh/v3/syntax"
@@ -83,49 +84,95 @@ func evaluateTest(source string, variables map[string]json.RawMessage) string {
  return "false"
 }
 
-// The simulation follows top-level statements in source order. Control-flow
-// constructs are barriers: their assignments must not leak into later nodes.
-// This is intentionally conservative until branch-state merging is supported.
+// Environment merging keeps only facts equal across all feasible paths.
+type simulationEnv map[string]json.RawMessage
+
+func copySimulationEnv(env simulationEnv) simulationEnv {
+ next := make(simulationEnv, len(env))
+ for key, value := range env { next[key] = value }
+ return next
+}
+
+func mergeSimulationEnv(left, right simulationEnv) simulationEnv {
+ merged := make(simulationEnv)
+ for key, value := range left {
+  if other, ok := right[key]; ok && string(value) == string(other) {
+   merged[key] = value
+  }
+ }
+ return merged
+}
+
 var assignmentPattern = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)=(.*)$`)
 
+// Evaluate statements in source order and fork state at conditional branches.
+// Unknown conditions merge the states rather than guessing a branch.
 func simulateConditions(source string, file *syntax.File, nodes []node, variables map[string]json.RawMessage) map[string]string {
  decisions := make(map[string]string)
- environment := make(map[string]json.RawMessage, len(variables))
- for key, value := range variables { environment[key] = value }
- nodeIndex := 0
- for _, stmt := range file.Stmts {
-  start, end := int(stmt.Pos().Offset()), int(stmt.End().Offset())
-  // Nodes are emitted in traversal order. Evaluate all nodes belonging to
-  // this statement against the environment before its side effects.
-  for nodeIndex < len(nodes) {
-   n := nodes[nodeIndex]
-   if n.Start >= end { break }
-   nodeIndex++
-   if n.Start < start || n.End > len(source) || n.Start >= n.End { continue }
-   if n.Kind != "Stmt" && n.Kind != "CallExpr" { continue }
-   decision := evaluateTest(strings.TrimSpace(source[n.Start:n.End]), environment)
-   if decision != "unknown" { decisions[n.ID] = decision }
-  }
-  if start < 0 || end > len(source) || start >= end { continue }
-  // A plain, standalone assignment is the only statement with a known,
-  // unconditional environment update. Never assume command substitutions,
-  // function calls, or control-flow branches have run.
-  if call, ok := stmt.Cmd.(*syntax.CallExpr); ok && len(call.Args) == 0 && len(call.Assigns) == 1 && len(stmt.Redirs) == 0 && !stmt.Background && !stmt.Negated {
-   fragment := strings.TrimSpace(source[start:end])
-   if match := assignmentPattern.FindStringSubmatch(fragment); match != nil {
-    if _, supplied := variables[match[1]]; !supplied {
-     if value, known := simulationOperand(match[2], environment); known {
-      encoded, _ := json.Marshal(value)
-      environment[match[1]] = encoded
-     } else { delete(environment, match[1]) }
+ initial := make(simulationEnv, len(variables))
+ for key, value := range variables { initial[key] = value }
+ // The graph uses the condition statement's offset as its node identity.
+ byRange := make(map[string][]string)
+ for _, n := range nodes {
+  key := strings.Join([]string{strconv.Itoa(n.Start), strconv.Itoa(n.End)}, ":")
+  byRange[key] = append(byRange[key], n.ID)
+ }
+ record := func(stmt *syntax.Stmt, outcome string) {
+  if outcome == "unknown" { return }
+  key := strings.Join([]string{strconv.Itoa(int(stmt.Pos().Offset())), strconv.Itoa(int(stmt.End().Offset()))}, ":")
+  for _, id := range byRange[key] { decisions[id] = outcome }
+ }
+ var walkList func([]*syntax.Stmt, simulationEnv) simulationEnv
+ walkList = func(stmts []*syntax.Stmt, incoming simulationEnv) simulationEnv {
+  env := copySimulationEnv(incoming)
+  for _, stmt := range stmts {
+   start, end := int(stmt.Pos().Offset()), int(stmt.End().Offset())
+   if start < 0 || end > len(source) || start >= end { continue }
+   if clause, ok := stmt.Cmd.(*syntax.IfClause); ok {
+    conditionEnv := walkList(clause.Cond, env)
+    outcome := "unknown"
+    if len(clause.Cond) > 0 {
+     last := clause.Cond[len(clause.Cond)-1]
+     a, b := int(last.Pos().Offset()), int(last.End().Offset())
+     if a >= 0 && b <= len(source) && a < b { outcome = evaluateTest(source[a:b], conditionEnv) }
+    }
+    thenEnv := copySimulationEnv(conditionEnv)
+    elseEnv := copySimulationEnv(conditionEnv)
+    if outcome != "false" { thenEnv = walkList(clause.Then, thenEnv) }
+    if clause.Else != nil && outcome != "true" {
+     if len(clause.Else.Cond) > 0 {
+      // Else-if chains are evaluated as another conditional.
+      synthetic := &syntax.Stmt{Cmd: clause.Else}
+      elseEnv = walkList([]*syntax.Stmt{synthetic}, elseEnv)
+     } else { elseEnv = walkList(clause.Else.Then, elseEnv) }
+    }
+    switch outcome {
+    case "true": env = thenEnv
+    case "false": env = elseEnv
+    default: env = mergeSimulationEnv(thenEnv, elseEnv)
     }
     continue
    }
+   if call, ok := stmt.Cmd.(*syntax.CallExpr); ok && len(call.Args) == 0 && len(call.Assigns) == 1 && len(stmt.Redirs) == 0 && !stmt.Background && !stmt.Negated {
+    if match := assignmentPattern.FindStringSubmatch(strings.TrimSpace(source[start:end])); match != nil {
+     if _, supplied := variables[match[1]]; !supplied {
+      if value, known := simulationOperand(match[2], env); known {
+       encoded, _ := json.Marshal(value)
+       env[match[1]] = encoded
+      } else { delete(env, match[1]) }
+     }
+     continue
+    }
+   }
+   outcome := evaluateTest(source[start:end], env)
+   record(stmt, outcome)
+   if outcome == "unknown" {
+    // A command with unknown side effects invalidates inferred values.
+    env = copySimulationEnv(initial)
+   }
   }
-  // Commands may mutate variables through builtins or sourced files.
-  // Keep only explicit user overrides after any non-assignment statement.
-  environment = make(map[string]json.RawMessage, len(variables))
-  for key, value := range variables { environment[key] = value }
+  return env
  }
+ walkList(file.Stmts, initial)
  return decisions
 }
