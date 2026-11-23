@@ -44,7 +44,7 @@ function resolveParameter(expr: string, values: SimulationVariables): string | u
   if (lenMatch) {
     const val = values[lenMatch[1]];
     if (val === undefined) return undefined;
-    return Array.isArray(val) ? String(val.length) : String([...val].length);
+    return typeof val === 'string' ? String([...val].length) : String(val.length);
   }
 
   // ${VAR:-default}, ${VAR-default}, ${VAR:+alt}, ${VAR+alt}, ${VAR:=default}, ${VAR=default}
@@ -52,7 +52,7 @@ function resolveParameter(expr: string, values: SimulationVariables): string | u
   if (modMatch) {
     const [, name, op, rawFallback] = modMatch;
     const val = values[name];
-    if (Array.isArray(val)) return undefined;
+    if (typeof val !== 'string' && val !== undefined) return undefined;
 
     const exists = val !== undefined;
     const nonEmpty = exists && val.length > 0;
