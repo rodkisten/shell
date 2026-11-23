@@ -1,4 +1,5 @@
-import { evaluateFlowBranch, parseSimulatedValue } from '../lib/flow-simulation';
+import { parseSimulatedValue } from '../lib/flow-simulation';
+import { analyzeShellWasm } from '../lib/shell-flow-wasm';
 import { describeFlowNode, previewShellVariables } from '../lib/flow-semantics';
 import { highlightFlowSource } from '../lib/flow-highlight';
 import { checkShell, type Finding } from '../lib/shellcheck';
@@ -129,14 +130,24 @@ export function ExecutionExplorer({
   const pinchDistance = (touches: React.TouchList) => Math.hypot(
     touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY,
   );
-  const branchDecisions = useMemo(() => {
-    const decisions = new Map<string, 'true' | 'false' | 'unknown'>();
-    for (const node of flow?.nodes ?? []) {
-      const code = source.slice(offset(node.start), offset(node.end));
-      decisions.set(node.id, evaluateFlowBranch(node.kind, code, simulatedValues));
-    }
-    return decisions;
-  }, [flow, source, simulatedValues]);
+  const [wasmDecisions, setWasmDecisions] = useState<Record<string, 'true' | 'false' | 'unknown'>>({});
+  const [simulationStatus, setSimulationStatus] = useState<'idle' | 'running' | 'ready' | 'error'>('idle');
+  useEffect(() => {
+    if (!flow || !simulationOpen) return;
+    let cancelled = false;
+    setSimulationStatus('running');
+    const timeout = setTimeout(() => {
+      void analyzeShellWasm(source, simulatedValues).then(result => {
+        if (cancelled) return;
+        setWasmDecisions(result.decisions ?? {});
+        setSimulationStatus('ready');
+      }).catch(() => {
+        if (!cancelled) { setWasmDecisions({}); setSimulationStatus('error'); }
+      });
+    }, 180);
+    return () => { cancelled = true; clearTimeout(timeout); };
+  }, [source, simulatedValues, flow, simulationOpen]);
+  const branchDecisions = useMemo(() => new Map(Object.entries(wasmDecisions)), [wasmDecisions]);
   const activeNode = flow?.nodes
     .filter(node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset < offset(node.end))
     .sort((a, b) => (offset(a.end) - offset(a.start)) - (offset(b.end) - offset(b.start)))[0];
@@ -309,6 +320,7 @@ export function ExecutionExplorer({
                 {simulationOpen ? '▾' : '▸'} Simular variáveis <small>sem executar o script</small>
               </button>
               {simulationOpen && <div className={styles.simulationBody}>
+                <p role="status">Motor Go/WASM: {simulationStatus === 'running' ? 'analisando…' : simulationStatus === 'ready' ? 'pronto' : simulationStatus === 'error' ? 'indisponível' : 'aguardando'}</p>
                 <p>Informe valores para visualizar substituições e avaliar testes simples (-z, -n, =, != e comparações numéricas). Arrays podem ser informados como JSON, por exemplo [\"api\",\"web\"]. Comandos não são executados.</p>
                 {detectedVariables.length === 0 && Object.keys(variableValues).length === 0 && <p>Nenhuma referência simples encontrada. Adicione uma variável manualmente abaixo.</p>}
                 {[...new Set([...detectedVariables, ...Object.keys(variableValues)])].map(name => <label key={name} className={styles.simulationField}>
