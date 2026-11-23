@@ -7,6 +7,8 @@ import (
  "math/big"
  "regexp"
  "strings"
+
+ "mvdan.cc/sh/v3/syntax"
 )
 
 // simulation.go deliberately interprets a small, side-effect-free subset.
@@ -81,31 +83,49 @@ func evaluateTest(source string, variables map[string]json.RawMessage) string {
  return "false"
 }
 
-// Only simple top-level assignments are propagated. Assignments inside branches,
-// loops and functions require path-sensitive evaluation and remain unknown.
+// The simulation follows top-level statements in source order. Control-flow
+// constructs are barriers: their assignments must not leak into later nodes.
+// This is intentionally conservative until branch-state merging is supported.
 var assignmentPattern = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)=(.*)$`)
 
-func simulateConditions(source string, nodes []node, variables map[string]json.RawMessage) map[string]string {
+func simulateConditions(source string, file *syntax.File, nodes []node, variables map[string]json.RawMessage) map[string]string {
  decisions := make(map[string]string)
  environment := make(map[string]json.RawMessage, len(variables))
  for key, value := range variables { environment[key] = value }
- for _, n := range nodes {
-  if n.Start < 0 || n.End > len(source) || n.Start >= n.End { continue }
-  fragment := strings.TrimSpace(source[n.Start:n.End])
-  if n.Kind != "Stmt" && n.Kind != "CallExpr" { continue }
-  if match := assignmentPattern.FindStringSubmatch(fragment); match != nil {
-   // Explicit input values take precedence over source defaults.
-   if _, supplied := variables[match[1]]; !supplied {
-    if value, known := simulationOperand(match[2], environment); known {
-     encoded, _ := json.Marshal(value)
-     environment[match[1]] = encoded
-    } else {
-     delete(environment, match[1])
+ nodeIndex := 0
+ for _, stmt := range file.Stmts {
+  start, end := int(stmt.Pos().Offset()), int(stmt.End().Offset())
+  // Nodes are emitted in traversal order. Evaluate all nodes belonging to
+  // this statement against the environment before its side effects.
+  for nodeIndex < len(nodes) {
+   n := nodes[nodeIndex]
+   if n.Start >= end { break }
+   nodeIndex++
+   if n.Start < start || n.End > len(source) || n.Start >= n.End { continue }
+   if n.Kind != "Stmt" && n.Kind != "CallExpr" { continue }
+   decision := evaluateTest(strings.TrimSpace(source[n.Start:n.End]), environment)
+   if decision != "unknown" { decisions[n.ID] = decision }
+  }
+  if start < 0 || end > len(source) || start >= end { continue }
+  // A plain, standalone assignment is the only statement with a known,
+  // unconditional environment update. Never assume command substitutions,
+  // function calls, or control-flow branches have run.
+  if call, ok := stmt.Cmd.(*syntax.CallExpr); ok && len(call.Args) == 0 && len(call.Assigns) == 1 && len(stmt.Redirs) == 0 && !stmt.Background && !stmt.Negated {
+   fragment := strings.TrimSpace(source[start:end])
+   if match := assignmentPattern.FindStringSubmatch(fragment); match != nil {
+    if _, supplied := variables[match[1]]; !supplied {
+     if value, known := simulationOperand(match[2], environment); known {
+      encoded, _ := json.Marshal(value)
+      environment[match[1]] = encoded
+     } else { delete(environment, match[1]) }
     }
+    continue
    }
   }
-  decision := evaluateTest(fragment, environment)
-  if decision != "unknown" { decisions[n.ID] = decision }
+  // Commands may mutate variables through builtins or sourced files.
+  // Keep only explicit user overrides after any non-assignment statement.
+  environment = make(map[string]json.RawMessage, len(variables))
+  for key, value := range variables { environment[key] = value }
  }
  return decisions
 }
