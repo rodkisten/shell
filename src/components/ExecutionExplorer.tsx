@@ -358,7 +358,7 @@ export function ExecutionExplorer({
                       {inspectedVariable === name && <div role="group" aria-label={`Detalhes de ${name}`} style={{padding:10,border:'1px solid #52525b',borderRadius:8,marginTop:5}}>
                         <strong>${name}</strong>
                         <p>{nodeBindings.find(binding => binding.name === name && binding.value !== null) ? `Definição candidata na linha ${nodeBindings.find(binding => binding.name === name)?.line}. Escopo: ${nodeBindings.find(binding => binding.name === name)?.scope}. A análise não executa expansões dinâmicas.` : 'Definição não identificada neste contexto. Pode vir do ambiente ou de uma expansão dinâmica.'}</p>
-                        {nodeBindings.some(binding => binding.name === name && binding.value !== null) && <button type="button" onClick={() => onReveal?.(nodeBindings.find(binding => binding.name === name)?.offset ?? 0, (nodeBindings.find(binding => binding.name === name)?.end ?? 0))}>Ver definição</button>}
+                        {nodeBindings.some(binding => binding.name === name && binding.value !== null) && <button type="button" onClick={() => onReveal?.(offset(nodeBindings.find(binding => binding.name === name)?.offset ?? 0), offset(nodeBindings.find(binding => binding.name === name)?.end ?? 0))}>Ver definição</button>}
                         <label style={{display:'grid',gap:5}}>Valor para avaliação
                           <input value={selectedOverrides[name] ?? nodeBindings.find(binding => binding.name === name && binding.value !== null)?.value ?? ''} onChange={event => setNodeOverrides(previous => ({ ...previous, [selectedGraphNode.id]: { ...previous[selectedGraphNode.id], [name]: event.target.value } }))} />
                         </label>
