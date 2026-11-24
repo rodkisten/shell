@@ -248,7 +248,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: rodkisten/github
-          ref: 555b8dee068f636d757de76422838083e73fce35
+          ref: 9d04949ee92f45bd4d9affe88a2e0104b82c97c8
           path: .rod-report-tools
           persist-credentials: false
 
@@ -268,6 +268,7 @@ jobs:
             ${{ runner.temp }}/shell-bundles.json
             ${{ runner.temp }}/shell-banner.svg
           retention-days: 30
+          overwrite: true
 
       - name: Prepare verified preview metadata
         env:
@@ -285,7 +286,7 @@ jobs:
 
       - name: Publish shared preview dashboard
         id: report
-        uses: rodkisten/github/src/preview-report@555b8dee068f636d757de76422838083e73fce35
+        uses: rodkisten/github/src/preview-report@9d04949ee92f45bd4d9affe88a2e0104b82c97c8
         with:
           app-id: ${{ secrets.BOT_APP_ID || vars.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_PRIVATE_KEY }}
@@ -294,6 +295,7 @@ jobs:
           results-file: ${{ runner.temp }}/shell-preview-report.json
           bundle-file: ${{ runner.temp }}/shell-bundles.json
           baseline-file: .github/baselines/shell-bundles.json
+          history-artifact: shell-preview-report
 
       - name: Remove superseded legacy dashboard
         if: steps.report.outputs.comment-url != ''
