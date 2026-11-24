@@ -8,9 +8,10 @@ import {
 } from 'react';
 import { autocompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 import { indentWithTab } from '@codemirror/commands';
-import { syntaxTree } from '@codemirror/language';
+import { syntaxTree, syntaxHighlighting } from '@codemirror/language';
 import { Compartment, EditorState, StateEffect, StateField } from '@codemirror/state';
-import { oneDark } from '@codemirror/theme-one-dark';
+import { HighlightStyle } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 import { Decoration, EditorView, WidgetType, hoverTooltip, keymap, placeholder, type DecorationSet } from '@codemirror/view';
 import { shell } from '@codincod/codemirror-lang-shell';
 import { basicSetup } from 'codemirror';
@@ -125,19 +126,19 @@ const EDITOR_CSS_CLASSES = {
 } as const;
 
 const EDITOR_THEME_PALETTE = {
-  bgPrimary: '#090b0f',
-  bgActiveLine: '#15181e',
-  bgSurface: '#17181c',
-  bgSelectedOption: '#303641',
-  bgSelection: '#334155',
-  borderSubtle: '#1e222a',
-  borderElevated: '#34363e',
-  textPrimary: '#f5f5f5',
-  textCaret: '#f4f4f5',
-  textCursor: '#ffffff',
-  textMuted: '#a1a1aa',
-  textGutter: '#4b5563',
-  textCodeAccent: '#a5b4fc',
+  bgPrimary: '#212121',
+  bgActiveLine: '#292929',
+  bgSurface: '#303030',
+  bgSelectedOption: '#424242',
+  bgSelection: '#545454',
+  borderSubtle: '#303030',
+  borderElevated: '#424242',
+  textPrimary: '#eeffff',
+  textCaret: '#ffcc00',
+  textCursor: '#ffcc00',
+  textMuted: '#b0bec5',
+  textGutter: '#727272',
+  textCodeAccent: '#82aaff',
   shadowOverlay: '#0008',
   fontFamilyMono: "'SFMono-Regular', 'SF Mono', Menlo, Consolas, monospace",
 } as const;
@@ -369,6 +370,17 @@ function findTokenAtOffset(tokens: readonly SemanticToken[], pos: number): Seman
  *   offsets absolutos e `Decoration.mark` do CodeMirror.
  * ============================================================================ */
 
+const materialDarkerHighlight = syntaxHighlighting(HighlightStyle.define([
+  { tag: [tags.keyword, tags.controlKeyword, tags.operatorKeyword], color: '#c792ea' },
+  { tag: [tags.string, tags.special(tags.string)], color: '#c3e88d' },
+  { tag: [tags.number, tags.bool, tags.null], color: '#f78c6c' },
+  { tag: [tags.variableName, tags.special(tags.variableName)], color: '#f07178' },
+  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: '#82aaff' },
+  { tag: [tags.operator, tags.punctuation], color: '#89ddff' },
+  { tag: [tags.comment], color: '#757575', fontStyle: 'italic' },
+  { tag: [tags.regexp, tags.escape], color: '#ffcb6b' },
+  { tag: [tags.typeName, tags.className], color: '#ffcb6b' },
+]));
 const setAstReveal = StateEffect.define<DecorationSet>();
 const astRevealField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
@@ -626,7 +638,7 @@ const shellHoverTooltip = hoverTooltip(
 
 const shellTheme = EditorView.theme(
   {
-    '&': { minHeight: '0', background: EDITOR_THEME_PALETTE.bgPrimary },
+    '&': { minHeight: '0', background: EDITOR_THEME_PALETTE.bgPrimary, color: EDITOR_THEME_PALETTE.textPrimary },
     '.cm-scroller': { fontFamily: EDITOR_THEME_PALETTE.fontFamilyMono, overflow: 'auto' },
     '.cm-content': { minHeight: '0', padding: '8px 3px 10px', caretColor: EDITOR_THEME_PALETTE.textCaret },
     '.cm-line': { padding: '0 4px' },
@@ -662,7 +674,8 @@ const shellTheme = EditorView.theme(
       whiteSpace: 'pre-wrap',
     },
     '.cm-focused': { outline: 'none' },
-    '.cm-ast-reveal-line': { backgroundColor: 'rgba(167,139,250,.18)', boxShadow: 'inset 3px 0 #a78bfa' },
+    '.cm-ast-reveal-range': { backgroundColor: '#ffcb6b', color: '#212121 !important', borderRadius: '2px', boxShadow: '0 0 0 1px #ffcb6b', fontWeight: '600' },
+    '.cm-ast-reveal-range *': { color: '#212121 !important' },
     [`.${EDITOR_CSS_CLASSES.diagnosticWarning}`]: {
       textDecoration: `underline wavy ${FLOW_COLORS.condition}`,
       textUnderlineOffset: '3px',
@@ -715,12 +728,12 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
         if (!view) return;
         if (from < 0 || to < from || to > view.state.doc.length) return;
         view.dispatch({
-          selection: { anchor: from, head: to },
-          effects: [EditorView.scrollIntoView(from, { y: 'center' }), setAstReveal.of(Decoration.set(Array.from({ length: view.state.doc.lineAt(Math.max(from, to - 1)).number - view.state.doc.lineAt(from).number + 1 }, (_, i) => Decoration.line({ class: 'cm-ast-reveal-line' }).range(view.state.doc.line(view.state.doc.lineAt(from).number + i).from))))],
+          selection: { anchor: from },
+          effects: [EditorView.scrollIntoView(from, { y: 'center' }), setAstReveal.of(from < to ? Decoration.set([Decoration.mark({ class: 'cm-ast-reveal-range' }).range(from, to)]) : Decoration.none)],
           scrollIntoView: true,
         });
         if (revealTimer.current !== null) clearTimeout(revealTimer.current);
-        revealTimer.current = setTimeout(() => { if (editor.current === view) view.dispatch({ effects: setAstReveal.of(Decoration.none) }); }, 3500);
+        revealTimer.current = setTimeout(() => { if (editor.current === view) view.dispatch({ effects: setAstReveal.of(Decoration.none) }); }, 5000);
         node.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       },
     }),
@@ -737,7 +750,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
         doc: code,
         extensions: [
           basicSetup,
-          oneDark,
+          materialDarkerHighlight,
           shell(),
           embeddedShellHighlight,
           shellHoverTooltip,
