@@ -255,7 +255,8 @@ jobs:
       - name: Measure verified build artifacts
         run: |
           set -euo pipefail
-          mapfile -d '' bundles < <(find dist -type f \\( -name '*.js' -o -name '*.css' -o -name '*.wasm' -o -name '*.mjs' \\) -print0 | sort -z)
+          find dist -type f \( -name '*.js' -o -name '*.css' -o -name '*.wasm' -o -name '*.mjs' \) -print0 | sort -z > "$RUNNER_TEMP/shell-bundle-files"
+          mapfile -d '' bundles < "$RUNNER_TEMP/shell-bundle-files"
           node .rod-report-tools/scripts/measure-bundles.mjs "$RUNNER_TEMP/shell-bundles.json" "${bundles[@]}"
           node .rod-report-tools/scripts/render-banner.mjs shell 'Preview ready' "$RUNNER_TEMP/shell-banner.svg"
 
@@ -276,6 +277,7 @@ jobs:
         run: |
           jq -n --arg url "$PREVIEW_URL" --arg native "$NATIVE_URL" --arg sha "$DEPLOYED_SHA" '{
             title: "🐚 Shell Workbench · Live PR Preview",
+            banner: "https://raw.githubusercontent.com/rodkisten/github/bddd826040d01c564eb4fe3c4a9c69e70a90dff7/assets/banners/shell/preview-ready.svg",
             url: $url, sha: $sha, status: "success",
             description: "Both preview endpoints and the stable redirect were verified.",
             links: [{label:"Native preview",url:$native},{label:"Latest successful preview",url:"https://shell.preview.migos.club/"}]
