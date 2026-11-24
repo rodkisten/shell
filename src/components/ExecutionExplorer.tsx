@@ -400,7 +400,7 @@ export function ExecutionExplorer({
                 ['Desconhecido', FLOW_COLORS.unknown], ['Erro', FLOW_COLORS.failure],
               ] as const).map(([label, color]) => <span key={label}><i style={{ backgroundColor: color }} />{label}</span>)}
             </div>
-            <div className={styles.flowScroll} ref={flowViewport}
+            <div className={styles.flowScroll} data-allow-graph-zoom ref={flowViewport}
               onTouchStart={event => {
                 if (event.touches.length === 2) pinch.current = { distance: pinchDistance(event.touches), scale: flowScale };
               }}
