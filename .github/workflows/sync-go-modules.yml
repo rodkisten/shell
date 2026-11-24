@@ -1,4 +1,4 @@
-name: 🐹 Sync Go modules
+name: 🐚 SH · 🐹 Sync Go modules
 run-name: "🐹 Go modules · ${{ github.event.pull_request.number && format('PR #{0}', github.event.pull_request.number) || github.ref_name }}"
 
 on:

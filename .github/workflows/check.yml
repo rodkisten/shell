@@ -1,4 +1,4 @@
-name: Filtered ShellConductor CI
+name: 🐚 SH · Filtered ShellConductor CI
 run-name: ShellConductor CI · ${{ github.ref_name }}
 
 on:

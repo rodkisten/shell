@@ -1,4 +1,4 @@
-name: Verify Shell production revision
+name: 🐚 SH · Verify Shell production revision
 run-name: Production SHA · ${{ github.event_name }} · ${{ github.ref_name }}
 
 on:

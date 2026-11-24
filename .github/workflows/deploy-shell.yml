@@ -1,4 +1,4 @@
-name: Deploy ShellConductor
+name: 🐚 SH · Deploy ShellConductor
 run-name: "🚀 Shell deploy · ${{ github.ref_name }} · ${{ github.event_name }}"
 on:
   push:

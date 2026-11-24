@@ -1,4 +1,4 @@
-name: 🧠 Shell Flow WASM
+name: 🐚 SH · 🧠 Shell Flow WASM
 
 on:
   workflow_call:

@@ -1,4 +1,4 @@
-name: Cloudflare PR Preview
+name: 🐚 SH · Cloudflare PR Preview
 
 on:
   pull_request:
