@@ -448,6 +448,8 @@ export function App() {
    * ========================================================================== */
   const [inspected, setInspected] = useState<string | null>(null);
   const [semanticSelection, setSemanticSelection] = useState<SemanticToken | null>(null);
+  const [followContext, setFollowContext] = useState(() => readBooleanPref('shellconductor:follow-context', true));
+  useEffect(() => { writePref('shellconductor:follow-context', String(followContext)); }, [followContext]);
   const [quickHelp, setQuickHelp] = useState<CommandHelpModel | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [explanation, setExplanation] = useState<string | null>(null);
@@ -476,6 +478,7 @@ export function App() {
 
   useEffect(() => {
     let active = true;
+    if (!followContext) return;
     void commandHelp(script, cursor)
       .then((next) => {
         if (active) setQuickHelp(next);
@@ -486,7 +489,7 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [script, cursor]);
+  }, [script, cursor, followContext]);
 
   const change = useCallback((text: string) => {
     analysisRevision.current += 1;
@@ -1356,9 +1359,9 @@ export function App() {
                         />
                       </div>
 
-                      <CommandHelp help={quickHelp} onManual={setInspected} />
+                      <CommandHelp help={quickHelp} onManual={setInspected} follow={followContext} onFollowChange={setFollowContext} />
 
-                      {semanticSelection && (
+                      {semanticSelection && !quickHelp && (
                         <section
                           className="semantic-selection-card"
                           aria-label="Explicação do trecho selecionado"
@@ -1793,7 +1796,7 @@ export function App() {
 
               {explorerTab !== 'explanation' && shellAnalysis && (
                 <ExecutionExplorer
-                  cursorOffset={cursor}
+                  cursorOffset={followContext ? cursor : undefined}
                   view={explorerTab}
                   analysis={shellAnalysis}
                   flow={flowResult}
