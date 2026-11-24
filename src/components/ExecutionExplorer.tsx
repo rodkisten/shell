@@ -176,6 +176,9 @@ export function ExecutionExplorer({
   const activeNode = flow?.nodes
     .filter(node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset < offset(node.end))
     .sort((a, b) => (offset(a.end) - offset(a.start)) - (offset(b.end) - offset(b.start)))[0];
+  useEffect(() => {
+    if (cursorOffset !== undefined && activeNode) setSelectedFlowId(activeNode.id);
+  }, [cursorOffset, activeNode?.id]);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState('');
   const [astMode, setAstMode] = useState<'blocks' | 'tree'>('blocks');
@@ -200,7 +203,15 @@ export function ExecutionExplorer({
   }, [analysis.astNodes, normalizedQuery]);
   useEffect(() => {
     const target = view === 'flow' ? activeFlowRef.current : astMode === 'blocks' ? activeBlockRef.current : activeAstRef.current;
-    if (!target || view === 'flow') return;
+    if (!target || cursorOffset === undefined) return;
+    if (view === 'flow') {
+      const viewport = flowViewport.current;
+      if (!viewport) return;
+      const rect = target.getBoundingClientRect();
+      const bounds = viewport.getBoundingClientRect();
+      viewport.scrollTo({ left: viewport.scrollLeft + rect.left - bounds.left - (bounds.width - rect.width) / 2, top: viewport.scrollTop + rect.top - bounds.top - (bounds.height - rect.height) / 2, behavior: 'instant' });
+      return;
+    }
     const container = target.closest('[role="tree"], [aria-label="Grafo de fluxo de controle"], [aria-label="Blocos explicativos do script"]');
     if (!container) return;
     const targetRect = target.getBoundingClientRect();
@@ -208,7 +219,7 @@ export function ExecutionExplorer({
     if (targetRect.top < containerRect.top || targetRect.bottom > containerRect.bottom) {
       target.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     }
-  }, [cursorOffset, view, astMode, selectedId]);
+  }, [cursorOffset, view, astMode, selectedId, selectedFlowId]);
 
   const children = useMemo(() => {
     const map = new Map<string | undefined, typeof analysis.astNodes>();
