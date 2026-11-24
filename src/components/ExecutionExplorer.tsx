@@ -149,7 +149,7 @@ export function ExecutionExplorer({
   const pinchDistance = (touches: React.TouchList) => Math.hypot(
     touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY,
   );
-  const [wasmDecisions, setWasmDecisions] = useState<Record<string, 'true' | 'false' | 'unknown'>>({});
+  const [wasmDecisions, setWasmDecisions] = useState<NonNullable<WasmFlowResult['decisions']>>({});
   const [reachableNodes, setReachableNodes] = useState<Record<string, boolean>>({});
   const [nodeStates, setNodeStates] = useState<Record<string, "reachable" | "indeterminate" | "unreachable">>({});
   const [simulationStatus, setSimulationStatus] = useState<'idle' | 'running' | 'ready' | 'error'>('idle');
@@ -425,7 +425,7 @@ export function ExecutionExplorer({
                     const to = graph.nodes.find(node => node.id === edge.to);
                     if (!from || !to) return null;
                     const decision = branchDecisions.get(edge.from) ?? 'unknown';
-                    const excluded = (simulationOpen && reachableNodes[edge.from] === false) || ((edge.kind === 'true' || edge.kind === 'false') && decision !== 'unknown' && edge.kind !== decision);
+                    const excluded = (simulationOpen && reachableNodes[edge.from] === false) || ((edge.kind === 'true' || edge.kind === 'false') && (decision === 'true' || decision === 'false') && edge.kind !== decision);
                     const back = to.y <= from.y;
                     const x1 = from.x + 100;
                     const x2 = to.x + 100;
@@ -465,7 +465,7 @@ export function ExecutionExplorer({
                       <strong style={{ color: nodeColor }}>{invalidRange ? 'Intervalo inválido' : semantic.title}</strong>
                       <span className={styles.flowAstKind}>{node.kind}{finding ? ` · ${finding.level}` : ''}{reachability ? ` · ${reachability === 'reachable' ? 'Alcançável' : reachability === 'indeterminate' ? 'Indeterminado' : 'Inalcançável'}` : ''}</span>
                       <code className={styles.flowHighlighted} dangerouslySetInnerHTML={{ __html: highlightFlowSource(preview.slice(0, 120) || node.id) }} />
-                      <small>{finding?.message ?? semantic.detail}{decision !== 'unknown' ? ` · Condição: ${decision === 'true' ? 'verdadeira' : 'falsa'}` : ''}</small>
+                      <small>{finding?.message ?? semantic.detail}{decision === 'true' || decision === 'false' ? ` · Condição: ${decision === 'true' ? 'verdadeira' : 'falsa'}` : decision === 'case:none' ? ' · Nenhum caso' : decision.startsWith('case:') ? ` · Caso ${Number(decision.slice(5)) + 1}` : ''}</small>
                     </button>
                   );
                 })}
