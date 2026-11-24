@@ -293,6 +293,7 @@ jobs:
           pr-number: ${{ github.event.pull_request.number }}
           results-file: ${{ runner.temp }}/shell-preview-report.json
           bundle-file: ${{ runner.temp }}/shell-bundles.json
+          baseline-file: .github/baselines/shell-bundles.json
 
       - name: Remove superseded legacy dashboard
         if: steps.report.outputs.comment-url != ''
