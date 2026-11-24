@@ -1,19 +1,7 @@
 name: 🧠 Shell Flow WASM
 
 on:
-  pull_request:
-    paths:
-      - 'tools/shell-flow/**'
-      - 'scripts/build-shell-flow-wasm.sh'
-      - 'scripts/test-shell-flow-wasm.mjs'
-      - 'src/lib/shell-flow-wasm.ts'
-      - 'src/App.tsx'
-      - 'src/components/ExecutionExplorer.tsx'
-      - 'public/wasm/flow-worker.js'
-      - 'vite.config.ts'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/shell-flow-wasm.yml'
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -57,6 +45,11 @@ jobs:
         run: node scripts/test-shell-flow-wasm.mjs
       - name: Install locked frontend dependencies
         run: npm ci --no-audit --no-fund
+      - name: Validate explorer and lint
+        uses: rodkisten/github/src/console-run@main
+        with:
+          title: Explorer tests and lint
+          command: npm run test:explorer && npm run lint
       - name: Typecheck and bundle app with previously compiled WASM
         uses: rodkisten/github/src/console-run@main
         with:
@@ -79,7 +72,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: shell-flow-preview-dist
-          path: dist/
+          path: |
+            dist/
+            .wrangler/deploy/config.json
+          include-hidden-files: true
           retention-days: 7
       - name: Upload compiled artifact
         uses: actions/upload-artifact@v4

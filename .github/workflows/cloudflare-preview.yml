@@ -13,7 +13,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  build:
+    if: github.event.action != 'closed'
+    uses: ./.github/workflows/shell-flow-wasm.yml
+    permissions:
+      contents: read
+
   preview:
+    needs: build
     environment: production
     if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
@@ -21,13 +28,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: rodkisten/github/src/setup-node@main
         with:
-          node-version: '22'
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-      - name: Build preview assets
-        run: npm run build
+          node-version: '24'
+      - name: Download validated preview build
+        uses: actions/download-artifact@v4
+        with:
+          name: shell-flow-preview-dist
+          path: .
+      - name: Verify restored deploy configuration
+        run: |
+          test -s dist/client/wasm/shell-flow.wasm
+          test -s .wrangler/deploy/config.json
       - name: Check Cloudflare credentials
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
