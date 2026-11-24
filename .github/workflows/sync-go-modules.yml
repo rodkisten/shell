@@ -42,28 +42,13 @@ jobs:
             echo "🐹 Synchronizing $directory"
             (cd "$directory" && go mod tidy && go mod verify)
           done < <(find tools -name go.mod -type f -print0)
-      - name: Detect module changes
+      - name: Collect changed files
         id: changed
-        shell: bash
-        run: |
-          if git diff --quiet -- ':(glob)tools/**/go.mod' ':(glob)tools/**/go.sum' &&
-             test -z "$(git ls-files --others --exclude-standard -- ':(glob)tools/**/go.sum')"; then
-            echo 'changed=false' >> "$GITHUB_OUTPUT"
-          else
-            echo 'changed=true' >> "$GITHUB_OUTPUT"
-          fi
-      - name: Prepare atomic commit payload
-        if: steps.changed.outputs.changed == 'true'
-        shell: bash
-        run: |
-          node --input-type=module <<'NODE'
-          import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-          import { execFileSync } from 'node:child_process';
-          import { join } from 'node:path';
-          const paths = [...new Set([...execFileSync('git', ['diff', '--name-only', '-z', 'HEAD', '--', 'tools']).toString().split('\0'), ...execFileSync('git', ['ls-files', '--others', '--exclude-standard', '-z', '--', 'tools']).toString().split('\0')])].filter(p => /\/go\.(mod|sum)$/.test(p));
-          if (paths.some(p => !existsSync(p))) throw new Error('Unexpected deleted module file; review manually');
-          writeFileSync(join(process.env.RUNNER_TEMP, 'sync-changes.json'), JSON.stringify(paths.map(path => ({ path, content: readFileSync(path).toString('base64'), encoding: 'base64' }))));
-          NODE
+        uses: rodkisten/github/src/collect-changes@main
+        with:
+          pathspecs: |
+            :(glob)tools/**/go.mod
+            :(glob)tools/**/go.sum
       - name: Commit synchronized files
         if: steps.changed.outputs.changed == 'true'
         uses: rodkisten/github/src/commit@main
@@ -72,7 +57,7 @@ jobs:
           private-key: ${{ secrets.BOT_PRIVATE_KEY }}
           branch: ${{ github.event.pull_request.head.ref || github.ref_name }}
           message: 'chore(go): sync module checksums [skip ci]'
-          files-path: ${{ runner.temp }}/sync-changes.json
+          files-path: ${{ steps.changed.outputs.files-path }}
       - name: Already synchronized
         if: steps.changed.outputs.changed == 'false'
         run: echo 'Go modules already synchronized.' >> "$GITHUB_STEP_SUMMARY"

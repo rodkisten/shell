@@ -52,28 +52,12 @@ jobs:
             }
           }
           NODE
-      - name: 🔎 Check lockfile changes
+      - name: Collect changed files
         id: changed
-        shell: bash
-        run: |
-          if git ls-files --error-unmatch package-lock.json >/dev/null 2>&1 && git diff --quiet -- package-lock.json; then
-            echo 'changed=false' >> "$GITHUB_OUTPUT"
-          else
-            echo 'changed=true' >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Prepare atomic commit payload
-        if: steps.changed.outputs.changed == 'true'
-        shell: bash
-        run: |
-          node --input-type=module <<'NODE'
-          import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-          import { execFileSync } from 'node:child_process';
-          import { join } from 'node:path';
-          const paths = ['package-lock.json'];
-          if (paths.some(p => !existsSync(p))) throw new Error('Unexpected deleted module file; review manually');
-          writeFileSync(join(process.env.RUNNER_TEMP, 'sync-changes.json'), JSON.stringify(paths.map(path => ({ path, content: readFileSync(path).toString('base64'), encoding: 'base64' }))));
-          NODE
+        uses: rodkisten/github/src/collect-changes@main
+        with:
+          pathspecs: |
+            package-lock.json
       - name: Commit synchronized files
         if: steps.changed.outputs.changed == 'true'
         uses: rodkisten/github/src/commit@main
@@ -82,7 +66,7 @@ jobs:
           private-key: ${{ secrets.BOT_PRIVATE_KEY }}
           branch: ${{ github.event.pull_request.head.ref || github.ref_name }}
           message: 'chore(lockfile): sync package-lock.json [skip ci]'
-          files-path: ${{ runner.temp }}/sync-changes.json
+          files-path: ${{ steps.changed.outputs.files-path }}
       - name: 📋 Explain PR branch policy
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
         run: echo 'Fork PRs are read-only; no bot credentials are exposed.' >> "$GITHUB_STEP_SUMMARY"
