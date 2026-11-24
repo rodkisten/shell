@@ -369,6 +369,16 @@ function findTokenAtOffset(tokens: readonly SemanticToken[], pos: number): Seman
  *   offsets absolutos e `Decoration.mark` do CodeMirror.
  * ============================================================================ */
 
+const setAstReveal = StateEffect.define<DecorationSet>();
+const astRevealField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(value, tr) {
+    value = value.map(tr.changes);
+    for (const effect of tr.effects) if (effect.is(setAstReveal)) value = effect.value;
+    return value;
+  },
+  provide: field => EditorView.decorations.from(field),
+});
 const setDiagnostics = StateEffect.define<DecorationSet>();
 
 const diagnosticsField = StateField.define<DecorationSet>({
@@ -652,6 +662,7 @@ const shellTheme = EditorView.theme(
       whiteSpace: 'pre-wrap',
     },
     '.cm-focused': { outline: 'none' },
+    '.cm-ast-reveal-line': { backgroundColor: 'rgba(167,139,250,.18)', boxShadow: 'inset 3px 0 #a78bfa' },
     [`.${EDITOR_CSS_CLASSES.diagnosticWarning}`]: {
       textDecoration: `underline wavy ${FLOW_COLORS.condition}`,
       textUnderlineOffset: '3px',
@@ -671,6 +682,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
 ) {
   const node = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { safariNoZoomFontExtension } = usePreventPageZoom({
     containerRef: node,
@@ -704,11 +716,12 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
         if (from < 0 || to < from || to > view.state.doc.length) return;
         view.dispatch({
           selection: { anchor: from, head: to },
-          effects: EditorView.scrollIntoView(from, { y: 'center' }),
+          effects: [EditorView.scrollIntoView(from, { y: 'center' }), setAstReveal.of(Decoration.set(Array.from({ length: view.state.doc.lineAt(Math.max(from, to - 1)).number - view.state.doc.lineAt(from).number + 1 }, (_, i) => Decoration.line({ class: 'cm-ast-reveal-line' }).range(view.state.doc.line(view.state.doc.lineAt(from).number + i).from))))],
           scrollIntoView: true,
         });
-        node.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        view.focus();
+        if (revealTimer.current !== null) clearTimeout(revealTimer.current);
+        revealTimer.current = setTimeout(() => { if (editor.current === view) view.dispatch({ effects: setAstReveal.of(Decoration.none) }); }, 3500);
+        node.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       },
     }),
     [],
@@ -729,6 +742,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           embeddedShellHighlight,
           shellHoverTooltip,
           diagnosticsField,
+          astRevealField,
           autosuggestionField,
           autosuggestionDecorations,
           shellTheme,
@@ -822,6 +836,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
 
     editor.current = view;
     return () => {
+      if (revealTimer.current !== null) clearTimeout(revealTimer.current);
       view.destroy();
       editor.current = null;
     };
