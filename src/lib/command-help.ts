@@ -16,6 +16,8 @@ export type CommandHelpModel = {
   title: string;
   description: string;
   signature: string;
+  snippet: string;
+  usedOptions: CommandHelpItem[];
   current?: CommandHelpItem;
   options: CommandHelpItem[];
   subcommands: CommandHelpItem[];
@@ -153,30 +155,42 @@ function dedupOptions(scopes: readonly CliSpec[]): CommandHelpItem[] {
       });
     }
   }
-  return items.slice(0, 8);
+  return items;
+}
+
+function usedOptions(items: CommandHelpItem[], words: readonly string[]) {
+  const flags = new Set<string>();
+  for (const word of words) {
+    if (word === '--') break;
+    if (!word.startsWith('-')) continue;
+    const name = word.split('=', 1)[0];
+    flags.add(name);
+    if (/^-[a-zA-Z]{2,}$/.test(name)) for (const char of name.slice(1)) flags.add('-' + char);
+  }
+  return items.filter(item => item.label.split(', ').some(label => flags.has(label.split(' ')[0])));
 }
 
 export function commandHelpFromActive(
   active: ActiveShellCommand | null,
   cursor: number,
+  source = '',
 ): CommandHelpModel | null {
   if (!active) return null;
   const root = cliSpecs[active.executable];
 
   if (!root) {
     const catalog = byName.get(active.executable);
-    if (!catalog) return null;
+    if (!catalog) return { executable: active.executable, path: [], title: active.executable, description: 'Sem descrição no catálogo local.', signature: active.executable, snippet: source.slice(active.from, active.to), options: [], usedOptions: [], subcommands: [], source: 'catalog' };
+    const options = (catalog.flags ?? []).map(flag => ({ label: flag.flag, description: flag.description, kind: 'option' as const }));
     return {
       executable: active.executable,
       path: [],
       title: catalog.title,
       description: catalog.description,
       signature: active.executable + ' [argumentos]',
-      options: (catalog.flags ?? []).slice(0, 8).map(flag => ({
-        label: flag.flag,
-        description: flag.description,
-        kind: 'option' as const,
-      })),
+      options,
+      usedOptions: usedOptions(options, active.words),
+      snippet: source.slice(active.from, active.to),
       subcommands: [],
       source: 'catalog',
     };
@@ -196,7 +210,9 @@ export function commandHelpFromActive(
     signature: signature(active.executable, scope),
     current: currentItem(active, cursor, scope),
     options: dedupOptions(scope.scopes),
-    subcommands: Object.entries(scope.current.subcommands ?? {}).slice(0, 8).map(([name, child]) => ({
+    usedOptions: usedOptions(dedupOptions(scope.scopes), active.words),
+    snippet: source.slice(active.from, active.to),
+    subcommands: Object.entries(scope.current.subcommands ?? {}).map(([name, child]) => ({
       label: name,
       description: child.description,
       kind: 'subcommand' as const,
@@ -206,5 +222,5 @@ export function commandHelpFromActive(
 }
 
 export async function commandHelp(source: string, cursor: number): Promise<CommandHelpModel | null> {
-  return commandHelpFromActive(await activeShellCommand(source, cursor), cursor);
+  return commandHelpFromActive(await activeShellCommand(source, cursor), cursor, source);
 }
