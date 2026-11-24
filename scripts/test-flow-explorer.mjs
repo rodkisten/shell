@@ -21,8 +21,10 @@ test('analysis tabs remain keyboard-accessible', () => {
 });
 
 test('flow nodes reveal UTF-8 offsets in CodeMirror and expose selection', () => {
-  assert.match(explorer, /new TextEncoder\(\)\.encode\(source\)/);
-  assert.match(explorer, /new TextDecoder\(\)\.decode\(utf8\.slice\(0, position\)\)\.length/);
+  assert.match(explorer, /new TextEncoder\(\)\.encode\(character\)/);
+  assert.match(explorer, /utf16 \+= character\.length/);
+  assert.match(explorer, /const from = offset\(node\.start\)/);
+  assert.match(explorer, /const to = offset\(node\.end\)/);
   assert.match(explorer, /onReveal\?\.\(from, to\)/);
   assert.match(explorer, /aria-pressed=\{selectedFlowId === node\.id\}/);
 });
@@ -35,7 +37,8 @@ test('WASM graph is explicitly static and exposes status and errors', () => {
 
 test('dock supports pointer and keyboard resizing with persisted size', () => {
   assert.match(app, /aria-label="Redimensionar explorador"/);
-  assert.match(app, /onPointerDown=\{resizeDock\}/);
+  assert.match(app, /onPointerDown=\{dockCollapsed \? undefined : resizeDock\}/);
+  assert.match(app, /onKeyDown=\{handleDockResizerKeyDown\}/);
   assert.match(app, /onPointerMove=\{moveDock\}/);
   assert.match(app, /setPointerCapture\(event.pointerId\)/);
   assert.match(app, /shellconductor:dock-size/);
