@@ -392,6 +392,15 @@ export function App() {
   const [busy, setBusy] = useState<BusyOperation>(null);
 
   const editor = useRef<ShellEditorHandle>(null);
+  const [pendingEditorReveal, setPendingEditorReveal] = useState<{ from: number; to: number } | null>(null);
+  useEffect(() => {
+    if (!pendingEditorReveal || location.pathname !== APP_ROUTES.editor) return;
+    const frame = requestAnimationFrame(() => {
+      editor.current?.reveal(pendingEditorReveal.from, pendingEditorReveal.to);
+      setPendingEditorReveal(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [pendingEditorReveal, location.pathname]);
   const hydrated = useRef(false);
   const analysisRevision = useRef(0);
 
@@ -1793,6 +1802,11 @@ export function App() {
                   source={script}
                   tokens={analysisTokens}
                   onReveal={(from, to) => editor.current?.reveal(from, to)}
+                  onShowInEditor={(from, to) => {
+                    setExplorerOpen(false);
+                    if (location.pathname !== APP_ROUTES.editor) navigation(APP_ROUTES.editor);
+                    setPendingEditorReveal({ from, to });
+                  }}
                 />
               )}
 
