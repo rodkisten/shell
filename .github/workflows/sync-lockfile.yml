@@ -33,9 +33,11 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
           persist-credentials: false
       - name: 🟩 Setup Node
-        uses: actions/setup-node@v4
+        uses: rodkisten/github/src/setup-node@main
         with:
           node-version: '24'
+          install: 'false'
+          cache: 'false'
       - name: 📦 Regenerate lockfile without lifecycle scripts
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - name: 🧪 Verify manifest consistency

@@ -25,10 +25,15 @@ jobs:
         with:
           ref: main
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: rodkisten/github/src/setup-node@main
         with:
           node-version: '24'
+          install: 'false'
+          cache: 'false'
       - name: Verify production SHA
         env:
           EXPECTED_SHA: ${{ inputs.expected_sha || github.sha }}
-        run: node scripts/verify-production-version.mjs
+        uses: rodkisten/github/src/console-run@main
+        with:
+          title: Verify production revision
+          command: node scripts/verify-production-version.mjs
