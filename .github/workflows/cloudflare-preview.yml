@@ -7,6 +7,8 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  issues: write
+  actions: read
 
 concurrency:
   group: shell-preview-stable-redirect
@@ -242,61 +244,65 @@ jobs:
           echo "Native fallback: $NATIVE_PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
           echo "Stable preview: https://shell.preview.migos.club" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Publish or update the PR preview dashboard
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PREVIEW_URL: ${{ steps.custom_preview.outputs.url }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          DEPLOYED_SHA: ${{ github.event.pull_request.head.sha }}
-          REPOSITORY: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
+      - name: Checkout shared reporting utilities
+        uses: actions/checkout@v4
+        with:
+          repository: rodkisten/github
+          ref: 555b8dee068f636d757de76422838083e73fce35
+          path: .rod-report-tools
+          persist-credentials: false
+
+      - name: Measure verified build artifacts
         run: |
           set -euo pipefail
-          # The workflow checks out the PR merge ref, but deploy attribution
-          # must always refer to the actual source head commit.
-          deployed_at="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          short_sha="${DEPLOYED_SHA:0:7}"
-          marker='<!-- shell-pr-preview-dashboard:v1 -->'
-          body="$(mktemp)"
-          comments="$(mktemp)"
-          trap 'rm -f "$body" "$comments"' EXIT
-          cat > "$body" <<EOF
-          $marker
-          ## ☁️ Shell Workbench · Live PR Preview
+          mapfile -d '' bundles < <(find dist -type f \\( -name '*.js' -o -name '*.css' -o -name '*.wasm' -o -name '*.mjs' \\) -print0 | sort -z)
+          node .rod-report-tools/scripts/measure-bundles.mjs "$RUNNER_TEMP/shell-bundles.json" "${bundles[@]}"
+          node .rod-report-tools/scripts/render-banner.mjs shell 'Preview ready' "$RUNNER_TEMP/shell-banner.svg"
 
-          **🚀 [Open interactive preview]($PREVIEW_URL)**
+      - name: Preserve bundle snapshot and banner
+        uses: actions/upload-artifact@v4
+        with:
+          name: shell-preview-report
+          path: |
+            ${{ runner.temp }}/shell-bundles.json
+            ${{ runner.temp }}/shell-banner.svg
+          retention-days: 30
 
-          | Deployment | Details |
-          | :-- | :-- |
-          | 🟢 Status | **Deployed and smoke-tested** |
-          | 🧩 Pull request | **#$PR_NUMBER** |
-          | 🪪 Source commit | [$short_sha](https://github.com/$REPOSITORY/commit/$DEPLOYED_SHA) |
-          | 🕒 Verified at | **$deployed_at** |
-          | 🧪 Workflow | [Run #$RUN_ID · attempt $RUN_ATTEMPT](https://github.com/$REPOSITORY/actions/runs/$RUN_ID) |
-          | 🧭 Latest successful preview | [shell.preview.migos.club](https://shell.preview.migos.club) |
+      - name: Prepare verified preview metadata
+        env:
+          PREVIEW_URL: ${{ steps.custom_preview.outputs.url }}
+          NATIVE_URL: ${{ steps.native_preview.outputs.url }}
+          DEPLOYED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          jq -n --arg url "$PREVIEW_URL" --arg native "$NATIVE_URL" --arg sha "$DEPLOYED_SHA" '{
+            title: "🐚 Shell Workbench · Live PR Preview",
+            url: $url, sha: $sha, status: "success",
+            description: "Both preview endpoints and the stable redirect were verified.",
+            links: [{label:"Native preview",url:$native},{label:"Latest successful preview",url:"https://shell.preview.migos.club/"}]
+          }' > "$RUNNER_TEMP/shell-preview-report.json"
 
-          > ✅ Both preview endpoints and the stable redirect were checked before this comment was updated.
-          > This dashboard records the **last verified deployment**, not necessarily the newest commit on the PR.
+      - name: Publish shared preview dashboard
+        id: report
+        uses: rodkisten/github/src/preview-report@555b8dee068f636d757de76422838083e73fce35
+        with:
+          app-id: ${{ secrets.BOT_APP_ID || vars.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+          github-token: ${{ github.token }}
+          pr-number: ${{ github.event.pull_request.number }}
+          results-file: ${{ runner.temp }}/shell-preview-report.json
+          bundle-file: ${{ runner.temp }}/shell-bundles.json
 
-          <sub>🔄 Automatically refreshed after each successful preview deployment. One persistent comment per PR.</sub>
-          EOF
-          # Update only the dashboard owned by this workflow, never an
-          # unrelated comment. Paginate to avoid duplicates on busy PRs.
-          gh api --paginate --jq '.[]' "repos/$REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" | jq -s . > "$comments"
-          comment_id="$(jq -r --arg marker "$marker" '[.[] | select(.user.login == "github-actions[bot]" and (.body | contains($marker))) | .id] | first // empty' "$comments")"
-          if [[ -z "$comment_id" ]]; then
-            # Migrate the previous bot-owned preview comment in place.
-            comment_id="$(jq -r '[.[] | select(.user.login == "github-actions[bot]" and (.body | contains("PR Preview:")) and (.body | contains("shell.preview.migos.club"))) | .id] | first // empty' "$comments")"
-          fi
-          if [[ -n "$comment_id" ]]; then
-            gh api --method PATCH "repos/$REPOSITORY/issues/comments/$comment_id" --raw-field body="$(cat "$body")" >/dev/null
-            echo "Updated preview dashboard comment #$comment_id" >> "$GITHUB_STEP_SUMMARY"
-          else
-            gh api --method POST "repos/$REPOSITORY/issues/$PR_NUMBER/comments" --raw-field body="$(cat "$body")" >/dev/null
-            echo "Created preview dashboard comment" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo "Verified source commit: $DEPLOYED_SHA at $deployed_at" >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove superseded legacy dashboard
+        if: steps.report.outputs.comment-url != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- shell-pr-preview-dashboard:v1 -->"))) | .id' |
+            while read -r id; do
+              gh api --method DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$id"
+            done
 
   cleanup:
     environment: production
