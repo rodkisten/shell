@@ -8,3 +8,5 @@ if(!shellHtml.includes('<html'))throw Error('Shell client entrypoint missing');
 await mkdir('dist/client/workflow',{recursive:true});
 await rm('dist/client/workflow',{recursive:true,force:true});
 await cp('apps/workflow/dist','dist/client/workflow',{recursive:true});
+
+console.log('Workflow static entrypoint staged at dist/client/workflow/index.html');
