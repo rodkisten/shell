@@ -45,16 +45,11 @@ jobs:
         run: node scripts/test-shell-flow-wasm.mjs
       - name: Install locked frontend dependencies
         run: npm ci --no-audit --no-fund
-      - name: Validate TypeScript and lint
+      - name: Generate AST, validate TypeScript and lint, then bundle
         uses: rodkisten/github/src/console-run@main
         with:
-          title: TypeScript and lint
-          command: npm run typecheck && npm run lint
-      - name: Typecheck and bundle app with previously compiled WASM
-        uses: rodkisten/github/src/console-run@main
-        with:
-          title: Typecheck and bundle frontend
-          command: npm run ast:inspect && npm run typecheck && npx vite build
+          title: AST, TypeScript, lint and frontend build
+          command: npm run ast:inspect && npm run typecheck && npm run lint && npx vite build
       - name: Verify deployable WASM assets
         run: |
           # Cloudflare Vite plugin emits static files under dist/client.
