@@ -55,3 +55,5 @@ export function connect(model:Model,source:string,output:string,target:string,in
  if(!model.steps[a].contract?.outputs.some(p=>p.id===output)||!model.steps[b].contract?.inputs.some(p=>p.id===input))throw Error('Unknown port');
  return {...model,steps:model.steps.map(s=>s.id===target?{...s,with:{...s.with,[input]:'${{ steps.'+source+'.outputs.'+output+' }}'}}:s)};
 }
+
+export {searchActions,type ActionResult} from './discovery';
