@@ -1,0 +1,22 @@
+name: Code · Workflow Studio
+on:
+  pull_request:
+    paths: ['apps/workflow/**', 'packages/**', 'pnpm-workspace.yaml', '.github/workflows/workflow-studio.yml']
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm --filter @code/workflow build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workflow-studio
+          path: apps/workflow/dist
