@@ -9,3 +9,5 @@ export function Button({asChild=false,variant,size,className,...props}: React.Co
  const Component=asChild?Slot:'button'; return <Component className={cn(variants({variant,size}),className)} {...props}/>;
 }
 export function Input({className,...props}:React.ComponentProps<'input'>){return <input autoCapitalize="none" autoCorrect="off" className={cn('h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring',className)} {...props}/>;}
+
+export {Sheet} from './sheet';
