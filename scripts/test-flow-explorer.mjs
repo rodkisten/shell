@@ -46,5 +46,5 @@ test('dock supports pointer and keyboard resizing with persisted size', () => {
 });
 test('explorer is rendered outside scrollable editor route', () => {
   assert.ok(app.indexOf('className="explorer-dock-resizer"') > app.indexOf('</Routes>'));
-  assert.match(app, /cursorOffset=\{cursor\}/);
+  assert.match(app, /cursorOffset=\{followContext \? cursor : undefined\}/);
 });
