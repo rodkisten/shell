@@ -591,7 +591,7 @@ async function shellCompletionSource(context: CompletionContext): Promise<Comple
   return options.length ? { from: before.from, options, validFor: COMPLETION_VALID_FOR_REGEX } : null;
 }
 
-const shellHoverTooltip = hoverTooltip(
+export const shellHoverTooltip = hoverTooltip(
   async (view, pos) => {
     const source = view.state.doc.toString();
     const match = findTokenAtOffset(await explainKnownShellTokens(source), pos);
@@ -753,7 +753,7 @@ export const ShellEditor = forwardRef<ShellEditorHandle, Props>(function ShellEd
           materialDarkerHighlight,
           shell(),
           embeddedShellHighlight,
-          shellHoverTooltip,
+          // Contextual help is rendered by the shared inspector, not a floating tooltip.
           diagnosticsField,
           astRevealField,
           autosuggestionField,
