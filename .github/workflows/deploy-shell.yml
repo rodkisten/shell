@@ -39,12 +39,11 @@ jobs:
         with:
           version: 10
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: pnpm install --no-frozen-lockfile
       - name: Build
         run: npm run build
       - name: Build Workflow Studio
         run: |
-          pnpm install --no-frozen-lockfile --filter @code/workflow...
           npm run build:workflow
       - name: Deploy Worker and R2 binding
         env:
@@ -54,7 +53,7 @@ jobs:
           set -euo pipefail
           : "${CLOUDFLARE_API_TOKEN:?Missing CLOUDFLARE_API_TOKEN in production environment}"
           : "${CLOUDFLARE_ACCOUNT_ID:?Missing CLOUDFLARE_ACCOUNT_ID in production environment}"
-          npx wrangler deploy
+          pnpm exec wrangler deploy
       - name: Verify Linux v86 production assets
         shell: bash
         run: |

@@ -28,12 +28,11 @@ jobs:
         with:
           version: 10
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: pnpm install --no-frozen-lockfile
       - name: Build preview assets
         run: npm run build
       - name: Build Workflow Studio
         run: |
-          pnpm install --no-frozen-lockfile --filter @code/workflow...
           npm run build:workflow
       - name: Check Cloudflare credentials
         env:
@@ -74,7 +73,7 @@ jobs:
           stdout="$(mktemp)"
           stderr="$(mktemp)"
           trap 'rm -f "$stdout" "$stderr"' EXIT
-          if ! npx --yes wrangler@^4.135.0 preview --name "pr-$PR_NUMBER" --json >"$stdout" 2>"$stderr"; then
+          if ! pnpm dlx wrangler@^4.135.0 preview --name "pr-$PR_NUMBER" --json >"$stdout" 2>"$stderr"; then
             echo "::error::Cloudflare Worker Preview deployment failed"
             sed -E 's/(Bearer |token[=: ]+)[^ ]+/\1[REDACTED]/Ig' "$stderr" >&2
             # Wrangler can emit API errors on stdout even when stderr is empty.
