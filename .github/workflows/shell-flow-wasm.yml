@@ -45,11 +45,11 @@ jobs:
         run: node scripts/test-shell-flow-wasm.mjs
       - name: Install locked frontend dependencies
         run: npm ci --no-audit --no-fund
-      - name: Validate explorer and lint
+      - name: Validate TypeScript and lint
         uses: rodkisten/github/src/console-run@main
         with:
-          title: Explorer tests and lint
-          command: npm run test:explorer && npm run lint
+          title: TypeScript and lint
+          command: npm run typecheck && npm run lint
       - name: Typecheck and bundle app with previously compiled WASM
         uses: rodkisten/github/src/console-run@main
         with:
