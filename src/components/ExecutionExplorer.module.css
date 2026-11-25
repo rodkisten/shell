@@ -338,3 +338,106 @@
 
 .simulationField button{border:1px solid #52525b;border-radius:6px;background:#27272a;color:#e4e4e7;padding:7px 9px;cursor:pointer}
 .simulationField input{font-size:16px}
+
+/* Keep graph inspection stable and readable on iPhone Safari. */
+.flowDialogBackdrop{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;background:#000b;overscroll-behavior:contain}
+.flowDialog{width:min(620px,100%);max-height:min(82dvh,760px);overflow:auto;border:1px solid #55516b;border-radius:14px;background:#15141d;color:#f5f3ff;padding:16px;box-shadow:0 20px 70px #000a;-webkit-overflow-scrolling:touch}
+.flowDialogHeader{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.flowDialogHeader strong{font-size:14px}
+.flowDialogHeader button,.flowDialogActions button{border:1px solid #575268;border-radius:8px;background:#242033;color:inherit;padding:9px 12px;cursor:pointer}
+.flowDialog p{color:#b9b4c8;font-size:12px;margin:14px 0 7px}
+.flowDialogCode{margin:0;max-height:28dvh;overflow:auto;padding:14px;border-radius:9px;background:#09090d;color:#ddd6fe;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.65 ui-monospace,SFMono-Regular,monospace}
+.flowDialogActions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap}
+@media(max-width:700px){.flowDialogBackdrop{align-items:flex-end;padding:0}.flowDialog{width:100%;max-height:78dvh;border-radius:16px 16px 0 0;padding:16px 14px calc(16px + env(safe-area-inset-bottom))}.flowDialogActions button{min-height:42px}}
+
+
+/* Semantic graph cards: content stays inside the card at every zoom level. */
+.flowNodePositioned {
+  box-sizing: border-box;
+  height: auto;
+  min-height: 100px;
+  padding: 12px 11px;
+  gap: 5px;
+  overflow: hidden;
+  align-items: stretch;
+  text-align: center;
+  border-radius: 12px;
+}
+.flowNodePositioned strong {
+  display: block;
+  position: static;
+  font-size: 13px;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.flowNodePositioned .flowAstKind {
+  font-size: 10px;
+  line-height: 1.35;
+}
+.flowNodePositioned .flowHighlighted {
+  display: block;
+  max-width: 100%;
+  padding: 5px 4px;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: hidden;
+  text-overflow: clip;
+  background: #0b0c13;
+  border-radius: 5px;
+}
+.flowNodePositioned small {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 100%;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.flowDialogCode code :global(.hljs-keyword),
+.flowDialogCode code :global(.hljs-built_in) { color: #c678dd; }
+.flowDialogCode code :global(.hljs-string) { color: #98c379; }
+.flowDialogCode code :global(.hljs-variable) { color: #e06c75; }
+.flowDialogCode code :global(.hljs-number) { color: #d19a66; }
+.flowDialogCode code :global(.hljs-comment) { color: #7f848e; }
+
+/* CFG layout uses fixed 68px nodes and edge anchors at y + 68.
+   Keep visual cards on that exact grid to prevent overlapping labels/edges. */
+.flowNodePositioned {
+  height: 68px;
+  min-height: 68px;
+  max-height: 68px;
+  padding: 5px 8px;
+  gap: 2px;
+  justify-content: center;
+  overflow: hidden;
+}
+.flowNodePositioned strong {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flowNodePositioned .flowAstKind {
+  flex: 0 0 auto;
+  font-size: 9px;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flowNodePositioned .flowHighlighted {
+  flex: 0 0 auto;
+  font-size: 10px;
+  line-height: 1.3;
+  padding: 2px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flowNodePositioned small { display: none; }

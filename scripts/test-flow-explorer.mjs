@@ -39,6 +39,7 @@ test('WASM graph is explicitly static and exposes status and errors', () => {
 test('dock supports pointer and keyboard resizing with persisted size', () => {
   assert.match(app, /aria-label="Redimensionar explorador"/);
   assert.match(app, /onPointerDown=\{dockCollapsed \? undefined : resizeDock\}/);
+  assert.match(app, /onKeyDown=\{handleDockResizerKeyDown\}/);
   assert.match(app, /onPointerMove=\{moveDock\}/);
   assert.match(app, /setPointerCapture\(event.pointerId\)/);
   assert.match(app, /shellconductor:dock-size/);

@@ -392,6 +392,15 @@ export function App() {
   const [busy, setBusy] = useState<BusyOperation>(null);
 
   const editor = useRef<ShellEditorHandle>(null);
+  const [pendingEditorReveal, setPendingEditorReveal] = useState<{ from: number; to: number } | null>(null);
+  useEffect(() => {
+    if (!pendingEditorReveal || location.pathname !== APP_ROUTES.editor) return;
+    const frame = requestAnimationFrame(() => {
+      editor.current?.reveal(pendingEditorReveal.from, pendingEditorReveal.to);
+      setPendingEditorReveal(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [pendingEditorReveal, location.pathname]);
   const hydrated = useRef(false);
   const analysisRevision = useRef(0);
 
@@ -439,6 +448,8 @@ export function App() {
    * ========================================================================== */
   const [inspected, setInspected] = useState<string | null>(null);
   const [semanticSelection, setSemanticSelection] = useState<SemanticToken | null>(null);
+  const [followContext, setFollowContext] = useState(() => readBooleanPref('shellconductor:follow-context', true));
+  useEffect(() => { writePref('shellconductor:follow-context', String(followContext)); }, [followContext]);
   const [quickHelp, setQuickHelp] = useState<CommandHelpModel | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [explanation, setExplanation] = useState<string | null>(null);
@@ -467,6 +478,7 @@ export function App() {
 
   useEffect(() => {
     let active = true;
+    if (!followContext) return;
     void commandHelp(script, cursor)
       .then((next) => {
         if (active) setQuickHelp(next);
@@ -477,7 +489,7 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [script, cursor]);
+  }, [script, cursor, followContext]);
 
   const change = useCallback((text: string) => {
     analysisRevision.current += 1;
@@ -1347,9 +1359,9 @@ export function App() {
                         />
                       </div>
 
-                      <CommandHelp help={quickHelp} onManual={setInspected} />
+                      <CommandHelp help={quickHelp} onManual={setInspected} follow={followContext} onFollowChange={setFollowContext} />
 
-                      {semanticSelection && (
+                      {semanticSelection && !quickHelp && (
                         <section
                           className="semantic-selection-card"
                           aria-label="Explicação do trecho selecionado"
@@ -1784,7 +1796,7 @@ export function App() {
 
               {explorerTab !== 'explanation' && shellAnalysis && (
                 <ExecutionExplorer
-                  cursorOffset={cursor}
+                  cursorOffset={followContext ? cursor : undefined}
                   view={explorerTab}
                   analysis={shellAnalysis}
                   flow={flowResult}
@@ -1793,6 +1805,18 @@ export function App() {
                   source={script}
                   tokens={analysisTokens}
                   onReveal={(from, to) => editor.current?.reveal(from, to)}
+                  onRunRange={(from, to) => {
+                    const snippet = script.slice(from, to);
+                    if (!snippet.trim()) return;
+                    pendingAutoRun.current = null;
+                    setExplorerOpen(false);
+                    void runScript(snippet);
+                  }}
+                  onShowInEditor={(from, to) => {
+                    setExplorerOpen(false);
+                    if (location.pathname !== APP_ROUTES.editor) navigation(APP_ROUTES.editor);
+                    setPendingEditorReveal({ from, to });
+                  }}
                 />
               )}
 

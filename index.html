@@ -2,13 +2,97 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#09090b" />
     <meta name="description" content="ShellConductor: escreva, valide, formate e aprenda Shell direto do navegador." />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<style>
+  * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
+    user-drag: none;
+  }
+  html, body {
+    touch-action: pan-x pan-y;
+    overscroll-behavior: none;
+    -ms-touch-action: pan-x pan-y;
+    -ms-content-zooming: none;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+    /*position: fixed;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;*/
+  }
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+</style>
+<script>
+  const isGraphGesture = e => e.composedPath().some(node => node instanceof Element && node.hasAttribute('data-allow-graph-zoom'));
+  const stop = e => {
+    e.preventDefault();
+    if (!isGraphGesture(e) || !['gesturestart', 'gesturechange', 'gestureend', 'touchstart', 'touchmove', 'touchend', 'wheel'].includes(e.type)) e.stopImmediatePropagation();
+    return false;
+  };
+
+  ['gesturestart', 'gesturechange', 'gestureend', 'dragstart', 'drag', 'dragenter', 'dragover', 'dragleave', 'drop', 'selectstart', 'contextmenu'].forEach(evt => {
+    window.addEventListener(evt, stop, { passive: false, capture: true });
+    document.addEventListener(evt, stop, { passive: false, capture: true });
+  });
+
+  ['touchstart', 'touchmove'].forEach(evt => {
+    window.addEventListener(evt, e => {
+      if (e.touches && e.touches.length > 1) stop(e);
+    }, { passive: false, capture: true });
+  });
+
+  let lastTouchEnd = 0;
+  window.addEventListener('touchend', e => {
+    const now = performance.now();
+    if (!isGraphGesture(e) && now - lastTouchEnd <= 350) stop(e);
+    lastTouchEnd = now;
+  }, { passive: false, capture: true });
+
+  window.addEventListener('wheel', e => {
+    if (e.ctrlKey || e.metaKey || e.deltaZ !== 0) stop(e);
+  }, { passive: false, capture: true });
+
+  window.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && ['+', '-', '=', '_', '0', 'Add', 'Subtract', 'Equal', 'Minus', 'Digit0', 'NumpadAdd', 'NumpadSubtract', 'Numpad0'].includes(e.key) || ['Equal', 'Minus', 'Digit0', 'NumpadAdd', 'NumpadSubtract', 'Numpad0'].includes(e.code)) {
+      if (e.ctrlKey || e.metaKey) stop(e);
+    }
+  }, { passive: false, capture: true });
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      if (window.visualViewport.scale !== 1) {
+        document.body.style.zoom = 1 / window.visualViewport.scale;
+      }
+    });
+  }
+
+  document.querySelectorAll('img, a, svg, canvas, video').forEach(el => {
+    el.setAttribute('draggable', 'false');
+  });
+
+  new MutationObserver(mutations => {
+    mutations.forEach(m => {
+      m.addedNodes.forEach(node => {
+        if (node.nodeType === 1) {
+          node.setAttribute('draggable', 'false');
+          node.querySelectorAll?.('img, a, svg, canvas, video').forEach(el => el.setAttribute('draggable', 'false'));
+        }
+      });
+    });
+  }).observe(document.documentElement, { childList: true, subtree: true });
+</script>
+
+
     <title>ShellConductor | Seu shell, sob controle.</title>
   </head>
   <body>

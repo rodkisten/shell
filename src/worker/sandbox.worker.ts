@@ -19,10 +19,10 @@ async function runBusyBox(script: string): Promise<CommandResult> {
 function busyBoxScript(script: string): string | null {
   const trimmed = script.trim();
   // Opt-in for complete POSIX shell scripts and real BusyBox pipelines.
-  const directive = /^#\\s*shellconductor:busybox\\s*(?:\\r?\\n|$)/i;
+  const directive = /^#\s*shellconductor:busybox\s*(?:\r?\n|$)/i;
   if (directive.test(trimmed)) return trimmed.replace(directive, '');
   // Explicit shell selection, without hijacking ordinary Zsh commands.
-  const prefix = /^busybox-sh(?:\\s+|$)/;
+  const prefix = /^busybox-sh(?:\s+|$)/;
   if (prefix.test(trimmed)) return trimmed.replace(prefix, '');
   return null;
 }
@@ -39,21 +39,35 @@ function tokenize(command: string): string[] | null {
     const char = command[i];
     if (char === '\\' && quote !== "'") {
       if (i + 1 >= command.length) return null;
-      token += command[++i]; started = true; continue;
+      token += command[++i];
+      started = true;
+      continue;
     }
     if (quote) {
       if (char === quote) quote = null;
-      else { token += char; started = true; }
+      else {
+        token += char;
+        started = true;
+      }
       continue;
     }
-    if (char === "'" || char === '"') { quote = char; started = true; continue; }
+    if (char === "'" || char === '"') {
+      quote = char;
+      started = true;
+      continue;
+    }
     if (/\s/.test(char)) {
-      if (started) { tokens.push(token); token = ''; started = false; }
+      if (started) {
+        tokens.push(token);
+        token = '';
+        started = false;
+      }
       continue;
     }
     // Shell operators must be handled by the shell, not the HTTP adapter.
     if (/[|;&<>`$(){}]/.test(char)) return null;
-    token += char; started = true;
+    token += char;
+    started = true;
   }
   if (quote) return null;
   if (started) tokens.push(token);
@@ -83,15 +97,21 @@ async function curlFetch(args: string[]): Promise<CommandResult> {
       if (index <= 0) throw new Error('curl: cabeçalho inválido: ' + header);
       headers.append(header.slice(0, index).trim(), header.slice(index + 1).trim());
     } else if (arg === '-d' || arg === '--data' || arg === '--data-raw') {
-      body = value(); if (method === 'GET') method = 'POST';
-    } else if (arg === '-I' || arg === '--head') { method = 'HEAD'; headOnly = true; }
-    else if (arg === '-i' || arg === '--include') showHeaders = true;
+      body = value();
+      if (method === 'GET') method = 'POST';
+    } else if (arg === '-I' || arg === '--head') {
+      method = 'HEAD';
+      headOnly = true;
+    } else if (arg === '-i' || arg === '--include') showHeaders = true;
     else if (arg === '-f' || arg === '--fail') fail = true;
     else if (arg === '-L' || arg === '--location') follow = true;
-    else if (arg === '-s' || arg === '--silent' || arg === '-S' || arg === '--show-error') { /* No progress meter. */ }
-    else if (arg === '--max-time') {
+    else if (arg === '-s' || arg === '--silent' || arg === '-S' || arg === '--show-error') {
+      /* No progress meter. */
+    } else if (arg === '--max-time') {
       timeoutSeconds = Number(value());
-      if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0 || timeoutSeconds > 30) throw new Error('curl: --max-time deve estar entre 1 e 30 segundos');
+      if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0 || timeoutSeconds > 30) {
+        throw new Error('curl: --max-time deve estar entre 1 e 30 segundos');
+      }
     } else if (arg === '--url') url = value();
     else if (arg.startsWith('-')) throw new Error('curl: opção não suportada no navegador: ' + arg);
     else if (!url) url = arg;
@@ -99,19 +119,38 @@ async function curlFetch(args: string[]): Promise<CommandResult> {
   }
   if (!url) throw new Error('curl: informe uma URL');
   const parsed = new URL(url);
-  if (!['https:', 'http:'].includes(parsed.protocol)) throw new Error('curl: somente HTTP e HTTPS são permitidos');
+  if (!['https:', 'http:'].includes(parsed.protocol)) {
+    throw new Error('curl: somente HTTP e HTTPS são permitidos');
+  }
   try {
     const response = await fetch(parsed.href, {
-      method, headers, body: method === 'GET' || method === 'HEAD' ? undefined : body,
-      redirect: follow ? 'follow' : 'manual', signal: AbortSignal.timeout(timeoutSeconds * 1000),
+      method,
+      headers,
+      body: method === 'GET' || method === 'HEAD' ? undefined : body,
+      redirect: follow ? 'follow' : 'manual',
+      signal: AbortSignal.timeout(timeoutSeconds * 1000),
       credentials: 'omit',
     });
-    const headerText = `HTTP ${response.status} ${response.statusText}\n${[...response.headers].map(([key, val]) => `${key}: ${val}`).join('\n')}\n\n`;
-    if (fail && !response.ok) return { ok: false, stdout: '', stderr: `curl: HTTP ${response.status}\n`, exitCode: 22 };
-    return { ok: true, stdout: (showHeaders || headOnly ? headerText : '') + (headOnly ? '' : await response.text()), stderr: '', exitCode: 0 };
+    const headerText = `HTTP ${response.status} ${response.statusText}\n${[...response.headers]
+      .map(([key, val]) => `${key}: ${val}`)
+      .join('\n')}\n\n`;
+    if (fail && !response.ok) {
+      return { ok: false, stdout: '', stderr: `curl: HTTP ${response.status}\n`, exitCode: 22 };
+    }
+    return {
+      ok: true,
+      stdout: (showHeaders || headOnly ? headerText : '') + (headOnly ? '' : await response.text()),
+      stderr: '',
+      exitCode: 0,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, stdout: '', stderr: `curl: ${message}. Verifique CORS, conectividade e permissões do servidor.\n`, exitCode: 7 };
+    return {
+      ok: false,
+      stdout: '',
+      stderr: `curl: ${message}. Verifique CORS, conectividade e permissões do servidor.\n`,
+      exitCode: 7,
+    };
   }
 }
 
@@ -133,17 +172,18 @@ for file in */package.json */*/package.json; do
   [[ -r "$file" ]] || continue
   print -r -- "__SC_FILE__$file"
   print -r -- "$(<"$file")"
+  print -r -- ''
   (( ++count >= 60 )) && break
 done
 print -r -- '__SC_WORKSPACES_END__'
 print -r -- '__SC_BRANCHES_BEGIN__'
 for ref in .git/refs/heads/* .git/refs/heads/**/*; do
   [[ -f "$ref" ]] || continue
-  print -r -- "\${ref#.git/refs/heads/}"
+  print -r -- "${'${ref#.git/refs/heads/}'}"
 done
 if [[ -r .git/packed-refs ]]; then
   while IFS=' ' read -r hash ref; do
-    [[ "$ref" == refs/heads/* ]] && print -r -- "\${ref#refs/heads/}"
+    [[ "$ref" == refs/heads/* ]] && print -r -- "${'${ref#refs/heads/}'}"
   done < .git/packed-refs
 fi
 print -r -- '__SC_BRANCHES_END__'
@@ -161,23 +201,27 @@ print -r -- '__SC_BRANCHES_END__'
   const npmWorkspaces: string[] = [];
   const gitBranches = between('__SC_BRANCHES_BEGIN__', '__SC_BRANCHES_END__')
     .split(/\r?\n/)
-    .map(value => value.trim())
+    .map((value) => value.trim())
     .filter(Boolean);
 
   const rootText = between('__SC_PACKAGE_BEGIN__', '__SC_PACKAGE_END__');
   if (rootText) {
     try {
       const pkg = JSON.parse(rootText) as { scripts?: Record<string, unknown>; workspaces?: unknown };
-      if (pkg.scripts && typeof pkg.scripts === 'object')
+      if (pkg.scripts && typeof pkg.scripts === 'object') {
         npmScripts.push(...Object.keys(pkg.scripts));
-      if (Array.isArray(pkg.workspaces))
-        npmWorkspaces.push(...pkg.workspaces.filter((value): value is string => typeof value === 'string'));
-      else if (pkg.workspaces && typeof pkg.workspaces === 'object') {
-        const packages = (pkg.workspaces as { packages?: unknown }).packages;
-        if (Array.isArray(packages))
-          npmWorkspaces.push(...packages.filter((value): value is string => typeof value === 'string'));
       }
-    } catch { /* malformed package.json should not break autocomplete */ }
+      if (Array.isArray(pkg.workspaces)) {
+        npmWorkspaces.push(...pkg.workspaces.filter((value): value is string => typeof value === 'string'));
+      } else if (pkg.workspaces && typeof pkg.workspaces === 'object') {
+        const packages = (pkg.workspaces as { packages?: unknown }).packages;
+        if (Array.isArray(packages)) {
+          npmWorkspaces.push(...packages.filter((value): value is string => typeof value === 'string'));
+        }
+      }
+    } catch {
+      /* malformed package.json should not break autocomplete */
+    }
   }
 
   const workspaceText = between('__SC_WORKSPACES_BEGIN__', '__SC_WORKSPACES_END__');
@@ -188,7 +232,9 @@ print -r -- '__SC_BRANCHES_END__'
     try {
       const pkg = JSON.parse(json) as { name?: unknown };
       if (typeof pkg.name === 'string' && pkg.name) npmWorkspaces.push(pkg.name);
-    } catch { /* ignore malformed nested manifests */ }
+    } catch {
+      /* ignore malformed nested manifests */
+    }
   }
 
   const context = {
@@ -207,7 +253,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
       return;
     }
     if (action === 'completion-context') {
-      self.postMessage({ id, ...await completionContext() });
+      self.postMessage({ id, ...(await completionContext()) });
       return;
     }
     if (!script?.trim() || script.length > 50_000) {
@@ -216,7 +262,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
     const posixScript = busyBoxScript(script);
     if (posixScript !== null) {
       if (!posixScript.trim()) throw new Error('BusyBox: script vazio.');
-      self.postMessage({ id, ...await runBusyBox(posixScript) });
+      self.postMessage({ id, ...(await runBusyBox(posixScript)) });
       return;
     }
     const tokens = tokenize(script.trim());
@@ -228,14 +274,16 @@ self.onmessage = async (event: MessageEvent<Request>) => {
     // IDBFS persists /home/user across invocations and browser reloads.
     // zsh-wasm runs its own nested worker to keep the UI responsive.
     const result = await runZshScript(script, { fs: 'idbfs' });
+    // The upstream public API documents stdout/stderr, not an exit status.
+    // Never report an unobserved exit as success.
+    const exitCode =
+      'exitCode' in result && typeof result.exitCode === 'number' ? result.exitCode : -1;
     self.postMessage({
       id,
-      ok: true,
+      ok: exitCode === 0 || exitCode === -1,
       stdout: result.stdout ?? '',
       stderr: result.stderr ?? '',
-      // The upstream public API documents stdout/stderr, not an exit status.
-      // Never report an unobserved exit as success.
-      exitCode: 'exitCode' in result && typeof result.exitCode === 'number' ? result.exitCode : -1,
+      exitCode,
     });
   } catch (error) {
     self.postMessage({
