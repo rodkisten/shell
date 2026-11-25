@@ -11,8 +11,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: shell-preview-stable-redirect
-  cancel-in-progress: false
+  group: shell-preview-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -22,6 +22,9 @@ jobs:
       contents: read
 
   preview:
+    concurrency:
+      group: shell-preview-stable-redirect
+      cancel-in-progress: false
     needs: build
     environment: production
     if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
@@ -248,7 +251,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: rodkisten/github
-          ref: 9d04949ee92f45bd4d9affe88a2e0104b82c97c8
+          ref: main
           path: .rod-report-tools
           persist-credentials: false
 
@@ -278,7 +281,7 @@ jobs:
         run: |
           jq -n --arg url "$PREVIEW_URL" --arg native "$NATIVE_URL" --arg sha "$DEPLOYED_SHA" '{
             title: "🐚 Shell Workbench · Live PR Preview",
-            banner: "https://raw.githubusercontent.com/rodkisten/github/bddd826040d01c564eb4fe3c4a9c69e70a90dff7/assets/banners/shell/preview-ready.svg",
+            banner: "https://raw.githubusercontent.com/rodkisten/github/main/assets/banners/shell/preview-ready.svg",
             url: $url, sha: $sha, status: "success",
             description: "Both preview endpoints and the stable redirect were verified.",
             links: [{label:"Native preview",url:$native},{label:"Latest successful preview",url:"https://shell.preview.migos.club/"}]
@@ -286,7 +289,7 @@ jobs:
 
       - name: Publish shared preview dashboard
         id: report
-        uses: rodkisten/github/src/preview-report@9d04949ee92f45bd4d9affe88a2e0104b82c97c8
+        uses: rodkisten/github/src/preview-report@main
         with:
           app-id: ${{ secrets.BOT_APP_ID || vars.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_PRIVATE_KEY }}
@@ -310,6 +313,9 @@ jobs:
             done
 
   cleanup:
+    concurrency:
+      group: shell-preview-stable-redirect
+      cancel-in-progress: false
     environment: production
     if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
