@@ -10,3 +10,6 @@ await rm('dist/client/workflow',{recursive:true,force:true});
 await cp('apps/workflow/dist','dist/client/workflow',{recursive:true});
 
 console.log('Workflow static entrypoint staged at dist/client/workflow/index.html');
+
+const {readdir}=await import('node:fs/promises');
+console.log('Staged workflow assets:',await readdir('dist/client/workflow/assets'));

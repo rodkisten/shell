@@ -121,8 +121,9 @@ jobs:
           PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
         run: |
           set -euo pipefail
-          curl --fail --show-error --silent --retry 5 --retry-all-errors --retry-delay 3 --output /dev/null "$PREVIEW_URL/"
-          curl --fail --show-error --silent --retry 5 --retry-all-errors "$PREVIEW_URL/workflow/" | grep -q 'Workflow Studio'
+          curl --fail-with-body --show-error --silent --retry 5 --retry-all-errors --retry-delay 3 --output /tmp/shell-preview.html "$PREVIEW_URL/" || { head -c 2000 /tmp/shell-preview.html; exit 1; }
+          curl --fail-with-body --show-error --silent --location --retry 5 --retry-all-errors "$PREVIEW_URL/workflow/" -o /tmp/workflow-preview.html || { head -c 2000 /tmp/workflow-preview.html; exit 1; }
+          grep -q 'Workflow Studio' /tmp/workflow-preview.html || { head -c 2000 /tmp/workflow-preview.html; exit 1; }
           echo "Wrangler preview responded successfully: $PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
 
       - id: custom_preview

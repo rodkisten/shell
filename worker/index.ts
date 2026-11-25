@@ -179,6 +179,7 @@ async function eitaPreview(request: Request, env: Env): Promise<Response> {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    try {
     const url = new URL(request.url);
     if (url.pathname === '/debian' || url.pathname === '/debian/') {
       if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405 });
@@ -210,7 +211,11 @@ export default {
       }
       return json({ error: 'Rota não encontrada' }, 404);
     }
-    // Non-API paths are handled by Cloudflare Static Assets, not this Worker.
-    return json({ error: 'Rota não encontrada' }, 404);
+    if (env.ASSETS) return await env.ASSETS.fetch(request);
+    return new Response('Static assets binding unavailable', {status:503});
+    } catch (error) {
+      console.error('Shell request failed', error);
+      return new Response('Shell request failed; inspect Worker logs', {status:503,headers:{'Cache-Control':'no-store'}});
+    }
   },
 };
