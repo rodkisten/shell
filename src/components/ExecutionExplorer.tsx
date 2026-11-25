@@ -8,7 +8,7 @@ import { layoutShellFlow } from '../lib/flow-layout';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ShellAnalysis } from '../lib/shell-analysis';
 import type { SemanticToken } from '../lib/semantic-shell';
-import type { FlowWasmStatus, WasmFlowResult } from '../lib/shell-flow-wasm';
+import type { FlowWasmStatus, WasmFlowResult, WasmNodeVariable } from '../lib/shell-flow-wasm';
 import styles from './ExecutionExplorer.module.css';
 
 type Props = {
@@ -21,6 +21,8 @@ type Props = {
   source?: string;
   tokens?: readonly SemanticToken[];
   onReveal?: (from: number, to: number) => void;
+  onRunRange?: (from: number, to: number) => void;
+  onShowInEditor?: (from: number, to: number) => void;
 };
 
 /** Read-only AST navigator. No command execution is performed here. */
@@ -32,35 +34,34 @@ export function ExecutionExplorer({
   source = '',
   tokens = [],
   onReveal,
+  onShowInEditor,
+  onRunRange,
   view = 'ast',
   cursorOffset,
 }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
+  const [inspectedFlowId, setInspectedFlowId] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<Finding[]>([]);
   const [simulationOpen, setSimulationOpen] = useState(true);
-  const [variableValues, setVariableValues] = useState<Record<string, string>>({});
+  const [nodeOverrides, setNodeOverrides] = useState<Record<string, Record<string, string>>>({});
   const [inspectedVariable, setInspectedVariable] = useState<string | null>(null);
-  const inferredVariables = useMemo(() => {
-    const values: Record<string, { value: string; offset: number; line: number }> = {};
-    for (const match of source.matchAll(/^([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"\n]*)"|'([^'\n]*)'|([0-9]+))\s*$/gm)) {
-      const position = match.index ?? 0;
-      values[match[1]] = { value: match[2] ?? match[3] ?? match[4] ?? '', offset: position, line: source.slice(0, position).split('\n').length };
-    }
-    return values;
-  }, [source]);
-  const simulatedValues = useMemo(() => Object.fromEntries(
-    Object.entries(variableValues).map(([key, value]) => [key, parseSimulatedValue(value)])
-  ), [variableValues]);
+  const inspectedFlowNode = flow?.nodes.find(node => node.id === inspectedFlowId);
+  // Escape closes the inspector without changing the selected graph node.
+  useEffect(() => {
+    if (!inspectedFlowId) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setInspectedFlowId(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [inspectedFlowId]);
+  const inspectedFlowSource = inspectedFlowNode ? source.slice(new TextDecoder().decode(new TextEncoder().encode(source).slice(0, inspectedFlowNode.start)).length, new TextDecoder().decode(new TextEncoder().encode(source).slice(0, inspectedFlowNode.end)).length) : '';
   const selectedGraphNode = useMemo(() => flow?.nodes.find(node => node.id === selectedFlowId) ?? null, [flow, selectedFlowId]);
   const selectedSnippet = selectedGraphNode ? source.slice(
     Math.max(0, Math.min(source.length, new TextDecoder().decode(new TextEncoder().encode(source).slice(0, selectedGraphNode.start)).length)),
     Math.max(0, Math.min(source.length, new TextDecoder().decode(new TextEncoder().encode(source).slice(0, selectedGraphNode.end)).length))
   ) : '';
-  const nodeVariables = useMemo(() => [...new Set(
-    [...selectedSnippet.matchAll(/\$\{([A-Za-z_][\w]*)\}|\$([A-Za-z_][\w]*)/g)]
-      .map(match => match[1] ?? match[2]).filter((name): name is string => Boolean(name))
-  )], [selectedSnippet]);
   useEffect(() => {
     let cancelled = false;
     void checkShell(source).then(findings => { if (!cancelled) setDiagnostics(findings); });
@@ -88,6 +89,15 @@ export function ExecutionExplorer({
     return mapping;
   }, [source]);
   const offset = (position: number) => byteOffsets[Math.max(0, Math.min(byteOffsets.length - 1, position))] ?? 0;
+  const nodeBindings: WasmNodeVariable[] = selectedGraphNode ? flow?.variables?.[selectedGraphNode.id] ?? [] : [];
+  const nodeVariables = nodeBindings.map(binding => binding.name);
+  const selectedOverrides = useMemo(() => selectedGraphNode ? nodeOverrides[selectedGraphNode.id] ?? {} : {}, [nodeOverrides, selectedGraphNode]);
+  const scopedValues = Object.fromEntries(nodeBindings
+    .filter(binding => binding.value !== null || binding.name in selectedOverrides)
+    .map(binding => [binding.name, selectedOverrides[binding.name] ?? binding.value ?? '']));
+  const simulatedValues = useMemo(() => Object.fromEntries(
+    Object.entries(scopedValues).map(([key, value]) => [key, parseSimulatedValue(value)])
+  ), [selectedGraphNode?.id, nodeBindings, selectedOverrides]);
   const graph = useMemo(() => flow ? layoutShellFlow(flow) : null, [flow]);
   const flowViewport = useRef<HTMLDivElement | null>(null);
   const pinch = useRef<{ distance: number; scale: number } | null>(null);
@@ -143,7 +153,7 @@ export function ExecutionExplorer({
   const pinchDistance = (touches: React.TouchList) => Math.hypot(
     touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY,
   );
-  const [wasmDecisions, setWasmDecisions] = useState<Record<string, 'true' | 'false' | 'unknown'>>({});
+  const [wasmDecisions, setWasmDecisions] = useState<NonNullable<WasmFlowResult['decisions']>>({});
   const [reachableNodes, setReachableNodes] = useState<Record<string, boolean>>({});
   const [nodeStates, setNodeStates] = useState<Record<string, "reachable" | "indeterminate" | "unreachable">>({});
   const [simulationStatus, setSimulationStatus] = useState<'idle' | 'running' | 'ready' | 'error'>('idle');
@@ -168,6 +178,9 @@ export function ExecutionExplorer({
   const activeNode = flow?.nodes
     .filter(node => cursorOffset !== undefined && offset(node.start) <= cursorOffset && cursorOffset < offset(node.end))
     .sort((a, b) => (offset(a.end) - offset(a.start)) - (offset(b.end) - offset(b.start)))[0];
+  useEffect(() => {
+    if (cursorOffset !== undefined && activeNode) setSelectedFlowId(activeNode.id);
+  }, [cursorOffset, activeNode?.id]);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState('');
   const [astMode, setAstMode] = useState<'blocks' | 'tree'>('blocks');
@@ -192,7 +205,15 @@ export function ExecutionExplorer({
   }, [analysis.astNodes, normalizedQuery]);
   useEffect(() => {
     const target = view === 'flow' ? activeFlowRef.current : astMode === 'blocks' ? activeBlockRef.current : activeAstRef.current;
-    if (!target) return;
+    if (!target || cursorOffset === undefined) return;
+    if (view === 'flow') {
+      const viewport = flowViewport.current;
+      if (!viewport) return;
+      const rect = target.getBoundingClientRect();
+      const bounds = viewport.getBoundingClientRect();
+      viewport.scrollTo({ left: viewport.scrollLeft + rect.left - bounds.left - (bounds.width - rect.width) / 2, top: viewport.scrollTop + rect.top - bounds.top - (bounds.height - rect.height) / 2, behavior: 'instant' });
+      return;
+    }
     const container = target.closest('[role="tree"], [aria-label="Grafo de fluxo de controle"], [aria-label="Blocos explicativos do script"]');
     if (!container) return;
     const targetRect = target.getBoundingClientRect();
@@ -200,7 +221,7 @@ export function ExecutionExplorer({
     if (targetRect.top < containerRect.top || targetRect.bottom > containerRect.bottom) {
       target.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     }
-  }, [cursorOffset, view, astMode, selectedId]);
+  }, [cursorOffset, view, astMode, selectedId, selectedFlowId]);
 
   const children = useMemo(() => {
     const map = new Map<string | undefined, typeof analysis.astNodes>();
@@ -339,22 +360,22 @@ export function ExecutionExplorer({
               {simulationOpen && <div className={styles.simulationBody}>
                 {!selectedGraphNode ? <p>Selecione um nó do grafo para inspecionar apenas as variáveis usadas nesse trecho.</p> : <>
                   <p><strong>{selectedGraphNode.kind}</strong> · trecho selecionado</p>
-                  <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}><code dangerouslySetInnerHTML={{__html:highlightFlowSource(selectedSnippet)}} /></pre>
+                  <pre className={styles.flowDialogCode}><code className={styles.flowHighlighted} dangerouslySetInnerHTML={{__html:highlightFlowSource(selectedSnippet)}} /></pre>
                   <p>Substituição estimada:</p>
-                  <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}><code dangerouslySetInnerHTML={{__html:highlightFlowSource(previewShellVariables(selectedSnippet, Object.fromEntries(nodeVariables.map(name => [name, variableValues[name] ?? inferredVariables[name]?.value ?? '']))) )}} /></pre>
+                  <pre className={styles.flowDialogCode}><code className={styles.flowHighlighted} dangerouslySetInnerHTML={{__html:highlightFlowSource(previewShellVariables(selectedSnippet, scopedValues) )}} /></pre>
                   <p>Resultado da avaliação: {simulationStatus === 'running' ? 'calculando…' : simulationStatus === 'error' ? 'erro no motor' : wasmDecisions[selectedGraphNode.id] === 'true' ? 'verdadeiro' : wasmDecisions[selectedGraphNode.id] === 'false' ? 'falso' : 'indeterminado'}.</p>
                   <p>Saída do comando: não executada. O simulador mostra apenas resultados estáticos comprováveis.</p>
                   {nodeVariables.length === 0 ? <p>Nenhuma referência de variável neste nó.</p> : <div>
                     {nodeVariables.map(name => <div key={name} style={{position:'relative',padding:'4px 0'}}>
                       <button type="button" aria-expanded={inspectedVariable === name} onClick={() => setInspectedVariable(current => current === name ? null : name)}>
-                        ${name} = {variableValues[name] ?? inferredVariables[name]?.value ?? '(desconhecido)'} ▾
+                        ${name} = {selectedOverrides[name] ?? nodeBindings.find(binding => binding.name === name && binding.value !== null)?.value ?? '(desconhecido)'} ▾
                       </button>
                       {inspectedVariable === name && <div role="group" aria-label={`Detalhes de ${name}`} style={{padding:10,border:'1px solid #52525b',borderRadius:8,marginTop:5}}>
                         <strong>${name}</strong>
-                        <p>{inferredVariables[name] ? `Atribuição literal encontrada na linha ${inferredVariables[name].line}. Escopo e alterações posteriores podem modificar esse valor.` : 'Definição não identificada neste trecho. Pode vir do ambiente, de outro escopo ou de um subshell.'}</p>
-                        {inferredVariables[name] && <button type="button" onClick={() => onReveal?.(inferredVariables[name].offset, inferredVariables[name].offset + name.length)}>Ver definição</button>}
+                        <p>{nodeBindings.find(binding => binding.name === name && binding.value !== null) ? `Definição candidata na linha ${nodeBindings.find(binding => binding.name === name)?.line}. Escopo: ${nodeBindings.find(binding => binding.name === name)?.scope}. A análise não executa expansões dinâmicas.` : 'Definição não identificada neste contexto. Pode vir do ambiente ou de uma expansão dinâmica.'}</p>
+                        {nodeBindings.some(binding => binding.name === name && binding.value !== null) && <button type="button" onClick={() => onReveal?.(offset(nodeBindings.find(binding => binding.name === name)?.offset ?? 0), offset(nodeBindings.find(binding => binding.name === name)?.end ?? 0))}>Ver definição</button>}
                         <label style={{display:'grid',gap:5}}>Valor para avaliação
-                          <input value={variableValues[name] ?? inferredVariables[name]?.value ?? ''} onChange={event => setVariableValues(previous => ({...previous,[name]:event.target.value}))} />
+                          <input value={selectedOverrides[name] ?? nodeBindings.find(binding => binding.name === name && binding.value !== null)?.value ?? ''} onChange={event => setNodeOverrides(previous => ({ ...previous, [selectedGraphNode.id]: { ...previous[selectedGraphNode.id], [name]: event.target.value } }))} />
                         </label>
                       </div>}
                     </div>)}
@@ -362,6 +383,23 @@ export function ExecutionExplorer({
                 </>}
               </div>}
             </div>
+            {inspectedFlowNode && <div className={styles.flowDialogBackdrop} onClick={() => setInspectedFlowId(null)}>
+              <section role="dialog" aria-modal="true" aria-label="Código do nó" className={styles.flowDialog} onClick={event => event.stopPropagation()}>
+                <header className={styles.flowDialogHeader}>
+                  <strong>Código do nó · {inspectedFlowNode.kind}</strong>
+                  <button type="button" aria-label="Fechar detalhes" onClick={() => setInspectedFlowId(null)}>✕</button>
+                </header>
+                <p>Trecho original do script</p>
+                <pre className={styles.flowDialogCode}><code className={styles.flowHighlighted} dangerouslySetInnerHTML={{__html:highlightFlowSource(inspectedFlowSource)}} /></pre>
+                <p>Substituição estimada</p>
+                <pre className={styles.flowDialogCode}><code className={styles.flowHighlighted} dangerouslySetInnerHTML={{__html:highlightFlowSource(previewShellVariables(inspectedFlowSource, Object.fromEntries((flow.variables?.[inspectedFlowNode.id] ?? []).filter(binding => binding.value !== null || binding.name in (nodeOverrides[inspectedFlowNode.id] ?? {})).map(binding => [binding.name, nodeOverrides[inspectedFlowNode.id]?.[binding.name] ?? binding.value ?? '']))))}} /></pre>
+                <div className={styles.flowDialogActions}>
+                  {onRunRange && <button type="button" onClick={() => { setInspectedFlowId(null); onRunRange(offset(inspectedFlowNode.start), offset(inspectedFlowNode.end)); }}>Executar nó isolado</button>}
+                  <button type="button" onClick={() => { setInspectedFlowId(null); (onShowInEditor ?? onReveal)?.(offset(inspectedFlowNode.start), offset(inspectedFlowNode.end)); }}>Mostrar no editor</button>
+                  <button type="button" onClick={() => setInspectedFlowId(null)}>Fechar</button>
+                </div>
+              </section>
+            </div>}
             <div className={styles.flowToolbar} role="toolbar" aria-label="Zoom do grafo">
               <button type="button" onClick={() => zoomFlow(flowScale / 1.25)} aria-label="Diminuir zoom">−</button>
               <button type="button" onClick={fitFlow}>Enquadrar</button>
@@ -378,7 +416,7 @@ export function ExecutionExplorer({
                 ['Desconhecido', FLOW_COLORS.unknown], ['Erro', FLOW_COLORS.failure],
               ] as const).map(([label, color]) => <span key={label}><i style={{ backgroundColor: color }} />{label}</span>)}
             </div>
-            <div className={styles.flowScroll} ref={flowViewport}
+            <div className={styles.flowScroll} data-allow-graph-zoom ref={flowViewport}
               onTouchStart={event => {
                 if (event.touches.length === 2) pinch.current = { distance: pinchDistance(event.touches), scale: flowScale };
               }}
@@ -403,7 +441,7 @@ export function ExecutionExplorer({
                     const to = graph.nodes.find(node => node.id === edge.to);
                     if (!from || !to) return null;
                     const decision = branchDecisions.get(edge.from) ?? 'unknown';
-                    const excluded = (simulationOpen && reachableNodes[edge.from] === false) || ((edge.kind === 'true' || edge.kind === 'false') && decision !== 'unknown' && edge.kind !== decision);
+                    const excluded = (simulationOpen && reachableNodes[edge.from] === false) || ((edge.kind === 'true' || edge.kind === 'false') && (decision === 'true' || decision === 'false') && edge.kind !== decision);
                     const back = to.y <= from.y;
                     const x1 = from.x + 100;
                     const x2 = to.x + 100;
@@ -426,7 +464,10 @@ export function ExecutionExplorer({
                   const snippet = source.slice(from, to).trim();
                   const semantic = describeFlowNode(node.kind, snippet);
                    const decision = branchDecisions.get(node.id) ?? 'unknown';
-                  const preview = previewShellVariables(snippet, Object.fromEntries([...snippet.matchAll(/\\$\\{([A-Za-z_][\\w]*)\\}|\\$([A-Za-z_][\\w]*)/g)].map(match => match[1] ?? match[2]).filter((name): name is string => Boolean(name)).map(name => [name, variableValues[name] ?? inferredVariables[name]?.value ?? ''])));
+                  const snippetBindings = flow.variables?.[node.id] ?? [];
+                  const preview = previewShellVariables(snippet, Object.fromEntries(snippetBindings
+                    .filter(binding => binding.value !== null || binding.name in (nodeOverrides[node.id] ?? {}))
+                    .map(binding => [binding.name, nodeOverrides[node.id]?.[binding.name] ?? binding.value ?? ''])));
                   const invalidRange = from < 0 || to <= from || to > source.length;
                   const finding = diagnosticOffsets.find(item => item.from >= from && item.from <= to);
                   const reachability = simulationOpen && simulationStatus === 'ready' ? nodeStates[node.id] : undefined;
@@ -436,11 +477,11 @@ export function ExecutionExplorer({
                       className={`${styles.flowNode} ${styles.flowNodePositioned} ${isSelected ? styles.isSelected : ''}`}
                       style={{ left: node.x, top: node.y, borderColor: nodeColor, '--flow-node-color': nodeColor, opacity: reachability === 'unreachable' ? 0.28 : reachability === 'indeterminate' ? 0.72 : 1, borderStyle: reachability === 'indeterminate' ? 'dashed' : 'solid' } as React.CSSProperties} aria-pressed={isSelected}
                       title={invalidRange ? 'Intervalo inválido' : finding?.message ?? semantic.detail}
-                      onClick={() => { setSelectedFlowId(node.id); if (!invalidRange) onReveal?.(from, to); }}>
+                      onClick={() => { setSelectedFlowId(node.id); setInspectedFlowId(node.id); if (!invalidRange) onReveal?.(from, to); }}>
                       <strong style={{ color: nodeColor }}>{invalidRange ? 'Intervalo inválido' : semantic.title}</strong>
                       <span className={styles.flowAstKind}>{node.kind}{finding ? ` · ${finding.level}` : ''}{reachability ? ` · ${reachability === 'reachable' ? 'Alcançável' : reachability === 'indeterminate' ? 'Indeterminado' : 'Inalcançável'}` : ''}</span>
                       <code className={styles.flowHighlighted} dangerouslySetInnerHTML={{ __html: highlightFlowSource(preview.slice(0, 120) || node.id) }} />
-                      <small>{finding?.message ?? semantic.detail}{decision !== 'unknown' ? ` · Condição: ${decision === 'true' ? 'verdadeira' : 'falsa'}` : ''}</small>
+                      <small>{finding?.message ?? semantic.detail}{decision === 'true' || decision === 'false' ? ` · Condição: ${decision === 'true' ? 'verdadeira' : 'falsa'}` : decision === 'case:none' ? ' · Nenhum caso' : decision.startsWith('case:') ? ` · Caso ${Number(decision.slice(5)) + 1}` : ''}</small>
                     </button>
                   );
                 })}

@@ -1,6 +1,7 @@
 export type WasmFlowNode = { id: string; kind: string; start: number; end: number };
 export type WasmFlowEdge = { from: string; to: string; kind: string };
-export type WasmFlowResult = { nodes: WasmFlowNode[]; edges: WasmFlowEdge[]; warnings: string[]; decisions?: Record<string, "true" | "false" | "unknown">; reachable?: Record<string, boolean>; nodeStates?: Record<string, "reachable" | "indeterminate" | "unreachable"> };
+export type WasmNodeVariable = { name: string; value: string | null; offset: number; end: number; line: number; scope: string };
+export type WasmFlowResult = { nodes: WasmFlowNode[]; edges: WasmFlowEdge[]; warnings: string[]; variables?: Record<string, WasmNodeVariable[]>; decisions?: Record<string, "true" | "false" | "unknown" | `case:${number}` | "case:none">; reachable?: Record<string, boolean>; nodeStates?: Record<string, "reachable" | "indeterminate" | "unreachable"> };
 export type FlowWasmStatus = { state: 'idle' | 'loading' | 'ready' | 'error'; message?: string };
 type Pending = { resolve: (value: WasmFlowResult) => void; reject: (error: Error) => void };
 let worker: Worker | undefined;
