@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "test:explorer": "node --test scripts/test-flow-explorer.mjs",
     "linux:assets": "bash scripts/prepare-linux-assets.sh",
-    "ast:inspect": "node scripts/inspect-shell-ast.mjs"
+    "ast:inspect": "node scripts/inspect-shell-ast.mjs",
+    "build:workflow": "node scripts/build-workflow.mjs"
   },
   "dependencies": {
     "@brandon.zylstra/zsh-wasm": "^0.6.0",

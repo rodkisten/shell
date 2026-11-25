@@ -180,6 +180,11 @@ async function eitaPreview(request: Request, env: Env): Promise<Response> {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === '/workflow' || url.pathname === '/workflow/' || (url.pathname.startsWith('/workflow/') && !url.pathname.startsWith('/workflow/assets/') && !url.pathname.split('/').at(-1)?.includes('.'))) {
+      if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405 });
+      return env.ASSETS.fetch(new Request(new URL('/workflow/index.html', url), request));
+    }
+    if (url.pathname.startsWith('/workflow/')) return env.ASSETS.fetch(request);
     if (url.pathname === '/debian' || url.pathname === '/debian/') {
       if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405 });
       // Return the SPA entrypoint, preserving the browser URL for React Router.
