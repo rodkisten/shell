@@ -1805,6 +1805,13 @@ export function App() {
                   source={script}
                   tokens={analysisTokens}
                   onReveal={(from, to) => editor.current?.reveal(from, to)}
+                  onRunRange={(from, to) => {
+                    const snippet = script.slice(from, to);
+                    if (!snippet.trim()) return;
+                    pendingAutoRun.current = null;
+                    setExplorerOpen(false);
+                    void runScript(snippet);
+                  }}
                   onShowInEditor={(from, to) => {
                     setExplorerOpen(false);
                     if (location.pathname !== APP_ROUTES.editor) navigation(APP_ROUTES.editor);
