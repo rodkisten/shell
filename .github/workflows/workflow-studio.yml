@@ -29,11 +29,15 @@ jobs:
           fi
       - run: pnpm --filter @code/workflow build
       - run: pnpm --filter @code/federation-host build
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm run build:federation
       - run: node scripts/verify-federation.mjs
+      - run: test -f dist-federation/mf-manifest.json
       - uses: actions/upload-artifact@v4
         with:
           name: code-federation
           path: |
             apps/workflow/dist
             apps/federation-host/dist
+            dist-federation
             pnpm-lock.yaml
