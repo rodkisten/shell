@@ -21,6 +21,7 @@ type Props = {
   source?: string;
   tokens?: readonly SemanticToken[];
   onReveal?: (from: number, to: number) => void;
+  onRunRange?: (from: number, to: number) => void;
   onShowInEditor?: (from: number, to: number) => void;
 };
 
@@ -34,6 +35,7 @@ export function ExecutionExplorer({
   tokens = [],
   onReveal,
   onShowInEditor,
+  onRunRange,
   view = 'ast',
   cursorOffset,
 }: Props) {
@@ -392,6 +394,7 @@ export function ExecutionExplorer({
                 <p>Substituição estimada</p>
                 <pre className={styles.flowDialogCode}><code className={styles.flowHighlighted} dangerouslySetInnerHTML={{__html:highlightFlowSource(previewShellVariables(inspectedFlowSource, Object.fromEntries((flow.variables?.[inspectedFlowNode.id] ?? []).filter(binding => binding.value !== null || binding.name in (nodeOverrides[inspectedFlowNode.id] ?? {})).map(binding => [binding.name, nodeOverrides[inspectedFlowNode.id]?.[binding.name] ?? binding.value ?? '']))))}} /></pre>
                 <div className={styles.flowDialogActions}>
+                  {onRunRange && <button type="button" onClick={() => { setInspectedFlowId(null); onRunRange(offset(inspectedFlowNode.start), offset(inspectedFlowNode.end)); }}>Executar nó isolado</button>}
                   <button type="button" onClick={() => { setInspectedFlowId(null); (onShowInEditor ?? onReveal)?.(offset(inspectedFlowNode.start), offset(inspectedFlowNode.end)); }}>Mostrar no editor</button>
                   <button type="button" onClick={() => setInspectedFlowId(null)}>Fechar</button>
                 </div>
