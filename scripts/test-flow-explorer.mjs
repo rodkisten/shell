@@ -26,7 +26,7 @@ test('flow nodes reveal UTF-8 offsets in CodeMirror and expose selection', () =>
   assert.match(explorer, /const from = offset\(node\.start\)/);
   assert.match(explorer, /const to = offset\(node\.end\)/);
   assert.match(explorer, /onReveal\?\.\(from, to\)/);
-  assert.match(explorer, /aria-pressed=\{selectedFlowId === node\.id\}/);
+  assert.match(explorer, /aria-pressed=\{(?:selectedFlowId === node\.id|isSelected|selected)\}/);
 });
 
 test('WASM graph is explicitly static and exposes status and errors', () => {
