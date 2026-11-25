@@ -1,4 +1,4 @@
-name: Linux VM assets
+name: 🐚 SH · Linux VM assets
 
 on:
   workflow_dispatch:

@@ -1,4 +1,4 @@
-name: Zsh WASM migration validation
+name: 🐚 SH · Zsh WASM migration validation
 on:
   push:
     branches: [feat/zsh-wasm-runtime]

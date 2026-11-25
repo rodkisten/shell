@@ -13,7 +13,6 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "test:explorer": "node --test scripts/test-flow-explorer.mjs",
     "linux:assets": "bash scripts/prepare-linux-assets.sh",
     "ast:inspect": "node scripts/inspect-shell-ast.mjs"
   },
