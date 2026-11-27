@@ -43,13 +43,16 @@ jobs:
           cache: 'true'
       - name: Execute WASM smoke tests
         run: node scripts/test-shell-flow-wasm.mjs
-      - name: Install locked frontend dependencies
-        run: npm ci --no-audit --no-fund
+      - uses: pnpm/action-setup@v4
+      - name: Install locked workspace dependencies
+        run: pnpm install --frozen-lockfile
       - name: Generate AST, validate TypeScript and lint, then bundle
         uses: rodkisten/github/src/console-run@main
         with:
           title: AST, TypeScript, lint and frontend build
           command: npm run ast:inspect && npm run typecheck && npm run lint && npx vite build
+      - name: Stage Workflow Studio in the same preview
+        run: npm run build:workflow
       - name: Verify deployable WASM assets
         run: |
           # Cloudflare Vite plugin emits static files under dist/client.

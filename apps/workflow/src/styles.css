@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+@source '../../../packages/ui/src';
+@theme inline {--color-background:#101114;--color-foreground:#e4e4e7;--color-muted:#27272a;--color-border:#34343b;--color-primary:#c4b5fd;--color-primary-foreground:#17121f;--color-ring:#a78bfa;}
+body{margin:0;background:var(--color-background);color:var(--color-foreground);font-family:system-ui;}
+
+html,body,#root{height:100%;overflow:hidden;overscroll-behavior:none}.react-flow__handle{width:10px;height:10px;background:var(--color-primary);border:2px solid var(--color-background)}.react-flow__controls{bottom:12px}.react-flow__pane{touch-action:none}

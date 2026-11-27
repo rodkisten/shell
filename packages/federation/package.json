@@ -1,0 +1,6 @@
+{
+  "name": "@code/federation",
+  "private": true,
+  "type": "module",
+  "exports": "./index.ts"
+}

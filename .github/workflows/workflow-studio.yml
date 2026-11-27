@@ -1,0 +1,41 @@
+name: 💻 SH · Federation
+on:
+  pull_request:
+    paths: ['apps/**', 'packages/**', 'pnpm-workspace.yaml', 'pnpm-lock.yaml', '.github/workflows/workflow-studio.yml', 'scripts/verify-federation.mjs']
+  workflow_dispatch:
+  push:
+    branches: ['feat/code-workflow-studio']
+concurrency:
+  group: federation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          if test -f pnpm-lock.yaml; then
+            pnpm install --frozen-lockfile
+          else
+            pnpm install --no-frozen-lockfile
+          fi
+      - run: pnpm --filter @code/workflow build
+      - run: pnpm --filter @code/federation-host build
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm run build:federation
+      - run: node scripts/verify-federation.mjs
+      - run: test -f dist-federation/mf-manifest.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: code-federation
+          path: |
+            apps/workflow/dist
+            apps/federation-host/dist
+            dist-federation
+            pnpm-lock.yaml

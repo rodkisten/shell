@@ -1,0 +1,19 @@
+{
+  "name": "@code/federation-host",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "@module-federation/runtime": "^0.18.0"
+  },
+  "devDependencies": {
+    "vite": "^7.1.7",
+    "@vitejs/plugin-react": "^5.0.3",
+    "@module-federation/vite": "^1.9.0"
+  }
+}

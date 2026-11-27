@@ -284,7 +284,7 @@ jobs:
             banner: "https://raw.githubusercontent.com/rodkisten/github/main/assets/banners/shell/preview-ready.svg",
             url: $url, sha: $sha, status: "success",
             description: "Both preview endpoints and the stable redirect were verified.",
-            links: [{label:"Native preview",url:$native},{label:"Latest successful preview",url:"https://shell.preview.migos.club/"}]
+            links: [{label:"Workflow Studio",url:($url+"/workflow/")},{label:"Native preview",url:$native},{label:"Latest successful preview",url:"https://shell.preview.migos.club/"}]
           }' > "$RUNNER_TEMP/shell-preview-report.json"
 
       - name: Publish shared preview dashboard
