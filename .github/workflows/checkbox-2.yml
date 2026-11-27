@@ -1,4 +1,4 @@
-name: 'Handle Checkbox Changes'
+name: '🐚 SH · Handle Checkbox Changes'
 on:
   issue_comment:
     types: [edited]

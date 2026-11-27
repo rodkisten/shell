@@ -1,0 +1,122 @@
+{
+  "dist/client/assets/TouchTerminal-CTiX66lA.js": {
+    "raw": 28620,
+    "gzip": 10445,
+    "brotli": 9408
+  },
+  "dist/client/assets/src-BD8oAO0m.js": {
+    "raw": 32078,
+    "gzip": 11078,
+    "brotli": 9963
+  },
+  "dist/client/assets/App-BB1cpaUA.js": {
+    "raw": 746709,
+    "gzip": 238819,
+    "brotli": 202374
+  },
+  "dist/client/assets/DebianPage-Dn8Y_ETf.js": {
+    "raw": 9314,
+    "gzip": 3238,
+    "brotli": 2786
+  },
+  "dist/worker/index.js": {
+    "raw": 10537,
+    "gzip": 3292,
+    "brotli": 2920
+  },
+  "dist/client/assets/sandbox.worker-DLezerap.js": {
+    "raw": 20392,
+    "gzip": 7182,
+    "brotli": 6448
+  },
+  "dist/client/assets/zsh-XVyxQy0i.wasm": {
+    "raw": 1409986,
+    "gzip": 569642,
+    "brotli": 468764
+  },
+  "dist/client/wasm/wasm_exec.js": {
+    "raw": 16687,
+    "gzip": 4261,
+    "brotli": 3683
+  },
+  "dist/client/assets/zsh-CcD2Ftdn.js": {
+    "raw": 220661,
+    "gzip": 56621,
+    "brotli": 47196
+  },
+  "dist/client/assets/worker-DocaY09E.js": {
+    "raw": 29856,
+    "gzip": 10516,
+    "brotli": 9506
+  },
+  "dist/client/wasm/shell-flow.wasm": {
+    "raw": 4064403,
+    "gzip": 1121802,
+    "brotli": 832027
+  },
+  "dist/client/assets/zsh-worker-BAipvRj5.js": {
+    "raw": 2092,
+    "gzip": 1200,
+    "brotli": 1095
+  },
+  "dist/client/assets/terminal-BLeYOZY9.js": {
+    "raw": 1390,
+    "gzip": 834,
+    "brotli": 734
+  },
+  "dist/client/assets/busybox-CKBm8ut4.wasm": {
+    "raw": 375884,
+    "gzip": 151690,
+    "brotli": 132013
+  },
+  "dist/client/assets/App-SnGMm1XD.css": {
+    "raw": 17317,
+    "gzip": 4023,
+    "brotli": 3510
+  },
+  "dist/client/assets/DebianPage-D-N_J3Vy.css": {
+    "raw": 8317,
+    "gzip": 2649,
+    "brotli": 2282
+  },
+  "dist/client/assets/index-CkzfVd-o.css": {
+    "raw": 58624,
+    "gzip": 13209,
+    "brotli": 11647
+  },
+  "dist/client/assets/shield-check-BqYPt2Ny.js": {
+    "raw": 1390,
+    "gzip": 742,
+    "brotli": 682
+  },
+  "dist/client/assets/index-QINjKvhi.js": {
+    "raw": 291029,
+    "gzip": 94824,
+    "brotli": 82449
+  },
+  "dist/client/diagnostics-bootstrap.js": {
+    "raw": 2060,
+    "gzip": 858,
+    "brotli": 718
+  },
+  "dist/client/assets/format-BMrMkO1e.js": {
+    "raw": 108068,
+    "gzip": 35255,
+    "brotli": 31518
+  },
+  "dist/client/wasm/flow-worker.js": {
+    "raw": 1703,
+    "gzip": 717,
+    "brotli": 631
+  },
+  "dist/client/assets/check-DZElDJ9R.js": {
+    "raw": 162,
+    "gzip": 172,
+    "brotli": 166
+  },
+  "dist/client/assets/main-BTEiQdlF.wasm": {
+    "raw": 4137001,
+    "gzip": 1199625,
+    "brotli": 892615
+  }
+}

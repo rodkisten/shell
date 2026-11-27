@@ -1,4 +1,4 @@
-name: 🐹 Sync Go modules
+name: 🐚 SH · 🐹 Sync Go modules
 run-name: "🐹 Go modules · ${{ github.event.pull_request.number && format('PR #{0}', github.event.pull_request.number) || github.ref_name }}"
 
 on:
@@ -42,57 +42,22 @@ jobs:
             echo "🐹 Synchronizing $directory"
             (cd "$directory" && go mod tidy && go mod verify)
           done < <(find tools -name go.mod -type f -print0)
-      - name: Detect module changes
+      - name: Collect changed files
         id: changed
-        shell: bash
-        run: |
-          if git diff --quiet -- ':(glob)tools/**/go.mod' ':(glob)tools/**/go.sum' &&
-             test -z "$(git ls-files --others --exclude-standard -- ':(glob)tools/**/go.sum')"; then
-            echo 'changed=false' >> "$GITHUB_OUTPUT"
-          else
-            echo 'changed=true' >> "$GITHUB_OUTPUT"
-          fi
-      - name: Rod GitHub App
-        if: steps.changed.outputs.changed == 'true'
-        id: bot
-        uses: actions/create-github-app-token@v2
+        uses: rodkisten/github/src/collect-changes@main
         with:
-          app-id: ${{ secrets.BOT_APP_ID }}
+          pathspecs: |
+            :(glob)tools/**/go.mod
+            :(glob)tools/**/go.sum
+      - name: Commit synchronized files
+        if: steps.changed.outputs.changed == 'true'
+        uses: rodkisten/github/src/commit@main
+        with:
+          app-id: ${{ secrets.BOT_APP_ID || vars.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_PRIVATE_KEY }}
-          permission-contents: write
-      - name: Commit updated module files
-        if: steps.changed.outputs.changed == 'true'
-        uses: actions/github-script@v8
-        env:
-          TARGET_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
-        with:
-          github-token: ${{ steps.bot.outputs.token }}
-          script: |
-            const fs = require('node:fs');
-            const { execFileSync } = require('node:child_process');
-            const { owner, repo } = context.repo;
-            const branch = process.env.TARGET_BRANCH;
-            const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'tools'], {encoding:'utf8'})
-              .split('\n').filter(path => /\/go\.(mod|sum)$/.test(path));
-            for (const path of files) {
-              if (!fs.existsSync(path)) continue;
-              const content = fs.readFileSync(path).toString('base64');
-              let sha;
-              try {
-                const current = await github.rest.repos.getContent({owner, repo, path, ref: branch});
-                if (Array.isArray(current.data)) throw new Error('Expected a file');
-                sha = current.data.sha;
-                if (Buffer.from(current.data.content || '', 'base64').equals(fs.readFileSync(path))) continue;
-              } catch (error) {
-                if (error.status !== 404) throw error;
-              }
-              await github.rest.repos.createOrUpdateFileContents({
-                owner, repo, path, branch, sha, content,
-                message: 'chore(go): sync module checksums [skip ci]',
-              });
-              core.info(`Updated ${path}`);
-            }
-            await core.summary.addRaw('Go module manifests and checksums synchronized.\n').write();
+          branch: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          message: 'chore(go): sync module checksums [skip ci]'
+          files-path: ${{ steps.changed.outputs.files-path }}
       - name: Already synchronized
         if: steps.changed.outputs.changed == 'false'
         run: echo 'Go modules already synchronized.' >> "$GITHUB_STEP_SUMMARY"

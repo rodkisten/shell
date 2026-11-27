@@ -1,14 +1,19 @@
-name: Deploy ShellConductor
+name: 🐚 SH · Deploy ShellConductor
 run-name: "🚀 Shell deploy · ${{ github.ref_name }} · ${{ github.event_name }}"
 on:
   push:
     branches: [main]
     paths:
-      - "src/**"
+      - "tools/shell-flow/**"
+      - "scripts/build-shell-flow-wasm.sh"
+      - "scripts/test-shell-flow-wasm.mjs"
+      - ".github/workflows/shell-flow-wasm.yml"
       - "apps/workflow/**"
       - "packages/**"
-      - "scripts/build-workflow.mjs"
+      - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
+      - "scripts/build-workflow.mjs"
+      - "src/**"
       - "worker/**"
       - "public/**"
       - "index.html"
@@ -25,26 +30,32 @@ concurrency:
   group: shell-production
   cancel-in-progress: false
 jobs:
+  build:
+    uses: ./.github/workflows/shell-flow-wasm.yml
+    permissions:
+      contents: read
   deploy:
+    needs: build
     name: Build and deploy to Cloudflare
     runs-on: ubuntu-24.04
     environment: production
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: rodkisten/github/src/setup-node@main
         with:
-          node-version: "22"
-      - uses: pnpm/action-setup@v4
+          node-version: "24"
+          install: "false"
+          cache: "false"
+      - name: Download validated production build
+        uses: actions/download-artifact@v4
         with:
-          version: 10
-      - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
-      - name: Build
-        run: npm run build
-      - name: Build Workflow Studio
+          name: shell-flow-preview-dist
+          path: .
+      - name: Verify restored deploy configuration
         run: |
-          npm run build:workflow
+          test -s dist/client/wasm/shell-flow.wasm
+          test -s .wrangler/deploy/config.json
       - name: Deploy Worker and R2 binding
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -53,7 +64,7 @@ jobs:
           set -euo pipefail
           : "${CLOUDFLARE_API_TOKEN:?Missing CLOUDFLARE_API_TOKEN in production environment}"
           : "${CLOUDFLARE_ACCOUNT_ID:?Missing CLOUDFLARE_ACCOUNT_ID in production environment}"
-          pnpm exec wrangler deploy
+          npx --yes wrangler@^4.135.0 deploy
       - name: Verify Linux v86 production assets
         shell: bash
         run: |

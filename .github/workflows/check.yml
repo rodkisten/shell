@@ -1,11 +1,8 @@
-name: Filtered ShellConductor CI
+name: 🐚 SH · Filtered ShellConductor CI
 run-name: ShellConductor CI · ${{ github.ref_name }}
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
     branches:
       - main
 
@@ -29,7 +26,7 @@ jobs:
       config-ref: main
       node-version: '24'
       working-directory: .
-      test-command: npm run test:explorer
+      test-command: npm run typecheck
       build-command: npm run build
       lint-command: npm run lint
       run-tests: true

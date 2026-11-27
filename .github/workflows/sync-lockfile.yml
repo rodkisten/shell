@@ -1,4 +1,4 @@
-name: 🔒 Sync npm lockfile
+name: 🐚 SH · 🔒 Sync npm lockfile
 run-name: "🔒 Lockfile · ${{ github.event.pull_request.number && format('PR #{0}', github.event.pull_request.number) || github.ref_name }}"
 
 on:
@@ -32,18 +32,12 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
           persist-credentials: false
-      - name: 🤖 Rod GitHub App token
-       # if: steps.changed.outputs.changed == 'true'
-        id: bot
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.BOT_APP_ID }}
-          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
-          permission-contents: write
       - name: 🟩 Setup Node
-        uses: actions/setup-node@v4
+        uses: rodkisten/github/src/setup-node@main
         with:
           node-version: '24'
+          install: 'false'
+          cache: 'false'
       - name: 📦 Regenerate lockfile without lifecycle scripts
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - name: 🧪 Verify manifest consistency
@@ -60,42 +54,21 @@ jobs:
             }
           }
           NODE
-      - name: 🔎 Check lockfile changes
+      - name: Collect changed files
         id: changed
-        shell: bash
-        run: |
-          if git ls-files --error-unmatch package-lock.json >/dev/null 2>&1 && git diff --quiet -- package-lock.json; then
-            echo 'changed=false' >> "$GITHUB_OUTPUT"
-          else
-            echo 'changed=true' >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: 📝 Commit lockfile through GitHub API
-        if: steps.changed.outputs.changed == 'true'
-        uses: actions/github-script@v8
-        env:
-          TARGET_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
+        uses: rodkisten/github/src/collect-changes@main
         with:
-          github-token: ${{ steps.bot.outputs.token }}
-          script: |
-            const fs = require('node:fs');
-            const { owner, repo } = context.repo;
-            const branch = process.env.TARGET_BRANCH;
-            const path = 'package-lock.json';
-            let sha;
-            try {
-              const response = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
-              if (Array.isArray(response.data)) throw new Error('Expected a lockfile, got a directory');
-              sha = response.data.sha;
-            } catch (error) {
-              if (error.status !== 404) throw error;
-            }
-            await github.rest.repos.createOrUpdateFileContents({
-              owner, repo, branch, path, sha,
-              content: fs.readFileSync(path).toString('base64'),
-              message: 'chore(lockfile): sync package-lock.json [skip ci]',
-            });
-            await core.summary.addRaw(`Updated \`${path}\` on \`${branch}\` using Rod GitHub App.\n`).write();
+          pathspecs: |
+            package-lock.json
+      - name: Commit synchronized files
+        if: steps.changed.outputs.changed == 'true'
+        uses: rodkisten/github/src/commit@main
+        with:
+          app-id: ${{ secrets.BOT_APP_ID || vars.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+          branch: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          message: 'chore(lockfile): sync package-lock.json [skip ci]'
+          files-path: ${{ steps.changed.outputs.files-path }}
       - name: 📋 Explain PR branch policy
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
         run: echo 'Fork PRs are read-only; no bot credentials are exposed.' >> "$GITHUB_STEP_SUMMARY"

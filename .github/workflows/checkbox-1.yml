@@ -1,4 +1,4 @@
-name: 'Create PR Checklist'
+name: '🐚 SH · Create PR Checklist'
 on:
   pull_request:
     types: [opened]

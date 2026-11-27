@@ -1,4 +1,4 @@
-name: "🧪 Temporary · Deploy Eita artifact routes"
+name: "🐚 SH · 🧪 Temporary · Deploy Eita artifact routes"
 on:
   workflow_dispatch:
 
