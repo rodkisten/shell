@@ -44,8 +44,6 @@ jobs:
       - name: Execute WASM smoke tests
         run: node scripts/test-shell-flow-wasm.mjs
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - name: Install locked workspace dependencies
         run: pnpm install --frozen-lockfile
       - name: Generate AST, validate TypeScript and lint, then bundle
