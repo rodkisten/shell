@@ -1,9 +1,30 @@
 {
   "name": "@code/workflow-core",
-  "private": true,
+  "version": "0.2.0",
   "type": "module",
-  "exports": "./src/index.ts",
+  "files": [
+    "dist",
+    "UPSTREAM.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./adapters": {
+      "types": "./dist/adapters.d.ts",
+      "import": "./dist/adapters.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
+    "test": "vitest run tests"
+  },
   "dependencies": {
     "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
   }
 }

@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   wasm:
@@ -13,6 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version-file: tools/shell-flow/go.mod
@@ -51,8 +55,23 @@ jobs:
         with:
           title: AST, TypeScript, lint and frontend build
           command: npm run ast:inspect && npm run typecheck && npm run lint && npx vite build
-      - name: Stage Workflow Studio in the same preview
+      - name: Stage standalone and immutable federated Code in the same preview
+        env:
+          MODULE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          MODULE_ORIGIN: ${{ github.event_name == 'pull_request' && format('https://pr-{0}.preview.shell.migos.club', github.event.pull_request.number) || 'https://shell.migos.club' }}
         run: npm run build:workflow
+      - name: Retain two compatible prior releases in this deployment lane
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODULE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/retain-modules.mjs
+      - name: Preserve immutable Code artifact for rollback
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-${{ github.event.pull_request.number && format('pr{0}', github.event.pull_request.number) || 'main' }}-module-${{ github.event.pull_request.head.sha || github.sha }}
+          path: dist/client/modules/
+          retention-days: 30
       - name: Verify deployable WASM assets
         run: |
           # Cloudflare Vite plugin emits static files under dist/client.

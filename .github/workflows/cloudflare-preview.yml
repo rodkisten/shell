@@ -20,6 +20,7 @@ jobs:
     uses: ./.github/workflows/shell-flow-wasm.yml
     permissions:
       contents: read
+      actions: read
 
   preview:
     concurrency:
@@ -147,6 +148,12 @@ jobs:
             --output /dev/null "$custom_preview_url/"
           echo "url=$custom_preview_url" >> "$GITHUB_OUTPUT"
           echo "Custom preview responded successfully: $custom_preview_url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify immutable Code preview artifacts
+        env:
+          MODULE_ORIGIN: ${{ steps.custom_preview.outputs.url }}
+          MODULE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/verify-module.mjs
 
       - id: native_preview
         name: Verify workers.dev PR preview URL
