@@ -12,8 +12,8 @@ Canonical architecture/status: https://github.com/rodverse/rodverse/tree/main/do
 
 ## Verified locally
 
-Core: 6 parser/patch/migration tests. Core, Studio and standalone TypeScript checks; Shell Go/WASM/frontend build and standalone/federated bundles completed. Existing orb API tests and web/typechecks passed before the final transport refresh.
+Core: 6 parser/patch/migration tests. Core, Studio and standalone TypeScript checks; Shell Go/WASM/frontend build and standalone/federated bundles completed. Existing orb API tests/web/typechecks and API dry-run passed after refreshing packages and reconciling current main. Real Chromium Code standalone/Manage loading, draft URL reopen, scoped CSS/DB, SPA unmount and orb shared-package smoke passed locally. The unused prototype host/contracts/remote and duplicate Federation workflow were removed after this integration proof.
 
 ## Pending verification
 
-Real Code loading in Manage, URL/draft lifecycle, final shared-package consumption by orb, deployed preview/header/SHA checks, removal of the old prototype federation host after parity, and Safari. No successful deployment is claimed for this checkpoint. Public package publishing and privileged host adapters remain pending.
+Deployed preview/header/SHA checks and Safari. No successful deployment is claimed for this checkpoint. Public package publishing and privileged host adapters remain pending.

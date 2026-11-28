@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { parseDocument } from 'yaml';
 import { patchWorkflowFields, connectStepOutput, importLegacyWorkflow, parseWorkflow } from '../dist/index.js';

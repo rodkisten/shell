@@ -15,9 +15,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
-    "test": "node --test tests/*.test.mjs"
+    "test": "vitest run tests"
   },
   "dependencies": {
     "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
   }
 }
