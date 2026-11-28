@@ -20,6 +20,7 @@ jobs:
     uses: ./.github/workflows/shell-flow-wasm.yml
     permissions:
       contents: read
+      actions: read
 
   preview:
     concurrency:

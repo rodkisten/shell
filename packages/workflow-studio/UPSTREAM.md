@@ -1,0 +1,1 @@
+Editor extracted from rodkisten/orb d5243c982808940a7197062ca334b4836812c2b7, retaining the original CST graph, inspector, source editor, draft and dispatch UX. Canonical source now lives in rodkisten/shell. orb consumes this versioned package; no parallel editor source is retained. UAI registry primitives are source-installed components.

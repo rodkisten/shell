@@ -26,6 +26,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: shell-production
   cancel-in-progress: false
@@ -34,6 +35,7 @@ jobs:
     uses: ./.github/workflows/shell-flow-wasm.yml
     permissions:
       contents: read
+      actions: read
   deploy:
     needs: build
     name: Build and deploy to Cloudflare

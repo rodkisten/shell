@@ -13,3 +13,6 @@ dist/
 # Generated Go WASM artifacts
 /public/wasm/shell-flow.wasm
 /public/wasm/wasm_exec.js
+
+# Immutable federation build output; generated in CI.
+**/dist-module/
